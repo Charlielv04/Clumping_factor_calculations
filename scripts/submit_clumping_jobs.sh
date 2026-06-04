@@ -24,7 +24,8 @@ submit_one() {
   local particle="$1"
   local backend="$2"
   local grid="$3"
-  local mem walltime name queue_args mail_args
+  local mem walltime name
+  local -a qsub_args
 
   case "${grid}" in
     256)
@@ -46,27 +47,26 @@ submit_one() {
   esac
 
   name="cf_${particle}_${backend}_${grid}"
-  queue_args=()
-  mail_args=()
 
-  if [[ -n "${QUEUE}" ]]; then
-    queue_args=(-q "${QUEUE}")
-  fi
-
-  if [[ -n "${MAIL_USER}" ]]; then
-    mail_args=(-M "${MAIL_USER}" -m ae)
-  fi
-
-  qsub \
+  qsub_args=(
     -N "${name}" \
     -o "${PROJECT_DIR}/logs/${name}.out" \
     -e "${PROJECT_DIR}/logs/${name}.err" \
     -l "select=1:ncpus=${NCPUS}:mem=${mem}" \
     -l "walltime=${walltime}" \
-    "${queue_args[@]}" \
-    "${mail_args[@]}" \
     -v "PROJECT_DIR=${PROJECT_DIR},BASE_PATH=${BASE_PATH},CONDA_ENV=${CONDA_ENV},SNAPSHOT=${SNAPSHOT},RADIUS_BINS=${RADIUS_BINS},THREADS=${THREADS},PARTICLE=${particle},BACKEND=${backend},GRID=${grid}" \
     scripts/clumping_job.pbs
+  )
+
+  if [[ -n "${QUEUE}" ]]; then
+    qsub_args=(-q "${QUEUE}" "${qsub_args[@]}")
+  fi
+
+  if [[ -n "${MAIL_USER}" ]]; then
+    qsub_args=(-M "${MAIL_USER}" -m ae "${qsub_args[@]}")
+  fi
+
+  qsub "${qsub_args[@]}"
 }
 
 for grid in 256 512 1024; do
@@ -76,4 +76,3 @@ for grid in 256 512 1024; do
     done
   done
 done
-
