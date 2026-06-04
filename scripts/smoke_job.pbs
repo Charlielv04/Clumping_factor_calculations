@@ -10,22 +10,17 @@ conda activate "${CONDA_ENV:-clumping-factor}"
 cd "${PROJECT_DIR:-$PBS_O_WORKDIR}"
 mkdir -p results logs
 
-: "${PARTICLE:?PARTICLE must be set to gas or dm}"
-: "${BACKEND:?BACKEND must be set to sphere, cube, or pylians}"
-: "${GRID:?GRID must be set to 256, 512, or 1024}"
-
 BASE_PATH="${BASE_PATH:-../tng100-3/output}"
 SNAPSHOT="${SNAPSHOT:-98}"
-RADIUS_BINS="${RADIUS_BINS:-10}"
+RADIUS_BINS="${RADIUS_BINS:-4}"
+THRESHOLD_COUNT="${THRESHOLD_COUNT:-16}"
 THREADS="${THREADS:-1}"
-OUTPUT="results/${PARTICLE}_${BACKEND}_${GRID}.json"
 
-echo "Started: $(date)"
-echo "Host: $(hostname)"
-echo "Particle type: ${PARTICLE}"
-echo "Backend: ${BACKEND}"
-echo "Grid size: ${GRID}"
-echo "Output: ${OUTPUT}"
+: "${GRID:?GRID must be set}"
+: "${PARTICLE:?PARTICLE must be set}"
+: "${BACKEND:?BACKEND must be set}"
+
+name="smoke_${PARTICLE}_${BACKEND}_${GRID}"
 
 clumping-compute \
   --base-path "${BASE_PATH}" \
@@ -34,7 +29,6 @@ clumping-compute \
   --backend "${BACKEND}" \
   --grid-size "${GRID}" \
   --radius-bins "${RADIUS_BINS}" \
+  --threshold-count "${THRESHOLD_COUNT}" \
   --threads "${THREADS}" \
-  --output "${OUTPUT}"
-
-echo "Finished: $(date)"
+  --output "results/${name}.json"
