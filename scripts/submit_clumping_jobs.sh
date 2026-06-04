@@ -10,15 +10,18 @@ CONDA_ENV="${CONDA_ENV:-clumping-factor}"
 SNAPSHOT="${SNAPSHOT:-98}"
 RADIUS_BINS="${RADIUS_BINS:-10}"
 THREADS="${THREADS:-1}"
-WALLTIME_256="${WALLTIME_256:-24:00:00}"
-WALLTIME_512="${WALLTIME_512:-48:00:00}"
-WALLTIME_1024="${WALLTIME_1024:-72:00:00}"
-MEM_256="${MEM_256:-128gb}"
-MEM_512="${MEM_512:-256gb}"
-MEM_1024="${MEM_1024:-512gb}"
-NCPUS="${NCPUS:-4}"
+WALLTIME_256="${WALLTIME_256:-01:00:00}"
+WALLTIME_512="${WALLTIME_512:-04:00:00}"
+WALLTIME_1024="${WALLTIME_1024:-12:00:00}"
+MEM_256="${MEM_256:-4gb}"
+MEM_512="${MEM_512:-4gb}"
+MEM_1024="${MEM_1024:-4gb}"
+NCPUS="${NCPUS:-2}"
 QUEUE="${QUEUE:-}"
 MAIL_USER="${MAIL_USER:-}"
+GRIDS="${GRIDS:-256 512 1024}"
+PARTICLES="${PARTICLES:-gas dm}"
+BACKENDS="${BACKENDS:-sphere cube pylians}"
 
 submit_one() {
   local particle="$1"
@@ -69,9 +72,9 @@ submit_one() {
   qsub "${qsub_args[@]}"
 }
 
-for grid in 256 512 1024; do
-  for particle in gas dm; do
-    for backend in sphere cube pylians; do
+for grid in ${GRIDS}; do
+  for particle in ${PARTICLES}; do
+    for backend in ${BACKENDS}; do
       submit_one "${particle}" "${backend}" "${grid}"
     done
   done
