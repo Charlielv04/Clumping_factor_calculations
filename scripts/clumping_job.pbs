@@ -1,0 +1,39 @@
+#!/bin/bash
+
+set -euo pipefail
+
+source ~/.bashrc
+conda activate "${CONDA_ENV:-clumping-factor}"
+
+cd "${PROJECT_DIR:-$PBS_O_WORKDIR}"
+mkdir -p results logs
+
+: "${PARTICLE:?PARTICLE must be set to gas or dm}"
+: "${BACKEND:?BACKEND must be set to sphere, cube, or pylians}"
+: "${GRID:?GRID must be set to 256, 512, or 1024}"
+
+BASE_PATH="${BASE_PATH:-../tng100-3/output}"
+SNAPSHOT="${SNAPSHOT:-98}"
+RADIUS_BINS="${RADIUS_BINS:-10}"
+THREADS="${THREADS:-1}"
+OUTPUT="results/${PARTICLE}_${BACKEND}_${GRID}.json"
+
+echo "Started: $(date)"
+echo "Host: $(hostname)"
+echo "Particle type: ${PARTICLE}"
+echo "Backend: ${BACKEND}"
+echo "Grid size: ${GRID}"
+echo "Output: ${OUTPUT}"
+
+clumping-compute \
+  --base-path "${BASE_PATH}" \
+  --snapshot "${SNAPSHOT}" \
+  --particle-type "${PARTICLE}" \
+  --backend "${BACKEND}" \
+  --grid-size "${GRID}" \
+  --radius-bins "${RADIUS_BINS}" \
+  --threads "${THREADS}" \
+  --output "${OUTPUT}"
+
+echo "Finished: $(date)"
+
