@@ -52,9 +52,9 @@ def _build_density_grid_pylians(*args, **kwargs):
 
 
 def _clumping_factor_sweep(*args, **kwargs):
-    from .clumping import clumping_factor_sweep
+    from .clumping import clumping_factor_sweep_with_diagnostics
 
-    return clumping_factor_sweep(*args, **kwargs)
+    return clumping_factor_sweep_with_diagnostics(*args, **kwargs)
 
 
 def _build_result_document(*args, **kwargs):
@@ -104,7 +104,8 @@ def run_compute(args: argparse.Namespace) -> Path:
         grid_result = _build_density_grid_scipy(particles, args.grid_size, args.radius_bins, args.backend)
 
     thresholds = np.linspace(args.threshold_min, args.threshold_max, args.threshold_count)
-    clumping_factors, clumping_timings = _clumping_factor_sweep(thresholds, grid_result.density_grid)
+    clumping_factors, clumping_timings, clumping_diagnostics = _clumping_factor_sweep(thresholds, grid_result.density_grid)
+    grid_result.diagnostics["clumping"] = clumping_diagnostics
 
     timings = {
         **load_timings,
