@@ -35,8 +35,8 @@ def test_run_compute_writes_json_with_mock_loader_and_grid(monkeypatch, tmp_path
             backend_metadata={"backend": "cube"},
         )
 
-    monkeypatch.setattr("clumping_factor.cli.load_tng_particles", fake_loader)
-    monkeypatch.setattr("clumping_factor.cli.build_density_grid_scipy", fake_grid)
+    monkeypatch.setattr("clumping_factor.cli._load_tng_particles", fake_loader)
+    monkeypatch.setattr("clumping_factor.cli._build_density_grid_scipy", fake_grid)
 
     output = tmp_path / "result.json"
     args = Namespace(

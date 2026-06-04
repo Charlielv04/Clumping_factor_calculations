@@ -33,20 +33,57 @@ def build_plot_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _load_tng_particles(*args, **kwargs):
+    from .loaders import load_tng_particles
+
+    return load_tng_particles(*args, **kwargs)
+
+
+def _build_density_grid_scipy(*args, **kwargs):
+    from .grid import build_density_grid_scipy
+
+    return build_density_grid_scipy(*args, **kwargs)
+
+
+def _build_density_grid_pylians(*args, **kwargs):
+    from .grid import build_density_grid_pylians
+
+    return build_density_grid_pylians(*args, **kwargs)
+
+
+def _clumping_factor_sweep(*args, **kwargs):
+    from .clumping import clumping_factor_sweep
+
+    return clumping_factor_sweep(*args, **kwargs)
+
+
+def _build_result_document(*args, **kwargs):
+    from .results import build_result_document
+
+    return build_result_document(*args, **kwargs)
+
+
+def _default_output_path(*args, **kwargs):
+    from .results import default_output_path
+
+    return default_output_path(*args, **kwargs)
+
+
+def _write_json_result(*args, **kwargs):
+    from .results import write_json_result
+
+    return write_json_result(*args, **kwargs)
+
+
 def run_compute(args: argparse.Namespace) -> Path:
     import numpy as np
-
-    from .clumping import clumping_factor_sweep
-    from .grid import build_density_grid_pylians, build_density_grid_scipy
-    from .loaders import load_tng_particles
-    from .results import build_result_document, default_output_path, write_json_result
 
     total_t0 = perf_counter()
     if args.threshold_count < 1:
         raise ValueError("--threshold-count must be at least 1.")
 
     load_radius_mode = args.backend
-    particles, load_timings = load_tng_particles(
+    particles, load_timings = _load_tng_particles(
         args.base_path,
         args.snapshot,
         args.particle_type,
@@ -55,7 +92,7 @@ def run_compute(args: argparse.Namespace) -> Path:
     )
 
     if args.backend == "pylians":
-        grid_result = build_density_grid_pylians(
+        grid_result = _build_density_grid_pylians(
             particles,
             args.grid_size,
             args.radius_bins,
@@ -64,10 +101,10 @@ def run_compute(args: argparse.Namespace) -> Path:
             threads=args.threads,
         )
     else:
-        grid_result = build_density_grid_scipy(particles, args.grid_size, args.radius_bins, args.backend)
+        grid_result = _build_density_grid_scipy(particles, args.grid_size, args.radius_bins, args.backend)
 
     thresholds = np.linspace(args.threshold_min, args.threshold_max, args.threshold_count)
-    clumping_factors, clumping_timings = clumping_factor_sweep(thresholds, grid_result.density_grid)
+    clumping_factors, clumping_timings = _clumping_factor_sweep(thresholds, grid_result.density_grid)
 
     timings = {
         **load_timings,
@@ -85,10 +122,10 @@ def run_compute(args: argparse.Namespace) -> Path:
         "threshold_max": args.threshold_max,
         "threshold_count": args.threshold_count,
     }
-    document = build_result_document(particles, grid_result, thresholds, clumping_factors, parameters, timings)
+    document = _build_result_document(particles, grid_result, thresholds, clumping_factors, parameters, timings)
 
-    output_path = Path(args.output) if args.output else default_output_path(args.output_dir, args.particle_type, args.backend, args.snapshot, args.grid_size)
-    return write_json_result(document, output_path)
+    output_path = Path(args.output) if args.output else _default_output_path(args.output_dir, args.particle_type, args.backend, args.snapshot, args.grid_size)
+    return _write_json_result(document, output_path)
 
 
 def compute_main(argv: list[str] | None = None) -> None:

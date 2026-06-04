@@ -10,6 +10,21 @@ The calculation command writes JSON summaries. Plotting is intentionally separat
 python -m pip install -e ".[test]"
 ```
 
+On clusters with old system compilers, install the scientific stack from wheels first:
+
+```bash
+python -m pip install --only-binary=:all: -r requirements-core.txt
+python -m pip install illustris-python
+python -m pip install -e .
+```
+
+If Pylians tries to rebuild NumPy inside build isolation, install it after Cython with build isolation disabled:
+
+```bash
+python -m pip install "Cython<3"
+python -m pip install --no-build-isolation Pylians
+```
+
 ## Compute
 
 ```bash
@@ -41,4 +56,3 @@ Multiple JSON files can be plotted together:
 ```bash
 clumping-plot results/*.json --output results/comparison.png
 ```
-
