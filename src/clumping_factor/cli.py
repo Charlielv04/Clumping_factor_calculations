@@ -10,7 +10,7 @@ def build_compute_parser() -> argparse.ArgumentParser:
     parser.add_argument("--base-path", default="./tng100-3/output")
     parser.add_argument("--snapshot", type=int, default=98)
     parser.add_argument("--particle-type", choices=["gas", "dm"], required=True)
-    parser.add_argument("--backend", choices=["sphere", "cube", "pylians", "raw"], required=True)
+    parser.add_argument("--backend", choices=["sphere", "cube", "pylians", "raw", "raw-volume"], required=True)
     parser.add_argument("--grid-size", type=int, default=256)
     parser.add_argument("--radius-bins", type=int, default=10)
     parser.add_argument("--threshold-min", type=float, default=-1.0)
@@ -93,6 +93,12 @@ def _raw_gas_clumping_sweep(*args, **kwargs):
     return raw_gas_clumping_sweep(*args, **kwargs)
 
 
+def _raw_gas_volume_weighted_clumping_sweep(*args, **kwargs):
+    from .raw_gas import raw_gas_volume_weighted_clumping_sweep
+
+    return raw_gas_volume_weighted_clumping_sweep(*args, **kwargs)
+
+
 def run_compute(args: argparse.Namespace) -> Path:
     import numpy as np
 
@@ -100,17 +106,27 @@ def run_compute(args: argparse.Namespace) -> Path:
     if args.threshold_count < 1:
         raise ValueError("--threshold-count must be at least 1.")
 
-    if args.backend == "raw":
+    if args.backend in {"raw", "raw-volume"}:
         if args.particle_type != "gas":
-            raise ValueError("--backend raw is only valid with --particle-type gas.")
+            raise ValueError("--backend raw and --backend raw-volume are only valid with --particle-type gas.")
 
         gas_cells, load_timings = _load_tng_gas_cells(args.base_path, args.snapshot, verbose=args.verbose)
         thresholds = np.linspace(args.threshold_min, args.threshold_max, args.threshold_count)
-        clumping_factors, clumping_timings, clumping_diagnostics = _raw_gas_clumping_sweep(
-            thresholds,
-            gas_cells["density"],
-            gas_cells["rho_mean"],
-        )
+        if args.backend == "raw":
+            clumping_factors, clumping_timings, clumping_diagnostics = _raw_gas_clumping_sweep(
+                thresholds,
+                gas_cells["density"],
+                gas_cells["rho_mean"],
+            )
+            method = "legacy raw gas-cell density, cell weighted"
+        else:
+            clumping_factors, clumping_timings, clumping_diagnostics = _raw_gas_volume_weighted_clumping_sweep(
+                thresholds,
+                gas_cells["density"],
+                gas_cells["cell_volume"],
+                gas_cells["rho_mean"],
+            )
+            method = "raw gas-cell density, volume weighted"
         timings = {**load_timings, **{f"clumping_{key}": value for key, value in clumping_timings.items()}}
         timings["total"] = perf_counter() - total_t0
         parameters = {
@@ -127,7 +143,7 @@ def run_compute(args: argparse.Namespace) -> Path:
             "particle_type": "gas",
             "parameters": parameters,
             "particle_metadata": gas_cells["metadata"],
-            "backend": {"backend": "raw", "method": "legacy raw gas-cell density"},
+            "backend": {"backend": args.backend, "method": method},
             "thresholds": thresholds.tolist(),
             "clumping_factors": [None if not np.isfinite(value) else float(value) for value in clumping_factors],
             "diagnostics": {"clumping": clumping_diagnostics},

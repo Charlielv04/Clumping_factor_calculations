@@ -43,6 +43,7 @@ Backends:
 - `cube`: SciPy cube tophat smoothing
 - `pylians`: optional Pylians mass assignment and smoothing
 - `raw`: raw gas-cell density calculation matching the first legacy gas script; only valid with `--particle-type gas`
+- `raw-volume`: raw gas-cell density calculation weighted by each gas cell volume; only valid with `--particle-type gas`
 
 Outputs are saved under `results/` unless `--output` is supplied.
 

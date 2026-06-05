@@ -47,3 +47,65 @@ def raw_gas_clumping_sweep(thresholds: np.ndarray, density: np.ndarray, rho_mean
     timings = {"raw_gas_clumping": perf_counter() - total_t0}
     return clumping_factors, timings, diagnostics
 
+
+def raw_gas_volume_weighted_clumping_sweep(
+    thresholds: np.ndarray,
+    density: np.ndarray,
+    cell_volume: np.ndarray,
+    rho_mean: float,
+) -> tuple[np.ndarray, dict[str, float], dict]:
+    total_t0 = perf_counter()
+    thresholds = np.asarray(thresholds, dtype=np.float64)
+    density = np.asarray(density, dtype=np.float64)
+    cell_volume = np.asarray(cell_volume, dtype=np.float64)
+    overdensity = density / float(rho_mean)
+
+    order = np.argsort(overdensity)
+    overdensity_sorted = overdensity[order]
+    density_sorted = density[order]
+    volume_sorted = cell_volume[order]
+
+    weighted_rho = density_sorted * volume_sorted
+    weighted_rho2 = density_sorted**2 * volume_sorted
+    cumulative_volume = np.cumsum(volume_sorted, dtype=np.float64)
+    cumulative_rho = np.cumsum(weighted_rho, dtype=np.float64)
+    cumulative_rho2 = np.cumsum(weighted_rho2, dtype=np.float64)
+
+    indices = np.searchsorted(overdensity_sorted, thresholds, side="left")
+    clumping_factors = np.full(thresholds.shape, np.nan, dtype=np.float64)
+    valid = indices > 0
+    selected_counts = indices[valid]
+
+    selected_volume = cumulative_volume[selected_counts - 1]
+    mean_rho = cumulative_rho[selected_counts - 1] / selected_volume
+    mean_rho2 = cumulative_rho2[selected_counts - 1] / selected_volume
+    nonzero = mean_rho > 0
+    valid_positions = np.flatnonzero(valid)
+    clumping_factors[valid_positions[nonzero]] = mean_rho2[nonzero] / mean_rho[nonzero] ** 2
+
+    selected_volumes = np.zeros(thresholds.shape, dtype=np.float64)
+    selected_density_sums = np.zeros(thresholds.shape, dtype=np.float64)
+    selected_volumes[valid] = selected_volume
+    selected_density_sums[valid] = cumulative_rho[selected_counts - 1]
+
+    total_volume = float(cumulative_volume[-1]) if cumulative_volume.size else 0.0
+    total_density_sum = float(cumulative_rho[-1]) if cumulative_rho.size else 0.0
+    selected_volume_fractions = selected_volumes / total_volume if total_volume > 0 else selected_volumes
+    selected_density_fractions = selected_density_sums / total_density_sum if total_density_sum > 0 else selected_density_sums
+
+    diagnostics = {
+        "mean_density": float(rho_mean),
+        "volume_weighted_density_mean": float(total_density_sum / total_volume) if total_volume > 0 else None,
+        "total_cells": int(density.size),
+        "total_volume": total_volume,
+        "selected_cell_counts": indices.astype(np.int64).tolist(),
+        "selected_cell_fractions": (indices / density.size).astype(np.float64).tolist(),
+        "selected_volumes": selected_volumes.tolist(),
+        "selected_volume_fractions": selected_volume_fractions.tolist(),
+        "selected_density_sums": selected_density_sums.tolist(),
+        "selected_density_fractions": selected_density_fractions.tolist(),
+        "overdensity_definition": "Density / (sum(Masses) / Lbox**3), no minus one",
+        "clumping_definition": "sum(rho**2 * volume) / sum(volume) divided by (sum(rho * volume) / sum(volume))**2",
+    }
+    timings = {"raw_gas_volume_weighted_clumping": perf_counter() - total_t0}
+    return clumping_factors, timings, diagnostics
