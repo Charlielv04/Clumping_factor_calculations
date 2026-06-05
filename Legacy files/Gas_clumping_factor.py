@@ -26,8 +26,8 @@ cell_volume = mass / rho
 # Mean gas density in the box
 rho_mean = np.sum(mass) / (Lbox ** 3)
 
-# Overdensity in the usual sense: rho / <rho>
-overdensity = rho / rho_mean
+# Overdensity in the usual sense: rho / <rho> - 1
+overdensity = rho / rho_mean - 1
 
 # IGM threshold
 threshold = 10.0
@@ -173,6 +173,7 @@ with open("Clumping_factor.json", "w", encoding="utf-8") as f:
         "clumping_factors": [None if not np.isfinite(v) else float(v) for v in y],
         "single_threshold_clumping_factor": None if not np.isfinite(Clumping_factor) else float(Clumping_factor),
         "rho_mean": float(rho_mean),
+        "overdensity_definition": "Density / rho_mean - 1",
         "global_IGM_fraction_by_cell_count": float(np.mean(overdensity < threshold)),
         "global_IGM_fraction_by_volume": float(np.sum(cell_volume[overdensity < threshold]) / np.sum(cell_volume)),
     }, f, indent=2)

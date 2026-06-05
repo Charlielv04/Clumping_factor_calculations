@@ -13,6 +13,7 @@ def plot_result_files(
     output_path: str | Path,
     title: str | None = None,
     min_selected_density_fraction: float = 0.0,
+    x_min: float = -0.9,
 ) -> Path:
     if not result_paths:
         raise ValueError("At least one JSON result file is required.")
@@ -39,6 +40,7 @@ def plot_result_files(
 
     ax.set_xlabel("Overdensity threshold")
     ax.set_ylabel("Clumping factor")
+    ax.set_xlim(left=x_min)
     if title:
         ax.set_title(title)
     ax.grid(True)

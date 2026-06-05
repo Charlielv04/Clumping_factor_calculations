@@ -9,7 +9,7 @@ def raw_gas_clumping_sweep(thresholds: np.ndarray, density: np.ndarray, rho_mean
     total_t0 = perf_counter()
     thresholds = np.asarray(thresholds, dtype=np.float64)
     density = np.asarray(density, dtype=np.float64)
-    overdensity = density / float(rho_mean)
+    overdensity = density / float(rho_mean) - 1.0
 
     order = np.argsort(overdensity)
     overdensity_sorted = overdensity[order]
@@ -42,7 +42,7 @@ def raw_gas_clumping_sweep(thresholds: np.ndarray, density: np.ndarray, rho_mean
         "selected_cell_fractions": (indices / density.size).astype(np.float64).tolist(),
         "selected_density_sums": selected_density_sums.tolist(),
         "selected_density_fractions": selected_density_fractions.tolist(),
-        "overdensity_definition": "Density / (sum(Masses) / Lbox**3), no minus one",
+        "overdensity_definition": "Density / (sum(Masses) / Lbox**3) - 1",
     }
     timings = {"raw_gas_clumping": perf_counter() - total_t0}
     return clumping_factors, timings, diagnostics
@@ -58,7 +58,7 @@ def raw_gas_volume_weighted_clumping_sweep(
     thresholds = np.asarray(thresholds, dtype=np.float64)
     density = np.asarray(density, dtype=np.float64)
     cell_volume = np.asarray(cell_volume, dtype=np.float64)
-    overdensity = density / float(rho_mean)
+    overdensity = density / float(rho_mean) - 1.0
 
     order = np.argsort(overdensity)
     overdensity_sorted = overdensity[order]
@@ -104,7 +104,7 @@ def raw_gas_volume_weighted_clumping_sweep(
         "selected_volume_fractions": selected_volume_fractions.tolist(),
         "selected_density_sums": selected_density_sums.tolist(),
         "selected_density_fractions": selected_density_fractions.tolist(),
-        "overdensity_definition": "Density / (sum(Masses) / Lbox**3), no minus one",
+        "overdensity_definition": "Density / (sum(Masses) / Lbox**3) - 1",
         "clumping_definition": "sum(rho**2 * volume) / sum(volume) divided by (sum(rho * volume) / sum(volume))**2",
     }
     timings = {"raw_gas_volume_weighted_clumping": perf_counter() - total_t0}

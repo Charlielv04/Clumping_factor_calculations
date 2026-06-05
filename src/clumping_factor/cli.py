@@ -36,6 +36,12 @@ def build_plot_parser() -> argparse.ArgumentParser:
         default=0.0,
         help="Mask thresholds where the selected cells contain less than this fraction of total grid density.",
     )
+    parser.add_argument(
+        "--x-min",
+        type=float,
+        default=-0.9,
+        help="Minimum x-axis value for plots. Defaults to -0.9 to avoid the exact -1 edge.",
+    )
     return parser
 
 
@@ -216,6 +222,7 @@ def plot_main(argv: list[str] | None = None) -> None:
         args.output,
         title=args.title,
         min_selected_density_fraction=args.min_selected_density_fraction,
+        x_min=args.x_min,
     )
     print(f"Wrote plot: {output_path}")
 
