@@ -14,12 +14,14 @@ def plot_result_files(
     title: str | None = None,
     min_selected_density_fraction: float = 0.0,
     x_min: float = -0.9,
+    alternate_linestyles: bool = False,
 ) -> Path:
     if not result_paths:
         raise ValueError("At least one JSON result file is required.")
 
     fig, ax = plt.subplots(figsize=(8, 5))
-    for result_path in result_paths:
+    linestyles = ["-", "--", ":", "-."]
+    for index, result_path in enumerate(result_paths):
         document = read_json_result(result_path)
         thresholds = np.asarray(document["thresholds"], dtype=np.float64)
         factors = np.asarray([np.nan if value is None else value for value in document["clumping_factors"]], dtype=np.float64)
@@ -36,7 +38,8 @@ def plot_result_files(
         particle_type = document.get("particle_type", "unknown")
         grid_size = document.get("parameters", {}).get("grid_size")
         label = f"{particle_type} {backend}" if grid_size is None else f"{particle_type} {backend} {grid_size}"
-        ax.plot(thresholds, factors, label=label)
+        linestyle = linestyles[index % len(linestyles)] if alternate_linestyles else "-"
+        ax.plot(thresholds, factors, label=label, linestyle=linestyle)
 
     ax.set_xlabel("Overdensity threshold")
     ax.set_ylabel("Clumping factor")

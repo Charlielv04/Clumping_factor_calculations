@@ -42,6 +42,11 @@ def build_plot_parser() -> argparse.ArgumentParser:
         default=-0.9,
         help="Minimum x-axis value for plots. Defaults to -0.9 to avoid the exact -1 edge.",
     )
+    parser.add_argument(
+        "--alternate-linestyles",
+        action="store_true",
+        help="Cycle through solid, dashed, dotted, and dash-dot line styles so overlapping curves are easier to see.",
+    )
     return parser
 
 
@@ -223,6 +228,7 @@ def plot_main(argv: list[str] | None = None) -> None:
         title=args.title,
         min_selected_density_fraction=args.min_selected_density_fraction,
         x_min=args.x_min,
+        alternate_linestyles=args.alternate_linestyles,
     )
     print(f"Wrote plot: {output_path}")
 
