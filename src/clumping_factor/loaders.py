@@ -79,3 +79,44 @@ def load_tng_particles(base_path: str | Path, snapshot: int, particle_type: str,
     )
     return particles, {"load_data": perf_counter() - t0}
 
+
+def load_tng_gas_cells(base_path: str | Path, snapshot: int, verbose: bool = False) -> tuple[dict, dict[str, float]]:
+    t0 = perf_counter()
+    il = _load_illustris_python()
+    base_path = Path(base_path)
+    header_path = snapshot_header_path(base_path, snapshot)
+
+    gas_data = il.snapshot.loadSubset(str(base_path), snapshot, 0, fields=["Coordinates", "Density", "Masses"])
+    coords, density, masses, metadata = validate_gas_arrays(
+        gas_data["Coordinates"],
+        gas_data["Density"],
+        gas_data["Masses"],
+    )
+
+    with h5py.File(header_path, "r") as snapfile:
+        lbox = float(snapfile["Header"].attrs["BoxSize"])
+
+    rho_mean = float(np.sum(masses, dtype=np.float64) / lbox**3)
+    cell_volume = masses / density
+    metadata.update(
+        {
+            "lbox": lbox,
+            "rho_mean_mass_over_box_volume": rho_mean,
+            "method": "raw gas Voronoi cell density, matching legacy Gas_clumping_factor.py",
+        }
+    )
+
+    if verbose:
+        print(f"Loaded {metadata['valid_count']} valid gas cells from snapshot {snapshot}.")
+        print(f"Box size: {lbox}")
+        print(f"Mean gas density from mass / box volume: {rho_mean}")
+
+    return {
+        "coords": coords,
+        "density": density,
+        "masses": masses,
+        "cell_volume": cell_volume,
+        "lbox": lbox,
+        "rho_mean": rho_mean,
+        "metadata": metadata,
+    }, {"load_data": perf_counter() - t0}

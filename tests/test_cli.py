@@ -12,6 +12,7 @@ def test_compute_help():
     help_text = parser.format_help()
     assert "--particle-type" in help_text
     assert "--backend" in help_text
+    assert "raw" in help_text
 
 
 def test_run_compute_writes_json_with_mock_loader_and_grid(monkeypatch, tmp_path):

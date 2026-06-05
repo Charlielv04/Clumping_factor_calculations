@@ -10,7 +10,7 @@ def build_compute_parser() -> argparse.ArgumentParser:
     parser.add_argument("--base-path", default="./tng100-3/output")
     parser.add_argument("--snapshot", type=int, default=98)
     parser.add_argument("--particle-type", choices=["gas", "dm"], required=True)
-    parser.add_argument("--backend", choices=["sphere", "cube", "pylians"], required=True)
+    parser.add_argument("--backend", choices=["sphere", "cube", "pylians", "raw"], required=True)
     parser.add_argument("--grid-size", type=int, default=256)
     parser.add_argument("--radius-bins", type=int, default=10)
     parser.add_argument("--threshold-min", type=float, default=-1.0)
@@ -30,6 +30,12 @@ def build_plot_parser() -> argparse.ArgumentParser:
     parser.add_argument("results", nargs="+", help="JSON result files to plot.")
     parser.add_argument("--output", required=True, help="PNG/PDF/etc. output path.")
     parser.add_argument("--title")
+    parser.add_argument(
+        "--min-selected-density-fraction",
+        type=float,
+        default=0.0,
+        help="Mask thresholds where the selected cells contain less than this fraction of total grid density.",
+    )
     return parser
 
 
@@ -75,12 +81,60 @@ def _write_json_result(*args, **kwargs):
     return write_json_result(*args, **kwargs)
 
 
+def _load_tng_gas_cells(*args, **kwargs):
+    from .loaders import load_tng_gas_cells
+
+    return load_tng_gas_cells(*args, **kwargs)
+
+
+def _raw_gas_clumping_sweep(*args, **kwargs):
+    from .raw_gas import raw_gas_clumping_sweep
+
+    return raw_gas_clumping_sweep(*args, **kwargs)
+
+
 def run_compute(args: argparse.Namespace) -> Path:
     import numpy as np
 
     total_t0 = perf_counter()
     if args.threshold_count < 1:
         raise ValueError("--threshold-count must be at least 1.")
+
+    if args.backend == "raw":
+        if args.particle_type != "gas":
+            raise ValueError("--backend raw is only valid with --particle-type gas.")
+
+        gas_cells, load_timings = _load_tng_gas_cells(args.base_path, args.snapshot, verbose=args.verbose)
+        thresholds = np.linspace(args.threshold_min, args.threshold_max, args.threshold_count)
+        clumping_factors, clumping_timings, clumping_diagnostics = _raw_gas_clumping_sweep(
+            thresholds,
+            gas_cells["density"],
+            gas_cells["rho_mean"],
+        )
+        timings = {**load_timings, **{f"clumping_{key}": value for key, value in clumping_timings.items()}}
+        timings["total"] = perf_counter() - total_t0
+        parameters = {
+            "base_path": args.base_path,
+            "snapshot": args.snapshot,
+            "grid_size": None,
+            "radius_bins": None,
+            "threshold_min": args.threshold_min,
+            "threshold_max": args.threshold_max,
+            "threshold_count": args.threshold_count,
+        }
+        document = {
+            "schema_version": 1,
+            "particle_type": "gas",
+            "parameters": parameters,
+            "particle_metadata": gas_cells["metadata"],
+            "backend": {"backend": "raw", "method": "legacy raw gas-cell density"},
+            "thresholds": thresholds.tolist(),
+            "clumping_factors": [None if not np.isfinite(value) else float(value) for value in clumping_factors],
+            "diagnostics": {"clumping": clumping_diagnostics},
+            "timings": timings,
+        }
+        output_path = Path(args.output) if args.output else _default_output_path(args.output_dir, args.particle_type, args.backend, args.snapshot, args.grid_size)
+        return _write_json_result(document, output_path)
 
     load_radius_mode = args.backend
     particles, load_timings = _load_tng_particles(
@@ -141,7 +195,12 @@ def plot_main(argv: list[str] | None = None) -> None:
 
     parser = build_plot_parser()
     args = parser.parse_args(argv)
-    output_path = plot_result_files(args.results, args.output, title=args.title)
+    output_path = plot_result_files(
+        args.results,
+        args.output,
+        title=args.title,
+        min_selected_density_fraction=args.min_selected_density_fraction,
+    )
     print(f"Wrote plot: {output_path}")
 
 

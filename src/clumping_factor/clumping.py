@@ -18,12 +18,14 @@ def clumping_factor_sweep_with_diagnostics(thresholds: np.ndarray, density_grid:
     diagnostics: dict[str, list | float] = {
         "mean_density": mean_density,
         "total_cells": int(rho.size),
+        "total_density_sum": float(np.sum(rho, dtype=np.float64)),
     }
 
     if mean_density == 0.0 or not np.isfinite(mean_density):
         diagnostics["selected_cell_counts"] = [0] * int(thresholds.size)
         diagnostics["selected_cell_fractions"] = [0.0] * int(thresholds.size)
         diagnostics["selected_density_sums"] = [0.0] * int(thresholds.size)
+        diagnostics["selected_density_fractions"] = [0.0] * int(thresholds.size)
         return np.full(thresholds.shape, np.nan, dtype=np.float64), {"mean_density": mean_density}, diagnostics
 
     t0 = perf_counter()
@@ -56,7 +58,13 @@ def clumping_factor_sweep_with_diagnostics(thresholds: np.ndarray, density_grid:
 
     selected_density_sums = np.zeros(thresholds.shape, dtype=np.float64)
     selected_density_sums[valid] = cumulative_rho[selected_counts - 1]
+    total_density_sum = float(cumulative_rho[-1])
+    if total_density_sum > 0:
+        selected_density_fractions = selected_density_sums / total_density_sum
+    else:
+        selected_density_fractions = np.zeros(thresholds.shape, dtype=np.float64)
     diagnostics["selected_cell_counts"] = indices.astype(np.int64).tolist()
     diagnostics["selected_cell_fractions"] = (indices / rho.size).astype(np.float64).tolist()
     diagnostics["selected_density_sums"] = selected_density_sums.tolist()
+    diagnostics["selected_density_fractions"] = selected_density_fractions.tolist()
     return clumping_factors, timings, diagnostics
