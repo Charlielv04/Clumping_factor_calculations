@@ -8,11 +8,51 @@ from time import perf_counter
 def build_compute_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Compute clumping factor curves and save JSON summaries.")
     parser.add_argument("--base-path", default="./tng100-3/output")
+    parser.add_argument(
+        "--simulation-name",
+        help="Name used in result metadata and default output directories. Defaults to a name inferred from --base-path.",
+    )
     parser.add_argument("--snapshot", type=int, default=98)
     parser.add_argument("--particle-type", choices=["gas", "dm"], required=True)
     parser.add_argument("--backend", choices=["sphere", "cube", "pylians", "raw", "raw-volume"], required=True)
+    parser.add_argument(
+        "--target-particle-type",
+        choices=["gas", "dm", "both"],
+        help="Density field to measure clumping on. Defaults to --particle-type.",
+    )
+    parser.add_argument(
+        "--target-backend",
+        choices=["sphere", "cube", "pylians"],
+        help="Grid builder for the target density field. Defaults to --backend for gridded runs.",
+    )
+    parser.add_argument(
+        "--mask-particle-type",
+        choices=["gas", "dm", "both"],
+        help="Density field used to define the IGM mask. Defaults to the target field.",
+    )
+    parser.add_argument(
+        "--mask-backend",
+        choices=["sphere", "cube", "pylians"],
+        help="Grid builder for the mask density field. Defaults to the target backend.",
+    )
     parser.add_argument("--grid-size", type=int, default=256)
     parser.add_argument("--radius-bins", type=int, default=10)
+    parser.add_argument(
+        "--radius-mode",
+        choices=["sphere", "cube"],
+        default="sphere",
+        help="Gas cell radius definition for gridded gas calculations.",
+    )
+    parser.add_argument(
+        "--target-radius-mode",
+        choices=["sphere", "cube"],
+        help="Gas radius definition for the target density field. Defaults to --radius-mode.",
+    )
+    parser.add_argument(
+        "--mask-radius-mode",
+        choices=["sphere", "cube"],
+        help="Gas radius definition for the mask density field. Defaults to the target radius mode.",
+    )
     parser.add_argument("--threshold-min", type=float, default=-1.0)
     parser.add_argument("--threshold-max", type=float, default=25.0)
     parser.add_argument("--threshold-count", type=int, default=200)
@@ -69,9 +109,9 @@ def _build_density_grid_pylians(*args, **kwargs):
 
 
 def _clumping_factor_sweep(*args, **kwargs):
-    from .clumping import clumping_factor_sweep_with_diagnostics
+    from .clumping import clumping_factor_sweep_with_mask
 
-    return clumping_factor_sweep_with_diagnostics(*args, **kwargs)
+    return clumping_factor_sweep_with_mask(*args, **kwargs)
 
 
 def _build_result_document(*args, **kwargs):
@@ -84,6 +124,12 @@ def _default_output_path(*args, **kwargs):
     from .results import default_output_path
 
     return default_output_path(*args, **kwargs)
+
+
+def _resolve_simulation_name(*args, **kwargs):
+    from .results import resolve_simulation_name
+
+    return resolve_simulation_name(*args, **kwargs)
 
 
 def _write_json_result(*args, **kwargs):
@@ -110,17 +156,104 @@ def _raw_gas_volume_weighted_clumping_sweep(*args, **kwargs):
     return raw_gas_volume_weighted_clumping_sweep(*args, **kwargs)
 
 
+def _validate_compute_args(args: argparse.Namespace) -> None:
+    if args.threshold_count < 1:
+        raise ValueError("--threshold-count must be at least 1.")
+    if args.threshold_min >= args.threshold_max:
+        raise ValueError("--threshold-min must be less than --threshold-max.")
+    if args.threads < 1:
+        raise ValueError("--threads must be at least 1.")
+    if args.backend not in {"raw", "raw-volume"}:
+        if args.grid_size < 1:
+            raise ValueError("--grid-size must be at least 1.")
+        if args.radius_bins < 1:
+            raise ValueError("--radius-bins must be at least 1.")
+    if args.backend in {"raw", "raw-volume"} and args.particle_type != "gas":
+        raise ValueError("--backend raw and --backend raw-volume are only valid with --particle-type gas.")
+    if args.backend in {"raw", "raw-volume"} and (
+        getattr(args, "target_particle_type", None)
+        or getattr(args, "target_backend", None)
+        or getattr(args, "mask_particle_type", None)
+        or getattr(args, "mask_backend", None)
+        or getattr(args, "target_radius_mode", None)
+        or getattr(args, "mask_radius_mode", None)
+    ):
+        raise ValueError("raw and raw-volume runs do not support separate mask/target fields.")
+
+
+def _build_single_density_grid(args: argparse.Namespace, particle_type: str, backend: str, radius_mode: str) -> tuple:
+    load_radius_mode = radius_mode if particle_type == "gas" else "sphere"
+    particles, load_timings = _load_tng_particles(
+        args.base_path,
+        args.snapshot,
+        particle_type,
+        load_radius_mode,
+        verbose=args.verbose,
+    )
+
+    if backend == "pylians":
+        grid_result = _build_density_grid_pylians(
+            particles,
+            args.grid_size,
+            args.radius_bins,
+            mas=args.mas,
+            filter_type=args.filter_type,
+            threads=args.threads,
+        )
+    else:
+        grid_result = _build_density_grid_scipy(particles, args.grid_size, args.radius_bins, backend)
+
+    spec = {
+        "particle_type": particle_type,
+        "backend": backend,
+        "radius_mode": load_radius_mode if particle_type == "gas" else None,
+        "particle_metadata": particles.metadata,
+        "backend_metadata": grid_result.backend_metadata,
+        "diagnostics": grid_result.diagnostics,
+    }
+    timings = {
+        "load_data": load_timings.get("load_data", 0.0),
+        **{f"grid_{key}": value for key, value in grid_result.timings.items()},
+    }
+    return grid_result.density_grid, spec, timings
+
+
+def _build_density_field(args: argparse.Namespace, particle_type: str, backend: str, radius_mode: str) -> tuple:
+    import numpy as np
+
+    if particle_type != "both":
+        return _build_single_density_grid(args, particle_type, backend, radius_mode)
+
+    gas_grid, gas_spec, gas_timings = _build_single_density_grid(args, "gas", backend, radius_mode)
+    dm_grid, dm_spec, dm_timings = _build_single_density_grid(args, "dm", backend, radius_mode)
+    density_grid = gas_grid + dm_grid
+    spec = {
+        "particle_type": "both",
+        "backend": backend,
+        "radius_mode": radius_mode,
+        "components": [gas_spec, dm_spec],
+        "diagnostics": {
+            "grid_shape": list(density_grid.shape),
+            "gas_density_sum": float(np.sum(gas_grid, dtype=np.float64)),
+            "dm_density_sum": float(np.sum(dm_grid, dtype=np.float64)),
+            "combined_density_sum": float(np.sum(density_grid, dtype=np.float64)),
+        },
+    }
+    timings = {
+        **{f"gas_{key}": value for key, value in gas_timings.items()},
+        **{f"dm_{key}": value for key, value in dm_timings.items()},
+    }
+    return density_grid, spec, timings
+
+
 def run_compute(args: argparse.Namespace) -> Path:
     import numpy as np
 
     total_t0 = perf_counter()
-    if args.threshold_count < 1:
-        raise ValueError("--threshold-count must be at least 1.")
+    _validate_compute_args(args)
+    simulation_name = _resolve_simulation_name(args.base_path, getattr(args, "simulation_name", None))
 
     if args.backend in {"raw", "raw-volume"}:
-        if args.particle_type != "gas":
-            raise ValueError("--backend raw and --backend raw-volume are only valid with --particle-type gas.")
-
         gas_cells, load_timings = _load_tng_gas_cells(args.base_path, args.snapshot, verbose=args.verbose)
         thresholds = np.linspace(args.threshold_min, args.threshold_max, args.threshold_count)
         if args.backend == "raw":
@@ -142,6 +275,7 @@ def run_compute(args: argparse.Namespace) -> Path:
         timings["total"] = perf_counter() - total_t0
         parameters = {
             "base_path": args.base_path,
+            "simulation_name": simulation_name,
             "snapshot": args.snapshot,
             "grid_size": None,
             "radius_bins": None,
@@ -151,6 +285,11 @@ def run_compute(args: argparse.Namespace) -> Path:
         }
         document = {
             "schema_version": 1,
+            "simulation": {
+                "name": simulation_name,
+                "base_path": args.base_path,
+                "snapshot": args.snapshot,
+            },
             "particle_type": "gas",
             "parameters": parameters,
             "particle_metadata": gas_cells["metadata"],
@@ -160,53 +299,106 @@ def run_compute(args: argparse.Namespace) -> Path:
             "diagnostics": {"clumping": clumping_diagnostics},
             "timings": timings,
         }
-        output_path = Path(args.output) if args.output else _default_output_path(args.output_dir, args.particle_type, args.backend, args.snapshot, args.grid_size)
+        output_path = Path(args.output) if args.output else _default_output_path(
+            args.output_dir,
+            args.particle_type,
+            args.backend,
+            args.snapshot,
+            None,
+            simulation_name,
+        )
         return _write_json_result(document, output_path)
 
-    load_radius_mode = args.backend
-    particles, load_timings = _load_tng_particles(
-        args.base_path,
-        args.snapshot,
-        args.particle_type,
-        load_radius_mode,
-        verbose=args.verbose,
-    )
+    target_particle_type = getattr(args, "target_particle_type", None) or args.particle_type
+    target_backend = getattr(args, "target_backend", None) or args.backend
+    target_radius_mode = getattr(args, "target_radius_mode", None) or args.radius_mode
+    mask_particle_type = getattr(args, "mask_particle_type", None) or target_particle_type
+    mask_backend = getattr(args, "mask_backend", None) or target_backend
+    mask_radius_mode = getattr(args, "mask_radius_mode", None) or target_radius_mode
 
-    if args.backend == "pylians":
-        grid_result = _build_density_grid_pylians(
-            particles,
-            args.grid_size,
-            args.radius_bins,
-            mas=args.mas,
-            filter_type=args.filter_type,
-            threads=args.threads,
-        )
+    target_spec_key = (target_particle_type, target_backend, target_radius_mode)
+    mask_spec_key = (mask_particle_type, mask_backend, mask_radius_mode)
+
+    target_grid, target_spec, target_timings = _build_density_field(
+        args,
+        target_particle_type,
+        target_backend,
+        target_radius_mode,
+    )
+    if mask_spec_key == target_spec_key:
+        mask_grid = target_grid
+        mask_spec = target_spec
+        mask_timings = {}
     else:
-        grid_result = _build_density_grid_scipy(particles, args.grid_size, args.radius_bins, args.backend)
+        mask_grid, mask_spec, mask_timings = _build_density_field(
+            args,
+            mask_particle_type,
+            mask_backend,
+            mask_radius_mode,
+        )
 
     thresholds = np.linspace(args.threshold_min, args.threshold_max, args.threshold_count)
-    clumping_factors, clumping_timings, clumping_diagnostics = _clumping_factor_sweep(thresholds, grid_result.density_grid)
-    grid_result.diagnostics["clumping"] = clumping_diagnostics
+    clumping_factors, clumping_timings, clumping_diagnostics = _clumping_factor_sweep(
+        thresholds,
+        mask_grid,
+        target_grid,
+    )
 
     timings = {
-        **load_timings,
-        **{f"grid_{key}": value for key, value in grid_result.timings.items()},
+        **{f"target_{key}": value for key, value in target_timings.items()},
+        **{f"mask_{key}": value for key, value in mask_timings.items()},
         **{f"clumping_{key}": value for key, value in clumping_timings.items()},
     }
     timings["total"] = perf_counter() - total_t0
 
     parameters = {
         "base_path": args.base_path,
+        "simulation_name": simulation_name,
         "snapshot": args.snapshot,
         "grid_size": args.grid_size,
         "radius_bins": args.radius_bins,
         "threshold_min": args.threshold_min,
         "threshold_max": args.threshold_max,
         "threshold_count": args.threshold_count,
+        "target": {
+            "particle_type": target_particle_type,
+            "backend": target_backend,
+            "radius_mode": target_radius_mode if target_particle_type in {"gas", "both"} else None,
+        },
+        "mask": {
+            "particle_type": mask_particle_type,
+            "backend": mask_backend,
+            "radius_mode": mask_radius_mode if mask_particle_type in {"gas", "both"} else None,
+        },
     }
-    document = _build_result_document(particles, grid_result, thresholds, clumping_factors, parameters, timings)
+    document = {
+        "schema_version": 1,
+        "simulation": {
+            "name": simulation_name,
+            "base_path": args.base_path,
+            "snapshot": args.snapshot,
+        },
+        "particle_type": target_particle_type,
+        "parameters": parameters,
+        "backend": {
+            "backend": target_backend,
+            "target": target_spec,
+            "mask": mask_spec,
+        },
+        "thresholds": thresholds.tolist(),
+        "clumping_factors": [None if not np.isfinite(value) else float(value) for value in clumping_factors],
+        "diagnostics": {"clumping": clumping_diagnostics},
+        "timings": timings,
+    }
 
-    output_path = Path(args.output) if args.output else _default_output_path(args.output_dir, args.particle_type, args.backend, args.snapshot, args.grid_size)
+    output_path = Path(args.output) if args.output else _default_output_path(
+        args.output_dir,
+        target_particle_type,
+        target_backend,
+        args.snapshot,
+        args.grid_size,
+        simulation_name,
+    )
     return _write_json_result(document, output_path)
 
 

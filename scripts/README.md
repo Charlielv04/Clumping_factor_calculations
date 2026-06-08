@@ -17,6 +17,8 @@ GRIDS=256 MEM_256=4gb WALLTIME_256=04:00:00 NCPUS=2 \
 bash scripts/submit_clumping_jobs.sh
 ```
 
+For Thesan-1 snapshot 81, set `BASE_PATH=../Thesan-1 SNAPSHOT=81 SIMULATION_NAME=Thesan-1`; results and logs will be written under simulation-specific subdirectories.
+
 Submit larger grids only after checking queue limits with `qstat -Q` or `qstat -Qf`.
 
 ```bash
@@ -25,4 +27,3 @@ bash scripts/submit_clumping_jobs.sh
 ```
 
 If PBS rejects a job with "violates queue and/or server resource limits", lower `MEM_*`, `WALLTIME_*`, or `NCPUS`, or choose an allowed queue with `QUEUE=<name>`.
-

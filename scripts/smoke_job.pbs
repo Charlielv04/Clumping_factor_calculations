@@ -11,24 +11,37 @@ cd "${PROJECT_DIR:-$PBS_O_WORKDIR}"
 mkdir -p results logs
 
 BASE_PATH="${BASE_PATH:-../tng100-3/output}"
+SIMULATION_NAME="${SIMULATION_NAME:-}"
 SNAPSHOT="${SNAPSHOT:-98}"
 RADIUS_BINS="${RADIUS_BINS:-4}"
 THRESHOLD_COUNT="${THRESHOLD_COUNT:-16}"
 THREADS="${THREADS:-1}"
+RADIUS_MODE="${RADIUS_MODE:-sphere}"
+
+if [[ -z "${SIMULATION_NAME}" ]]; then
+  base_trimmed="${BASE_PATH%/}"
+  SIMULATION_NAME="$(basename "${base_trimmed}")"
+  if [[ "${SIMULATION_NAME}" == "output" ]]; then
+    SIMULATION_NAME="$(basename "$(dirname "${base_trimmed}")")"
+  fi
+fi
 
 : "${GRID:?GRID must be set}"
 : "${PARTICLE:?PARTICLE must be set}"
 : "${BACKEND:?BACKEND must be set}"
 
 name="smoke_${PARTICLE}_${BACKEND}_${GRID}"
+mkdir -p "results/${SIMULATION_NAME}"
 
 clumping-compute \
   --base-path "${BASE_PATH}" \
+  --simulation-name "${SIMULATION_NAME}" \
   --snapshot "${SNAPSHOT}" \
   --particle-type "${PARTICLE}" \
   --backend "${BACKEND}" \
+  --radius-mode "${RADIUS_MODE}" \
   --grid-size "${GRID}" \
   --radius-bins "${RADIUS_BINS}" \
   --threshold-count "${THRESHOLD_COUNT}" \
   --threads "${THREADS}" \
-  --output "results/${name}.json"
+  --output "results/${SIMULATION_NAME}/${name}.json"

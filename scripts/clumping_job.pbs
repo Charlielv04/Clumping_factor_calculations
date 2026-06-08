@@ -15,26 +15,68 @@ mkdir -p results logs
 : "${GRID:?GRID must be set to 256, 512, or 1024}"
 
 BASE_PATH="${BASE_PATH:-../tng100-3/output}"
+SIMULATION_NAME="${SIMULATION_NAME:-}"
 SNAPSHOT="${SNAPSHOT:-98}"
 RADIUS_BINS="${RADIUS_BINS:-10}"
+RADIUS_MODE="${RADIUS_MODE:-sphere}"
 THREADS="${THREADS:-1}"
-OUTPUT="results/${PARTICLE}_${BACKEND}_${GRID}.json"
+if [[ -z "${SIMULATION_NAME}" ]]; then
+  base_trimmed="${BASE_PATH%/}"
+  SIMULATION_NAME="$(basename "${base_trimmed}")"
+  if [[ "${SIMULATION_NAME}" == "output" ]]; then
+    SIMULATION_NAME="$(basename "$(dirname "${base_trimmed}")")"
+  fi
+fi
+mkdir -p "results/${SIMULATION_NAME}"
+OUTPUT_STEM="results/${SIMULATION_NAME}/${PARTICLE}_${BACKEND}_${GRID}"
+EXTRA_ARGS=()
+
+if [[ -n "${TARGET_PARTICLE_TYPE:-}" ]]; then
+  EXTRA_ARGS+=(--target-particle-type "${TARGET_PARTICLE_TYPE}")
+  OUTPUT_STEM="${OUTPUT_STEM}_target-${TARGET_PARTICLE_TYPE}"
+fi
+if [[ -n "${TARGET_BACKEND:-}" ]]; then
+  EXTRA_ARGS+=(--target-backend "${TARGET_BACKEND}")
+  OUTPUT_STEM="${OUTPUT_STEM}-targetbackend-${TARGET_BACKEND}"
+fi
+if [[ -n "${MASK_PARTICLE_TYPE:-}" ]]; then
+  EXTRA_ARGS+=(--mask-particle-type "${MASK_PARTICLE_TYPE}")
+  OUTPUT_STEM="${OUTPUT_STEM}_mask-${MASK_PARTICLE_TYPE}"
+fi
+if [[ -n "${MASK_BACKEND:-}" ]]; then
+  EXTRA_ARGS+=(--mask-backend "${MASK_BACKEND}")
+  OUTPUT_STEM="${OUTPUT_STEM}-maskbackend-${MASK_BACKEND}"
+fi
+if [[ -n "${TARGET_RADIUS_MODE:-}" ]]; then
+  EXTRA_ARGS+=(--target-radius-mode "${TARGET_RADIUS_MODE}")
+  OUTPUT_STEM="${OUTPUT_STEM}-targetradius-${TARGET_RADIUS_MODE}"
+fi
+if [[ -n "${MASK_RADIUS_MODE:-}" ]]; then
+  EXTRA_ARGS+=(--mask-radius-mode "${MASK_RADIUS_MODE}")
+  OUTPUT_STEM="${OUTPUT_STEM}-maskradius-${MASK_RADIUS_MODE}"
+fi
+OUTPUT="${OUTPUT_STEM}.json"
 
 echo "Started: $(date)"
 echo "Host: $(hostname)"
 echo "Particle type: ${PARTICLE}"
 echo "Backend: ${BACKEND}"
+echo "Simulation: ${SIMULATION_NAME}"
 echo "Grid size: ${GRID}"
+echo "Radius mode: ${RADIUS_MODE}"
 echo "Output: ${OUTPUT}"
 
 clumping-compute \
   --base-path "${BASE_PATH}" \
+  --simulation-name "${SIMULATION_NAME}" \
   --snapshot "${SNAPSHOT}" \
   --particle-type "${PARTICLE}" \
   --backend "${BACKEND}" \
+  --radius-mode "${RADIUS_MODE}" \
   --grid-size "${GRID}" \
   --radius-bins "${RADIUS_BINS}" \
   --threads "${THREADS}" \
+  "${EXTRA_ARGS[@]}" \
   --output "${OUTPUT}"
 
 echo "Finished: $(date)"

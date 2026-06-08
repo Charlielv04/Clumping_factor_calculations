@@ -9,6 +9,8 @@ from scipy.ndimage import convolve, uniform_filter
 from .models import GridResult, ParticleData
 from .preprocess import make_radius_groups, particle_flat_indices
 
+MAX_GRID_CELLS = 1024**3
+
 
 def spherical_tophat_kernel(radius_physical: float, cell_size: float) -> np.ndarray:
     radius_cells = float(radius_physical) / float(cell_size)
@@ -16,7 +18,7 @@ def spherical_tophat_kernel(radius_physical: float, cell_size: float) -> np.ndar
     grid = np.arange(-kernel_radius, kernel_radius + 1)
     gx, gy, gz = np.meshgrid(grid, grid, grid, indexing="ij")
     distances = np.sqrt(gx**2 + gy**2 + gz**2)
-    kernel = (distances <= radius_cells).astype(np.float32)
+    kernel = (distances <= radius_cells).astype(np.float64)
     if float(kernel.sum()) == 0.0:
         kernel[kernel_radius, kernel_radius, kernel_radius] = 1.0
     kernel /= kernel.sum(dtype=np.float64)
@@ -40,7 +42,21 @@ def _deposit_mass(flat_indices: np.ndarray, masses: np.ndarray, grid_size: int) 
         flat_indices,
         weights=masses,
         minlength=grid_size**3,
-    ).reshape((grid_size, grid_size, grid_size)).astype(np.float32)
+    ).reshape((grid_size, grid_size, grid_size)).astype(np.float64)
+
+
+def _validate_grid_request(grid_size: int, dtype: np.dtype) -> dict[str, Any]:
+    if grid_size < 1:
+        raise ValueError("grid_size must be at least 1.")
+    cells = int(grid_size) ** 3
+    if cells > MAX_GRID_CELLS:
+        raise ValueError(f"grid_size={grid_size} requires {cells} cells; the supported maximum is {MAX_GRID_CELLS}.")
+    bytes_per_grid = cells * np.dtype(dtype).itemsize
+    return {
+        "grid_cells": cells,
+        "grid_dtype": np.dtype(dtype).name,
+        "bytes_per_grid": bytes_per_grid,
+    }
 
 
 def build_density_grid_scipy(particles: ParticleData, grid_size: int, radius_bins: int, backend: str) -> GridResult:
@@ -48,6 +64,7 @@ def build_density_grid_scipy(particles: ParticleData, grid_size: int, radius_bin
         raise ValueError("SciPy backend must be 'sphere' or 'cube'.")
 
     total_t0 = perf_counter()
+    allocation_metadata = _validate_grid_request(grid_size, np.float64)
     cell_size = particles.lbox / grid_size
     cell_volume = cell_size**3
     timings: dict[str, float] = {}
@@ -60,7 +77,7 @@ def build_density_grid_scipy(particles: ParticleData, grid_size: int, radius_bin
     group_ids, group_radii, radius_metadata = make_radius_groups(particles.radii, radius_bins)
     timings["radius_grouping"] = perf_counter() - t0
 
-    smoothed_mass_grid = np.zeros((grid_size, grid_size, grid_size), dtype=np.float32)
+    smoothed_mass_grid = np.zeros((grid_size, grid_size, grid_size), dtype=np.float64)
     group_summaries: list[dict[str, Any]] = []
 
     for group_id, group_radius in enumerate(group_radii):
@@ -90,7 +107,7 @@ def build_density_grid_scipy(particles: ParticleData, grid_size: int, radius_bin
             smoothed_group_mass_grid, smooth_metadata = cube_tophat_smooth(group_mass_grid, float(group_radius), cell_size)
         smooth_time = perf_counter() - t0
 
-        smoothed_mass_grid += smoothed_group_mass_grid.astype(np.float32, copy=False)
+        smoothed_mass_grid += smoothed_group_mass_grid.astype(np.float64, copy=False)
         group_summaries.append(
             {
                 "group_id": int(group_id),
@@ -119,6 +136,7 @@ def build_density_grid_scipy(particles: ParticleData, grid_size: int, radius_bin
         "cell_size": float(cell_size),
         "cell_volume": float(cell_volume),
         "groups": group_summaries,
+        **allocation_metadata,
         **radius_metadata,
     }
     return GridResult(
@@ -147,6 +165,7 @@ def build_density_grid_pylians(
         ) from exc
 
     total_t0 = perf_counter()
+    allocation_metadata = _validate_grid_request(grid_size, np.float32)
     cell_size = particles.lbox / grid_size
     cell_volume = cell_size**3
     timings: dict[str, float] = {}
@@ -216,6 +235,7 @@ def build_density_grid_pylians(
         "cell_size": float(cell_size),
         "cell_volume": float(cell_volume),
         "groups": group_summaries,
+        **allocation_metadata,
         **radius_metadata,
     }
     return GridResult(
@@ -224,4 +244,3 @@ def build_density_grid_pylians(
         timings=timings,
         backend_metadata={"backend": "pylians", "mas": mas, "filter_type": filter_type, "threads": threads},
     )
-

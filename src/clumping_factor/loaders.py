@@ -62,6 +62,7 @@ def load_tng_particles(base_path: str | Path, snapshot: int, particle_type: str,
         )
         radii = gas_radii_from_density(masses, density, radius_mode)
         metadata["gas_radius_definition"] = "cube root of cell volume" if radius_mode == "cube" else "sphere radius from cell volume"
+        metadata["gas_radius_mode"] = radius_mode
     else:
         raise ValueError("particle_type must be 'gas' or 'dm'.")
 

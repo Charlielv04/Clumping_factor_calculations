@@ -32,7 +32,7 @@ def gas_radii_from_density(masses: np.ndarray, density: np.ndarray, radius_mode:
     volume = masses / density
     if radius_mode == "cube":
         radii = volume ** (1.0 / 3.0)
-    elif radius_mode in {"sphere", "pylians"}:
+    elif radius_mode == "sphere":
         radii = (3.0 * volume / (4.0 * np.pi)) ** (1.0 / 3.0)
     else:
         raise ValueError(f"Unsupported gas radius mode: {radius_mode}")
@@ -82,8 +82,14 @@ def make_radius_groups(radii: np.ndarray, radius_bins: int) -> tuple[np.ndarray,
 def particle_flat_indices(coords: np.ndarray, lbox: float, grid_size: int) -> np.ndarray:
     if grid_size < 1:
         raise ValueError("grid_size must be at least 1.")
+    if not np.isfinite(lbox) or lbox <= 0:
+        raise ValueError("lbox must be positive and finite.")
+    coords = np.asarray(coords, dtype=np.float64)
+    if coords.ndim != 2 or coords.shape[1] != 3:
+        raise ValueError("coords must have shape (N, 3).")
+    if not np.all(np.isfinite(coords)):
+        raise ValueError("coords must be finite.")
     scale = grid_size / float(lbox)
-    indices = (coords * scale).astype(np.int64)
-    indices = np.clip(indices, 0, grid_size - 1)
+    wrapped_coords = np.mod(coords, float(lbox))
+    indices = np.floor(wrapped_coords * scale).astype(np.int64)
     return indices[:, 0] * grid_size**2 + indices[:, 1] * grid_size + indices[:, 2]
-

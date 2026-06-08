@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -52,8 +53,36 @@ def build_result_document(
     )
 
 
-def default_output_path(output_dir: str | Path, particle_type: str, backend: str, snapshot: int, grid_size: int) -> Path:
+def infer_simulation_name(base_path: str | Path) -> str:
+    path = Path(base_path)
+    name = path.name or path.resolve().name
+    if name.lower() == "output":
+        name = path.parent.name
+    return name or "simulation"
+
+
+def sanitize_simulation_name(name: str) -> str:
+    sanitized = re.sub(r"[^A-Za-z0-9_.-]+", "-", name.strip())
+    return sanitized.strip("-") or "simulation"
+
+
+def resolve_simulation_name(base_path: str | Path, simulation_name: str | None = None) -> str:
+    return sanitize_simulation_name(simulation_name or infer_simulation_name(base_path))
+
+
+def default_output_path(
+    output_dir: str | Path,
+    particle_type: str,
+    backend: str,
+    snapshot: int,
+    grid_size: int | None,
+    simulation_name: str | None = None,
+) -> Path:
     output_dir = Path(output_dir)
+    if simulation_name:
+        output_dir = output_dir / sanitize_simulation_name(simulation_name)
+    if grid_size is None:
+        return output_dir / f"{particle_type}_{backend}_snapshot{snapshot:03d}.json"
     return output_dir / f"{particle_type}_{backend}_snapshot{snapshot:03d}_grid{grid_size}.json"
 
 
@@ -66,4 +95,3 @@ def write_json_result(document: dict[str, Any], output_path: str | Path) -> Path
 
 def read_json_result(path: str | Path) -> dict[str, Any]:
     return json.loads(Path(path).read_text(encoding="utf-8"))
-

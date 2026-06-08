@@ -1,6 +1,6 @@
 import numpy as np
 
-from clumping_factor.preprocess import make_radius_groups
+from clumping_factor.preprocess import make_radius_groups, particle_flat_indices
 
 
 def test_identical_radius_grouping_uses_single_group():
@@ -24,3 +24,12 @@ def test_geometric_radius_grouping():
     assert np.count_nonzero(np.isfinite(group_radii)) == 5
     assert metadata["radius_binning"] == "geometric"
 
+
+def test_particle_flat_indices_wrap_periodic_boundaries():
+    coords = np.array(
+        [
+            [1.0, 0.0, 0.0],
+            [-0.25, 0.0, 0.0],
+        ]
+    )
+    assert particle_flat_indices(coords, lbox=1.0, grid_size=4).tolist() == [0, 3 * 4**2]

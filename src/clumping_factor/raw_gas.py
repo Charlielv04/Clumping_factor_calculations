@@ -5,10 +5,22 @@ from time import perf_counter
 import numpy as np
 
 
+def _validate_raw_inputs(density: np.ndarray, rho_mean: float) -> None:
+    if density.ndim != 1:
+        raise ValueError("density must be a one-dimensional array.")
+    if density.size == 0:
+        raise ValueError("density must contain at least one cell.")
+    if not np.all(np.isfinite(density)):
+        raise ValueError("density must contain only finite values.")
+    if not np.isfinite(rho_mean) or rho_mean <= 0:
+        raise ValueError("rho_mean must be positive and finite.")
+
+
 def raw_gas_clumping_sweep(thresholds: np.ndarray, density: np.ndarray, rho_mean: float) -> tuple[np.ndarray, dict[str, float], dict]:
     total_t0 = perf_counter()
     thresholds = np.asarray(thresholds, dtype=np.float64)
     density = np.asarray(density, dtype=np.float64)
+    _validate_raw_inputs(density, float(rho_mean))
     overdensity = density / float(rho_mean) - 1.0
 
     order = np.argsort(overdensity)
@@ -58,6 +70,11 @@ def raw_gas_volume_weighted_clumping_sweep(
     thresholds = np.asarray(thresholds, dtype=np.float64)
     density = np.asarray(density, dtype=np.float64)
     cell_volume = np.asarray(cell_volume, dtype=np.float64)
+    _validate_raw_inputs(density, float(rho_mean))
+    if cell_volume.shape != density.shape:
+        raise ValueError("cell_volume must have the same shape as density.")
+    if not np.all(np.isfinite(cell_volume)) or not np.all(cell_volume > 0):
+        raise ValueError("cell_volume must contain only positive finite values.")
     overdensity = density / float(rho_mean) - 1.0
 
     order = np.argsort(overdensity)
