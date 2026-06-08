@@ -20,6 +20,12 @@ RADIUS_MODE="${RADIUS_MODE:-sphere}"
 LOAD_MODE="${LOAD_MODE:-auto}"
 CHUNK_SIZE="${CHUNK_SIZE:-1000000}"
 MAX_FULL_LOAD_GB="${MAX_FULL_LOAD_GB:-16}"
+PROGRESS_INTERVAL="${PROGRESS_INTERVAL:-25}"
+VERBOSE="${VERBOSE:-1}"
+EXTRA_ARGS=()
+if [[ "${VERBOSE}" == "1" ]]; then
+  EXTRA_ARGS+=(--verbose)
+fi
 
 if [[ -z "${SIMULATION_NAME}" ]]; then
   base_trimmed="${BASE_PATH%/}"
@@ -46,8 +52,10 @@ clumping-compute \
   --load-mode "${LOAD_MODE}" \
   --chunk-size "${CHUNK_SIZE}" \
   --max-full-load-gb "${MAX_FULL_LOAD_GB}" \
+  --progress-interval "${PROGRESS_INTERVAL}" \
   --grid-size "${GRID}" \
   --radius-bins "${RADIUS_BINS}" \
   --threshold-count "${THRESHOLD_COUNT}" \
   --threads "${THREADS}" \
+  "${EXTRA_ARGS[@]}" \
   --output "results/${SIMULATION_NAME}/${name}.json"

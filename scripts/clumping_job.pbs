@@ -23,6 +23,8 @@ THREADS="${THREADS:-1}"
 LOAD_MODE="${LOAD_MODE:-auto}"
 CHUNK_SIZE="${CHUNK_SIZE:-1000000}"
 MAX_FULL_LOAD_GB="${MAX_FULL_LOAD_GB:-16}"
+PROGRESS_INTERVAL="${PROGRESS_INTERVAL:-25}"
+VERBOSE="${VERBOSE:-1}"
 if [[ -z "${SIMULATION_NAME}" ]]; then
   base_trimmed="${BASE_PATH%/}"
   SIMULATION_NAME="$(basename "${base_trimmed}")"
@@ -33,6 +35,9 @@ fi
 mkdir -p "results/${SIMULATION_NAME}"
 OUTPUT_STEM="results/${SIMULATION_NAME}/${PARTICLE}_${BACKEND}_${GRID}"
 EXTRA_ARGS=()
+if [[ "${VERBOSE}" == "1" ]]; then
+  EXTRA_ARGS+=(--verbose)
+fi
 
 if [[ -n "${TARGET_PARTICLE_TYPE:-}" ]]; then
   EXTRA_ARGS+=(--target-particle-type "${TARGET_PARTICLE_TYPE}")
@@ -68,6 +73,7 @@ echo "Simulation: ${SIMULATION_NAME}"
 echo "Grid size: ${GRID}"
 echo "Radius mode: ${RADIUS_MODE}"
 echo "Load mode: ${LOAD_MODE}"
+echo "Progress interval: ${PROGRESS_INTERVAL}"
 echo "Output: ${OUTPUT}"
 
 clumping-compute \
@@ -80,6 +86,7 @@ clumping-compute \
   --load-mode "${LOAD_MODE}" \
   --chunk-size "${CHUNK_SIZE}" \
   --max-full-load-gb "${MAX_FULL_LOAD_GB}" \
+  --progress-interval "${PROGRESS_INTERVAL}" \
   --grid-size "${GRID}" \
   --radius-bins "${RADIUS_BINS}" \
   --threads "${THREADS}" \

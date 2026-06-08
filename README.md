@@ -52,7 +52,7 @@ For gridded gas calculations, `--radius-mode sphere` treats each gas cell volume
 
 Outputs are saved under `results/<simulation>/` unless `--output` is supplied. The simulation name is inferred from `--base-path` by default, or can be set explicitly with `--simulation-name`.
 
-For large snapshots, `--load-mode auto` estimates whether a full particle load is safe and switches to chunked HDF5 reads when needed. Use `--load-mode chunked` to force streaming, `--chunk-size` to control particle/cell reads per chunk, and `--max-full-load-gb` to tune the automatic cutoff.
+For large snapshots, `--load-mode auto` estimates whether a full particle load is safe and switches to chunked HDF5 reads when needed. Use `--load-mode chunked` to force streaming, `--chunk-size` to control particle/cell reads per chunk, and `--max-full-load-gb` to tune the automatic cutoff. Add `--verbose` for progress logs; `--progress-interval 10` reports every 10 chunks instead of the default 25.
 
 Thesan-1 snapshot 81 can be run with:
 
@@ -64,7 +64,8 @@ clumping-compute \
   --particle-type gas \
   --backend sphere \
   --grid-size 256 \
-  --load-mode chunked
+  --load-mode chunked \
+  --verbose
 ```
 
 ## Separate IGM Mask And Target Fields

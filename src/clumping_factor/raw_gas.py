@@ -129,7 +129,12 @@ def raw_gas_volume_weighted_clumping_sweep(
     return clumping_factors, timings, diagnostics
 
 
-def _raw_chunk_summary(chunk_factory: Callable[[], Iterable[dict]], lbox: float) -> dict:
+def _raw_chunk_summary(
+    chunk_factory: Callable[[], Iterable[dict]],
+    lbox: float,
+    progress: Callable[[str], None] | None = None,
+    progress_interval: int = 25,
+) -> dict:
     input_count = 0
     valid_count = 0
     dropped_count = 0
@@ -137,6 +142,8 @@ def _raw_chunk_summary(chunk_factory: Callable[[], Iterable[dict]], lbox: float)
     mass_sum = 0.0
     density_sum = 0.0
     volume_sum = 0.0
+    if progress:
+        progress("starting raw gas chunk summary pass")
     for chunk in chunk_factory():
         chunk_count += 1
         input_count += int(chunk["input_count"])
@@ -145,11 +152,15 @@ def _raw_chunk_summary(chunk_factory: Callable[[], Iterable[dict]], lbox: float)
         mass_sum += float(np.sum(chunk["masses"], dtype=np.float64))
         density_sum += float(np.sum(chunk["density"], dtype=np.float64))
         volume_sum += float(np.sum(chunk["cell_volume"], dtype=np.float64))
+        if progress and chunk_count % progress_interval == 0:
+            progress(f"raw summary pass read {chunk_count} chunks; valid gas cells so far: {valid_count:,}")
     if valid_count == 0:
         raise ValueError("Cannot compute raw gas clumping from an empty valid gas stream.")
     rho_mean = float(mass_sum / float(lbox) ** 3)
     if not np.isfinite(rho_mean) or rho_mean <= 0:
         raise ValueError("rho_mean must be positive and finite.")
+    if progress:
+        progress(f"finished raw summary pass: {chunk_count} chunks, {valid_count:,} valid gas cells, rho_mean={rho_mean:.6g}")
     return {
         "input_count": input_count,
         "valid_count": valid_count,
@@ -168,12 +179,14 @@ def raw_gas_clumping_sweep_chunked(
     lbox: float,
     chunk_size: int,
     volume_weighted: bool = False,
+    progress: Callable[[str], None] | None = None,
+    progress_interval: int = 25,
 ) -> tuple[np.ndarray, dict[str, float], dict]:
     total_t0 = perf_counter()
     thresholds = np.asarray(thresholds, dtype=np.float64)
 
     t0 = perf_counter()
-    summary = _raw_chunk_summary(chunk_factory, lbox)
+    summary = _raw_chunk_summary(chunk_factory, lbox, progress, progress_interval)
     summary_time = perf_counter() - t0
     rho_mean = float(summary["rho_mean"])
 
@@ -183,7 +196,11 @@ def raw_gas_clumping_sweep_chunked(
     selected_volumes = np.zeros(thresholds.shape, dtype=np.float64)
 
     t0 = perf_counter()
+    chunk_count = 0
+    if progress:
+        progress(f"starting raw gas threshold sweep for {thresholds.size} thresholds")
     for chunk in chunk_factory():
+        chunk_count += 1
         density = np.asarray(chunk["density"], dtype=np.float64)
         overdensity = density / rho_mean - 1.0
         order = np.argsort(overdensity)
@@ -206,7 +223,11 @@ def raw_gas_clumping_sweep_chunked(
 
         selected_density_sums[valid] += cumulative_rho[indices[valid] - 1]
         selected_rho2_sums[valid] += cumulative_rho2[indices[valid] - 1]
+        if progress and chunk_count % progress_interval == 0:
+            progress(f"raw threshold sweep processed {chunk_count} chunks")
     sweep_time = perf_counter() - t0
+    if progress:
+        progress(f"finished raw gas threshold sweep in {sweep_time:.1f}s")
 
     clumping_factors = np.full(thresholds.shape, np.nan, dtype=np.float64)
     nonzero = selected_volumes > 0

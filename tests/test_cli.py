@@ -19,6 +19,7 @@ def test_compute_help():
     assert "--simulation-name" in help_text
     assert "--load-mode" in help_text
     assert "--chunk-size" in help_text
+    assert "--progress-interval" in help_text
 
 
 def test_simulation_name_inferred_from_base_path():

@@ -40,6 +40,7 @@ def build_compute_parser() -> argparse.ArgumentParser:
     parser.add_argument("--load-mode", choices=["auto", "full", "chunked"], default="auto")
     parser.add_argument("--chunk-size", type=int, default=1_000_000)
     parser.add_argument("--max-full-load-gb", type=float, default=16.0)
+    parser.add_argument("--progress-interval", type=int, default=25, help="When --verbose is set, report progress every N chunks.")
     parser.add_argument(
         "--radius-mode",
         choices=["sphere", "cube"],
@@ -206,6 +207,8 @@ def _validate_compute_args(args: argparse.Namespace) -> None:
         raise ValueError("--chunk-size must be at least 1.")
     if getattr(args, "max_full_load_gb", 1.0) <= 0:
         raise ValueError("--max-full-load-gb must be positive.")
+    if getattr(args, "progress_interval", 1) < 1:
+        raise ValueError("--progress-interval must be at least 1.")
     if args.backend not in {"raw", "raw-volume"}:
         if args.grid_size < 1:
             raise ValueError("--grid-size must be at least 1.")
@@ -249,9 +252,29 @@ def _chunk_factory(args: argparse.Namespace, particle_type: str, radius_mode: st
     )
 
 
+def _progress_callback(args: argparse.Namespace):
+    if not getattr(args, "verbose", False):
+        return None
+
+    import sys
+    from time import perf_counter
+
+    start = perf_counter()
+
+    def progress(message: str) -> None:
+        elapsed = perf_counter() - start
+        print(f"[clumping {elapsed:8.1f}s] {message}", file=sys.stderr, flush=True)
+
+    return progress
+
+
 def _build_single_density_grid(args: argparse.Namespace, particle_type: str, backend: str, radius_mode: str) -> tuple:
     load_radius_mode = radius_mode if particle_type == "gas" else "sphere"
     selected_load_mode, estimated_gb = _select_load_mode(args, particle_type)
+    progress = _progress_callback(args)
+    if progress:
+        estimated_text = "unknown" if estimated_gb is None else f"{estimated_gb:.2f} GiB"
+        progress(f"building {particle_type} {backend} density field with load_mode={selected_load_mode}; estimated full load={estimated_text}")
     if selected_load_mode == "chunked":
         chunk_factory = _chunk_factory(args, particle_type, load_radius_mode)
         if backend == "pylians":
@@ -263,6 +286,8 @@ def _build_single_density_grid(args: argparse.Namespace, particle_type: str, bac
                 mas=args.mas,
                 filter_type=args.filter_type,
                 threads=args.threads,
+                progress=progress,
+                progress_interval=getattr(args, "progress_interval", 25),
             )
         else:
             grid_result = _build_density_grid_scipy_chunked(
@@ -271,6 +296,8 @@ def _build_single_density_grid(args: argparse.Namespace, particle_type: str, bac
                 args.radius_bins,
                 backend,
                 getattr(args, "chunk_size", 1_000_000),
+                progress=progress,
+                progress_interval=getattr(args, "progress_interval", 25),
             )
         load_timings = {"load_data": grid_result.timings.get("chunk_summary", 0.0)}
     else:
@@ -350,6 +377,10 @@ def run_compute(args: argparse.Namespace) -> Path:
     if args.backend in {"raw", "raw-volume"}:
         thresholds = np.linspace(args.threshold_min, args.threshold_max, args.threshold_count)
         selected_load_mode, estimated_gb = _select_load_mode(args, "gas")
+        progress = _progress_callback(args)
+        if progress:
+            estimated_text = "unknown" if estimated_gb is None else f"{estimated_gb:.2f} GiB"
+            progress(f"computing {args.backend} gas clumping with load_mode={selected_load_mode}; estimated full load={estimated_text}")
         if selected_load_mode == "chunked":
             metadata = _read_snapshot_metadata(args.base_path, args.snapshot)
             clumping_factors, clumping_timings, clumping_diagnostics = _raw_gas_clumping_sweep_chunked(
@@ -358,6 +389,8 @@ def run_compute(args: argparse.Namespace) -> Path:
                 metadata.lbox,
                 getattr(args, "chunk_size", 1_000_000),
                 volume_weighted=args.backend == "raw-volume",
+                progress=progress,
+                progress_interval=getattr(args, "progress_interval", 25),
             )
             load_timings = {"load_data": clumping_timings.get("chunk_summary", 0.0)}
             particle_metadata = {

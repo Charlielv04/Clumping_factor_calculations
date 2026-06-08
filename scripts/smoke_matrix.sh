@@ -13,6 +13,8 @@ THREADS="${THREADS:-1}"
 LOAD_MODE="${LOAD_MODE:-auto}"
 CHUNK_SIZE="${CHUNK_SIZE:-1000000}"
 MAX_FULL_LOAD_GB="${MAX_FULL_LOAD_GB:-16}"
+PROGRESS_INTERVAL="${PROGRESS_INTERVAL:-25}"
+VERBOSE="${VERBOSE:-1}"
 
 mkdir -p results logs
 if [[ -z "${SIMULATION_NAME}" ]]; then
@@ -42,10 +44,12 @@ for particle in gas dm; do
       --load-mode "${LOAD_MODE}" \
       --chunk-size "${CHUNK_SIZE}" \
       --max-full-load-gb "${MAX_FULL_LOAD_GB}" \
+      --progress-interval "${PROGRESS_INTERVAL}" \
       --grid-size "${GRID}" \
       --radius-bins "${RADIUS_BINS}" \
       --threshold-count "${THRESHOLD_COUNT}" \
       --threads "${THREADS}" \
+      $([[ "${VERBOSE}" == "1" ]] && printf '%s' "--verbose") \
       --output "${output}" >"${log}" 2>&1; then
       echo "PASS ${name}"
     else

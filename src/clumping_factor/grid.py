@@ -99,7 +99,11 @@ def _chunk_group_ids(radii: np.ndarray, edges: np.ndarray | None, group_count: i
     return np.clip(group_ids, 0, group_count - 1)
 
 
-def _summarize_chunk_stream(chunks: Iterable[dict]) -> dict[str, Any]:
+def _summarize_chunk_stream(
+    chunks: Iterable[dict],
+    progress: Callable[[str], None] | None = None,
+    progress_interval: int = 25,
+) -> dict[str, Any]:
     input_count = 0
     valid_count = 0
     dropped_count = 0
@@ -108,6 +112,8 @@ def _summarize_chunk_stream(chunks: Iterable[dict]) -> dict[str, Any]:
     radius_min = np.inf
     radius_max = -np.inf
     lbox: float | None = None
+    if progress:
+        progress("starting chunk summary pass")
     for chunk in chunks:
         chunk_count += 1
         input_count += int(chunk["input_count"])
@@ -118,8 +124,12 @@ def _summarize_chunk_stream(chunks: Iterable[dict]) -> dict[str, Any]:
             radius_min = min(radius_min, float(np.min(chunk["radii"])))
             radius_max = max(radius_max, float(np.max(chunk["radii"])))
         lbox = float(chunk["lbox"])
+        if progress and chunk_count % progress_interval == 0:
+            progress(f"summary pass read {chunk_count} chunks; valid particles so far: {valid_count:,}")
     if valid_count == 0 or lbox is None:
         raise ValueError("Cannot build a density grid from an empty valid particle stream.")
+    if progress:
+        progress(f"finished chunk summary pass: {chunk_count} chunks, {valid_count:,} valid particles")
     return {
         "input_count": input_count,
         "valid_count": valid_count,
@@ -238,6 +248,8 @@ def build_density_grid_scipy_chunked(
     radius_bins: int,
     backend: str,
     chunk_size: int,
+    progress: Callable[[str], None] | None = None,
+    progress_interval: int = 25,
 ) -> GridResult:
     if backend not in {"sphere", "cube"}:
         raise ValueError("SciPy backend must be 'sphere' or 'cube'.")
@@ -247,7 +259,7 @@ def build_density_grid_scipy_chunked(
     timings: dict[str, float] = {}
 
     t0 = perf_counter()
-    stream_summary = _summarize_chunk_stream(chunk_factory())
+    stream_summary = _summarize_chunk_stream(chunk_factory(), progress, progress_interval)
     timings["chunk_summary"] = perf_counter() - t0
     lbox = float(stream_summary["lbox"])
     cell_size = lbox / grid_size
@@ -258,14 +270,20 @@ def build_density_grid_scipy_chunked(
 
     smoothed_mass_grid = np.zeros((grid_size, grid_size, grid_size), dtype=np.float64)
     group_summaries: list[dict[str, Any]] = []
+    if progress:
+        progress(f"building {backend} grid with {len(group_radii)} radius bins on {grid_size}^3 cells")
 
     for group_id, group_radius in enumerate(group_radii):
         group_t0 = perf_counter()
         group_mass_grid = np.zeros_like(smoothed_mass_grid)
         deposited_count = 0
+        chunk_count = 0
+        if progress:
+            progress(f"radius bin {group_id + 1}/{len(group_radii)} deposit started; radius={float(group_radius):.6g}")
 
         t0 = perf_counter()
         for chunk in chunk_factory():
+            chunk_count += 1
             group_ids = _chunk_group_ids(chunk["radii"], edges, len(group_radii))
             group_mask = group_ids == group_id
             n_group = int(np.count_nonzero(group_mask))
@@ -273,14 +291,22 @@ def build_density_grid_scipy_chunked(
                 continue
             deposited_count += n_group
             _add_deposited_mass(group_mass_grid, chunk["coords"][group_mask], chunk["masses"][group_mask], lbox, grid_size)
+            if progress and chunk_count % progress_interval == 0:
+                progress(f"radius bin {group_id + 1}/{len(group_radii)} read {chunk_count} chunks; deposited {deposited_count:,} particles")
         deposit_time = perf_counter() - t0
         if deposited_count == 0:
+            if progress:
+                progress(f"radius bin {group_id + 1}/{len(group_radii)} skipped; no particles")
             continue
 
+        if progress:
+            progress(f"radius bin {group_id + 1}/{len(group_radii)} smoothing started after depositing {deposited_count:,} particles")
         t0 = perf_counter()
         smoothed_group_mass_grid, smooth_metadata = _smooth_group_mass_grid(group_mass_grid, float(group_radius), cell_size, backend)
         smooth_time = perf_counter() - t0
         smoothed_mass_grid += smoothed_group_mass_grid.astype(np.float64, copy=False)
+        if progress:
+            progress(f"radius bin {group_id + 1}/{len(group_radii)} finished in {perf_counter() - group_t0:.1f}s")
         group_summaries.append(
             {
                 "group_id": int(group_id),
@@ -301,6 +327,8 @@ def build_density_grid_scipy_chunked(
 
     input_mass = float(stream_summary["input_mass"])
     grid_mass = float(np.sum(smoothed_mass_grid, dtype=np.float64))
+    if progress:
+        progress(f"finished chunked {backend} grid in {perf_counter() - total_t0:.1f}s")
     diagnostics = {
         "input_mass": input_mass,
         "grid_mass": grid_mass,
@@ -438,6 +466,8 @@ def build_density_grid_pylians_chunked(
     mas: str = "CIC",
     filter_type: str = "Top-Hat",
     threads: int = 1,
+    progress: Callable[[str], None] | None = None,
+    progress_interval: int = 25,
 ) -> GridResult:
     try:
         import MAS_library as MASL
@@ -453,7 +483,7 @@ def build_density_grid_pylians_chunked(
     timings: dict[str, float] = {}
 
     t0 = perf_counter()
-    stream_summary = _summarize_chunk_stream(chunk_factory())
+    stream_summary = _summarize_chunk_stream(chunk_factory(), progress, progress_interval)
     timings["chunk_summary"] = perf_counter() - t0
     lbox = float(stream_summary["lbox"])
     cell_size = lbox / grid_size
@@ -464,14 +494,20 @@ def build_density_grid_pylians_chunked(
 
     smoothed_mass_grid = np.zeros((grid_size, grid_size, grid_size), dtype=np.float32)
     group_summaries: list[dict[str, Any]] = []
+    if progress:
+        progress(f"building pylians grid with {len(group_radii)} radius bins on {grid_size}^3 cells")
 
     for group_id, group_radius in enumerate(group_radii):
         group_t0 = perf_counter()
         group_mass_grid = np.zeros_like(smoothed_mass_grid)
         assigned_count = 0
+        chunk_count = 0
+        if progress:
+            progress(f"radius bin {group_id + 1}/{len(group_radii)} Pylians assignment started; radius={float(group_radius):.6g}")
 
         t0 = perf_counter()
         for chunk in chunk_factory():
+            chunk_count += 1
             group_ids = _chunk_group_ids(chunk["radii"], edges, len(group_radii))
             group_mask = group_ids == group_id
             n_group = int(np.count_nonzero(group_mask))
@@ -488,18 +524,28 @@ def build_density_grid_pylians_chunked(
                 temp_grid = np.zeros_like(group_mass_grid)
                 MASL.MA(group_pos, temp_grid, lbox, mas, verbose=False)
                 group_mass_grid += temp_grid * group_masses[0]
+            if progress and chunk_count % progress_interval == 0:
+                progress(f"radius bin {group_id + 1}/{len(group_radii)} read {chunk_count} chunks; assigned {assigned_count:,} particles")
         assignment_time = perf_counter() - t0
         if assigned_count == 0:
+            if progress:
+                progress(f"radius bin {group_id + 1}/{len(group_radii)} skipped; no particles")
             continue
 
+        if progress:
+            progress(f"radius bin {group_id + 1}/{len(group_radii)} filter construction started")
         t0 = perf_counter()
         filter_kernel = SL.FT_filter(lbox, float(group_radius), grid_size, filter_type, threads)
         filter_time = perf_counter() - t0
 
+        if progress:
+            progress(f"radius bin {group_id + 1}/{len(group_radii)} smoothing started after assigning {assigned_count:,} particles")
         t0 = perf_counter()
         smoothed_group_mass_grid = SL.field_smoothing(group_mass_grid, filter_kernel, threads).astype(np.float32, copy=False)
         smooth_time = perf_counter() - t0
         smoothed_mass_grid += smoothed_group_mass_grid
+        if progress:
+            progress(f"radius bin {group_id + 1}/{len(group_radii)} finished in {perf_counter() - group_t0:.1f}s")
         group_summaries.append(
             {
                 "group_id": int(group_id),
@@ -518,6 +564,8 @@ def build_density_grid_pylians_chunked(
 
     input_mass = float(stream_summary["input_mass"])
     grid_mass = float(np.sum(smoothed_mass_grid, dtype=np.float64))
+    if progress:
+        progress(f"finished chunked pylians grid in {perf_counter() - total_t0:.1f}s")
     diagnostics = {
         "input_mass": input_mass,
         "grid_mass": grid_mass,
