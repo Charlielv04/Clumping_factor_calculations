@@ -10,6 +10,9 @@ WALLTIME="${WALLTIME:-01:00:00}"
 NCPUS="${NCPUS:-2}"
 THREADS="${THREADS:-1}"
 RADIUS_MODE="${RADIUS_MODE:-sphere}"
+LOAD_MODE="${LOAD_MODE:-auto}"
+CHUNK_SIZE="${CHUNK_SIZE:-1000000}"
+MAX_FULL_LOAD_GB="${MAX_FULL_LOAD_GB:-16}"
 QUEUE="${QUEUE:-}"
 BASE_PATH="${BASE_PATH:-../tng100-3/output}"
 SIMULATION_NAME="${SIMULATION_NAME:-}"
@@ -35,7 +38,7 @@ for grid in ${GRIDS}; do
         -e "$(pwd)/logs/${SIMULATION_NAME}/${name}.err"
         -l "select=1:ncpus=${NCPUS}:mem=${MEM}"
         -l "walltime=${WALLTIME}"
-        -v "PROJECT_DIR=$(pwd),BASE_PATH=${BASE_PATH},SIMULATION_NAME=${SIMULATION_NAME},GRID=${grid},PARTICLE=${particle},BACKEND=${backend},THREADS=${THREADS},RADIUS_MODE=${RADIUS_MODE}"
+        -v "PROJECT_DIR=$(pwd),BASE_PATH=${BASE_PATH},SIMULATION_NAME=${SIMULATION_NAME},GRID=${grid},PARTICLE=${particle},BACKEND=${backend},THREADS=${THREADS},RADIUS_MODE=${RADIUS_MODE},LOAD_MODE=${LOAD_MODE},CHUNK_SIZE=${CHUNK_SIZE},MAX_FULL_LOAD_GB=${MAX_FULL_LOAD_GB}"
         scripts/smoke_job.pbs
       )
       if [[ -n "${QUEUE}" ]]; then

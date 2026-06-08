@@ -17,6 +17,9 @@ RADIUS_BINS="${RADIUS_BINS:-4}"
 THRESHOLD_COUNT="${THRESHOLD_COUNT:-16}"
 THREADS="${THREADS:-1}"
 RADIUS_MODE="${RADIUS_MODE:-sphere}"
+LOAD_MODE="${LOAD_MODE:-auto}"
+CHUNK_SIZE="${CHUNK_SIZE:-1000000}"
+MAX_FULL_LOAD_GB="${MAX_FULL_LOAD_GB:-16}"
 
 if [[ -z "${SIMULATION_NAME}" ]]; then
   base_trimmed="${BASE_PATH%/}"
@@ -40,6 +43,9 @@ clumping-compute \
   --particle-type "${PARTICLE}" \
   --backend "${BACKEND}" \
   --radius-mode "${RADIUS_MODE}" \
+  --load-mode "${LOAD_MODE}" \
+  --chunk-size "${CHUNK_SIZE}" \
+  --max-full-load-gb "${MAX_FULL_LOAD_GB}" \
   --grid-size "${GRID}" \
   --radius-bins "${RADIUS_BINS}" \
   --threshold-count "${THRESHOLD_COUNT}" \

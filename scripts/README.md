@@ -17,7 +17,7 @@ GRIDS=256 MEM_256=4gb WALLTIME_256=04:00:00 NCPUS=2 \
 bash scripts/submit_clumping_jobs.sh
 ```
 
-For Thesan-1 snapshot 81, set `BASE_PATH=../Thesan-1 SNAPSHOT=81 SIMULATION_NAME=Thesan-1`; results and logs will be written under simulation-specific subdirectories.
+For Thesan-1 snapshot 81, set `BASE_PATH=../Thesan-1/output SNAPSHOT=81 SIMULATION_NAME=Thesan-1 LOAD_MODE=chunked`; results and logs will be written under simulation-specific subdirectories. Tune `CHUNK_SIZE` if needed.
 
 Submit larger grids only after checking queue limits with `qstat -Q` or `qstat -Qf`.
 

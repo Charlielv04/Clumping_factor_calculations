@@ -10,6 +10,9 @@ RADIUS_BINS="${RADIUS_BINS:-4}"
 RADIUS_MODE="${RADIUS_MODE:-sphere}"
 THRESHOLD_COUNT="${THRESHOLD_COUNT:-16}"
 THREADS="${THREADS:-1}"
+LOAD_MODE="${LOAD_MODE:-auto}"
+CHUNK_SIZE="${CHUNK_SIZE:-1000000}"
+MAX_FULL_LOAD_GB="${MAX_FULL_LOAD_GB:-16}"
 
 mkdir -p results logs
 if [[ -z "${SIMULATION_NAME}" ]]; then
@@ -36,6 +39,9 @@ for particle in gas dm; do
       --particle-type "${particle}" \
       --backend "${backend}" \
       --radius-mode "${RADIUS_MODE}" \
+      --load-mode "${LOAD_MODE}" \
+      --chunk-size "${CHUNK_SIZE}" \
+      --max-full-load-gb "${MAX_FULL_LOAD_GB}" \
       --grid-size "${GRID}" \
       --radius-bins "${RADIUS_BINS}" \
       --threshold-count "${THRESHOLD_COUNT}" \

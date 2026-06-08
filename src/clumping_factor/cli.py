@@ -37,6 +37,9 @@ def build_compute_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--grid-size", type=int, default=256)
     parser.add_argument("--radius-bins", type=int, default=10)
+    parser.add_argument("--load-mode", choices=["auto", "full", "chunked"], default="auto")
+    parser.add_argument("--chunk-size", type=int, default=1_000_000)
+    parser.add_argument("--max-full-load-gb", type=float, default=16.0)
     parser.add_argument(
         "--radius-mode",
         choices=["sphere", "cube"],
@@ -108,6 +111,18 @@ def _build_density_grid_pylians(*args, **kwargs):
     return build_density_grid_pylians(*args, **kwargs)
 
 
+def _build_density_grid_scipy_chunked(*args, **kwargs):
+    from .grid import build_density_grid_scipy_chunked
+
+    return build_density_grid_scipy_chunked(*args, **kwargs)
+
+
+def _build_density_grid_pylians_chunked(*args, **kwargs):
+    from .grid import build_density_grid_pylians_chunked
+
+    return build_density_grid_pylians_chunked(*args, **kwargs)
+
+
 def _clumping_factor_sweep(*args, **kwargs):
     from .clumping import clumping_factor_sweep_with_mask
 
@@ -144,6 +159,24 @@ def _load_tng_gas_cells(*args, **kwargs):
     return load_tng_gas_cells(*args, **kwargs)
 
 
+def _iter_particle_chunks(*args, **kwargs):
+    from .loaders import iter_particle_chunks
+
+    return iter_particle_chunks(*args, **kwargs)
+
+
+def _read_snapshot_metadata(*args, **kwargs):
+    from .loaders import read_snapshot_metadata
+
+    return read_snapshot_metadata(*args, **kwargs)
+
+
+def _estimate_full_load_bytes(*args, **kwargs):
+    from .loaders import estimate_full_load_bytes
+
+    return estimate_full_load_bytes(*args, **kwargs)
+
+
 def _raw_gas_clumping_sweep(*args, **kwargs):
     from .raw_gas import raw_gas_clumping_sweep
 
@@ -156,6 +189,12 @@ def _raw_gas_volume_weighted_clumping_sweep(*args, **kwargs):
     return raw_gas_volume_weighted_clumping_sweep(*args, **kwargs)
 
 
+def _raw_gas_clumping_sweep_chunked(*args, **kwargs):
+    from .raw_gas import raw_gas_clumping_sweep_chunked
+
+    return raw_gas_clumping_sweep_chunked(*args, **kwargs)
+
+
 def _validate_compute_args(args: argparse.Namespace) -> None:
     if args.threshold_count < 1:
         raise ValueError("--threshold-count must be at least 1.")
@@ -163,6 +202,10 @@ def _validate_compute_args(args: argparse.Namespace) -> None:
         raise ValueError("--threshold-min must be less than --threshold-max.")
     if args.threads < 1:
         raise ValueError("--threads must be at least 1.")
+    if getattr(args, "chunk_size", 1) < 1:
+        raise ValueError("--chunk-size must be at least 1.")
+    if getattr(args, "max_full_load_gb", 1.0) <= 0:
+        raise ValueError("--max-full-load-gb must be positive.")
     if args.backend not in {"raw", "raw-volume"}:
         if args.grid_size < 1:
             raise ValueError("--grid-size must be at least 1.")
@@ -181,36 +224,87 @@ def _validate_compute_args(args: argparse.Namespace) -> None:
         raise ValueError("raw and raw-volume runs do not support separate mask/target fields.")
 
 
-def _build_single_density_grid(args: argparse.Namespace, particle_type: str, backend: str, radius_mode: str) -> tuple:
-    load_radius_mode = radius_mode if particle_type == "gas" else "sphere"
-    particles, load_timings = _load_tng_particles(
+def _estimate_particle_load_gb(args: argparse.Namespace, particle_type: str) -> float:
+    metadata = _read_snapshot_metadata(args.base_path, args.snapshot)
+    return float(_estimate_full_load_bytes(metadata, particle_type) / 1024**3)
+
+
+def _select_load_mode(args: argparse.Namespace, particle_type: str) -> tuple[str, float | None]:
+    load_mode = getattr(args, "load_mode", "full")
+    if load_mode != "auto":
+        return load_mode, None
+    estimated_gb = _estimate_particle_load_gb(args, particle_type)
+    if estimated_gb > float(getattr(args, "max_full_load_gb", 16.0)):
+        return "chunked", estimated_gb
+    return "full", estimated_gb
+
+
+def _chunk_factory(args: argparse.Namespace, particle_type: str, radius_mode: str):
+    return lambda: _iter_particle_chunks(
         args.base_path,
         args.snapshot,
         particle_type,
-        load_radius_mode,
-        verbose=args.verbose,
+        radius_mode,
+        getattr(args, "chunk_size", 1_000_000),
     )
 
-    if backend == "pylians":
-        grid_result = _build_density_grid_pylians(
-            particles,
-            args.grid_size,
-            args.radius_bins,
-            mas=args.mas,
-            filter_type=args.filter_type,
-            threads=args.threads,
-        )
+
+def _build_single_density_grid(args: argparse.Namespace, particle_type: str, backend: str, radius_mode: str) -> tuple:
+    load_radius_mode = radius_mode if particle_type == "gas" else "sphere"
+    selected_load_mode, estimated_gb = _select_load_mode(args, particle_type)
+    if selected_load_mode == "chunked":
+        chunk_factory = _chunk_factory(args, particle_type, load_radius_mode)
+        if backend == "pylians":
+            grid_result = _build_density_grid_pylians_chunked(
+                chunk_factory,
+                args.grid_size,
+                args.radius_bins,
+                getattr(args, "chunk_size", 1_000_000),
+                mas=args.mas,
+                filter_type=args.filter_type,
+                threads=args.threads,
+            )
+        else:
+            grid_result = _build_density_grid_scipy_chunked(
+                chunk_factory,
+                args.grid_size,
+                args.radius_bins,
+                backend,
+                getattr(args, "chunk_size", 1_000_000),
+            )
+        load_timings = {"load_data": grid_result.timings.get("chunk_summary", 0.0)}
     else:
-        grid_result = _build_density_grid_scipy(particles, args.grid_size, args.radius_bins, backend)
+        particles, load_timings = _load_tng_particles(
+            args.base_path,
+            args.snapshot,
+            particle_type,
+            load_radius_mode,
+            verbose=args.verbose,
+        )
+
+        if backend == "pylians":
+            grid_result = _build_density_grid_pylians(
+                particles,
+                args.grid_size,
+                args.radius_bins,
+                mas=args.mas,
+                filter_type=args.filter_type,
+                threads=args.threads,
+            )
+        else:
+            grid_result = _build_density_grid_scipy(particles, args.grid_size, args.radius_bins, backend)
 
     spec = {
         "particle_type": particle_type,
         "backend": backend,
         "radius_mode": load_radius_mode if particle_type == "gas" else None,
-        "particle_metadata": particles.metadata,
         "backend_metadata": grid_result.backend_metadata,
         "diagnostics": grid_result.diagnostics,
+        "load_mode": selected_load_mode,
+        "estimated_full_load_gb": estimated_gb,
     }
+    if selected_load_mode == "full":
+        spec["particle_metadata"] = particles.metadata
     timings = {
         "load_data": load_timings.get("load_data", 0.0),
         **{f"grid_{key}": value for key, value in grid_result.timings.items()},
@@ -254,23 +348,42 @@ def run_compute(args: argparse.Namespace) -> Path:
     simulation_name = _resolve_simulation_name(args.base_path, getattr(args, "simulation_name", None))
 
     if args.backend in {"raw", "raw-volume"}:
-        gas_cells, load_timings = _load_tng_gas_cells(args.base_path, args.snapshot, verbose=args.verbose)
         thresholds = np.linspace(args.threshold_min, args.threshold_max, args.threshold_count)
-        if args.backend == "raw":
-            clumping_factors, clumping_timings, clumping_diagnostics = _raw_gas_clumping_sweep(
+        selected_load_mode, estimated_gb = _select_load_mode(args, "gas")
+        if selected_load_mode == "chunked":
+            metadata = _read_snapshot_metadata(args.base_path, args.snapshot)
+            clumping_factors, clumping_timings, clumping_diagnostics = _raw_gas_clumping_sweep_chunked(
                 thresholds,
-                gas_cells["density"],
-                gas_cells["rho_mean"],
+                _chunk_factory(args, "gas", args.radius_mode),
+                metadata.lbox,
+                getattr(args, "chunk_size", 1_000_000),
+                volume_weighted=args.backend == "raw-volume",
             )
-            method = "legacy raw gas-cell density, cell weighted"
+            load_timings = {"load_data": clumping_timings.get("chunk_summary", 0.0)}
+            particle_metadata = {
+                "load_mode": "chunked",
+                "estimated_full_load_gb": estimated_gb,
+                "valid_count": clumping_diagnostics["valid_count"],
+                "dropped_count": clumping_diagnostics["dropped_count"],
+                "chunk_count": clumping_diagnostics["chunk_count"],
+            }
         else:
-            clumping_factors, clumping_timings, clumping_diagnostics = _raw_gas_volume_weighted_clumping_sweep(
-                thresholds,
-                gas_cells["density"],
-                gas_cells["cell_volume"],
-                gas_cells["rho_mean"],
-            )
-            method = "raw gas-cell density, volume weighted"
+            gas_cells, load_timings = _load_tng_gas_cells(args.base_path, args.snapshot, verbose=args.verbose)
+            if args.backend == "raw":
+                clumping_factors, clumping_timings, clumping_diagnostics = _raw_gas_clumping_sweep(
+                    thresholds,
+                    gas_cells["density"],
+                    gas_cells["rho_mean"],
+                )
+            else:
+                clumping_factors, clumping_timings, clumping_diagnostics = _raw_gas_volume_weighted_clumping_sweep(
+                    thresholds,
+                    gas_cells["density"],
+                    gas_cells["cell_volume"],
+                    gas_cells["rho_mean"],
+                )
+            particle_metadata = {**gas_cells["metadata"], "load_mode": "full", "estimated_full_load_gb": estimated_gb}
+        method = "legacy raw gas-cell density, cell weighted" if args.backend == "raw" else "raw gas-cell density, volume weighted"
         timings = {**load_timings, **{f"clumping_{key}": value for key, value in clumping_timings.items()}}
         timings["total"] = perf_counter() - total_t0
         parameters = {
@@ -282,6 +395,9 @@ def run_compute(args: argparse.Namespace) -> Path:
             "threshold_min": args.threshold_min,
             "threshold_max": args.threshold_max,
             "threshold_count": args.threshold_count,
+            "load_mode": selected_load_mode,
+            "chunk_size": getattr(args, "chunk_size", 1_000_000) if selected_load_mode == "chunked" else None,
+            "estimated_full_load_gb": estimated_gb,
         }
         document = {
             "schema_version": 1,
@@ -292,8 +408,8 @@ def run_compute(args: argparse.Namespace) -> Path:
             },
             "particle_type": "gas",
             "parameters": parameters,
-            "particle_metadata": gas_cells["metadata"],
-            "backend": {"backend": args.backend, "method": method},
+            "particle_metadata": particle_metadata,
+            "backend": {"backend": args.backend, "method": method, "load_mode": selected_load_mode},
             "thresholds": thresholds.tolist(),
             "clumping_factors": [None if not np.isfinite(value) else float(value) for value in clumping_factors],
             "diagnostics": {"clumping": clumping_diagnostics},
