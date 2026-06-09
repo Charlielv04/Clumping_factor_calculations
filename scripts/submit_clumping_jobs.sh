@@ -20,13 +20,23 @@ VERBOSE="${VERBOSE:-1}"
 WALLTIME_256="${WALLTIME_256:-01:00:00}"
 WALLTIME_512="${WALLTIME_512:-04:00:00}"
 WALLTIME_1024="${WALLTIME_1024:-12:00:00}"
+WALLTIME_128="${WALLTIME_128:-${WALLTIME_256}}"
+WALLTIME_384="${WALLTIME_384:-${WALLTIME_512}}"
+WALLTIME_640="${WALLTIME_640:-${WALLTIME_1024}}"
+WALLTIME_768="${WALLTIME_768:-${WALLTIME_1024}}"
+WALLTIME_896="${WALLTIME_896:-${WALLTIME_1024}}"
 MEM_256="${MEM_256:-4gb}"
 MEM_512="${MEM_512:-4gb}"
 MEM_1024="${MEM_1024:-4gb}"
+MEM_128="${MEM_128:-${MEM_256}}"
+MEM_384="${MEM_384:-${MEM_512}}"
+MEM_640="${MEM_640:-${MEM_1024}}"
+MEM_768="${MEM_768:-${MEM_1024}}"
+MEM_896="${MEM_896:-${MEM_1024}}"
 NCPUS="${NCPUS:-2}"
 QUEUE="${QUEUE:-}"
 MAIL_USER="${MAIL_USER:-}"
-GRIDS="${GRIDS:-256 512 1024}"
+GRIDS="${GRIDS:-128 384 640 768 896}"
 PARTICLES="${PARTICLES:-gas dm}"
 BACKENDS="${BACKENDS:-sphere cube pylians}"
 TARGET_PARTICLE_TYPE="${TARGET_PARTICLE_TYPE:-}"
@@ -54,20 +64,40 @@ submit_one() {
   local -a qsub_args
 
   case "${grid}" in
+    128)
+      mem="${MEM_128}"
+      walltime="${WALLTIME_128}"
+      ;;
     256)
       mem="${MEM_256}"
       walltime="${WALLTIME_256}"
       ;;
+    384)
+      mem="${MEM_384}"
+      walltime="${WALLTIME_384}"
+      ;;
     512)
       mem="${MEM_512}"
       walltime="${WALLTIME_512}"
+      ;;
+    640)
+      mem="${MEM_640}"
+      walltime="${WALLTIME_640}"
+      ;;
+    768)
+      mem="${MEM_768}"
+      walltime="${WALLTIME_768}"
+      ;;
+    896)
+      mem="${MEM_896}"
+      walltime="${WALLTIME_896}"
       ;;
     1024)
       mem="${MEM_1024}"
       walltime="${WALLTIME_1024}"
       ;;
     *)
-      echo "Unsupported grid size: ${grid}" >&2
+      echo "Unsupported grid size: ${grid}. Supported defaults are 128-step grids from 128 to 1024." >&2
       exit 1
       ;;
   esac

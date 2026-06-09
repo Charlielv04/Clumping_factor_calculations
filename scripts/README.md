@@ -29,10 +29,25 @@ PARTICLE=gas BACKEND=sphere GRID=256 SHARD_COUNT=32 \
 bash scripts/submit_summary_jobs.sh
 ```
 
+Monitor summary jobs:
+
+```bash
+qstat -u "$USER"
+tail -f logs/partials/cf_summary_0_of_32.out
+grep -h "summary pass read" logs/partials/cf_summary_*_of_*.out | tail
+find partials -name 'summary_*_of_*.json' | wc -l
+```
+
 Merge summaries:
 
 ```bash
 clumping-merge-summaries partials/Thesan-1/snapshot081/gas_sphere_grid256/summaries/*.json --verbose
+```
+
+Only submit compute partials after `manifest.json` exists:
+
+```bash
+ls -lh partials/Thesan-1/snapshot081/gas_sphere_grid256/manifest.json
 ```
 
 Example partial submission:

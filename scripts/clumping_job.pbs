@@ -12,7 +12,7 @@ mkdir -p results logs
 
 : "${PARTICLE:?PARTICLE must be set to gas or dm}"
 : "${BACKEND:?BACKEND must be set to sphere, cube, or pylians}"
-: "${GRID:?GRID must be set to 256, 512, or 1024}"
+: "${GRID:?GRID must be set to a positive grid size}"
 
 BASE_PATH="${BASE_PATH:-../tng100-3/output}"
 SIMULATION_NAME="${SIMULATION_NAME:-}"

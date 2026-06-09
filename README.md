@@ -102,6 +102,52 @@ After all shards finish, reduce them:
 clumping-reduce-partials --manifest partials/Thesan-1/snapshot081/gas_sphere_grid256/manifest.json --verbose
 ```
 
+### Monitoring Partial Jobs On idark
+
+The distributed workflow must run in this order:
+
+1. Submit summary shards.
+2. Wait for all summary JSON files.
+3. Merge summaries into `manifest.json`.
+4. Submit compute partial shards.
+5. Reduce partial grids into the final result JSON.
+
+Do not submit `clumping-compute-partial` before the manifest exists. If workers fail with `FileNotFoundError: ... manifest.json`, merge the summaries first and resubmit the compute partial jobs.
+
+Summary and compute workers submitted by the helper scripts write PBS logs under:
+
+```bash
+logs/partials/
+```
+
+Useful checks:
+
+```bash
+qstat -u "$USER"
+tail -f logs/partials/cf_summary_0_of_32.out
+grep -h "summary pass read" logs/partials/cf_summary_*_of_*.out | tail
+grep -h "Wrote partial summary" logs/partials/cf_summary_*_of_*.out
+find partials -name 'summary_*_of_*.json' | wc -l
+tail -n 40 logs/partials/cf_summary_*_of_*.err
+```
+
+The expected number of chunks is approximately `ceil(particle_count / chunk_size)`. For Thesan-1 snapshot 81 gas, the run that failed attempted to load about `9,133,408,933` gas cells. With the default `--chunk-size 1000000`, that is about `9134` chunks per full pass. If the summary pass reports `1000` chunks in about `400` seconds, a single serial pass would take roughly one hour; use the distributed summary workflow to split that pass across many jobs.
+
+After all summary JSON files exist, merge them:
+
+```bash
+clumping-merge-summaries partials/Thesan-1/snapshot081/gas_sphere_grid256/summaries/*.json --verbose
+ls -lh partials/Thesan-1/snapshot081/gas_sphere_grid256/manifest.json
+```
+
+Then submit compute partial jobs:
+
+```bash
+MANIFEST=partials/Thesan-1/snapshot081/gas_sphere_grid256/manifest.json \
+SHARD_COUNT=32 \
+bash scripts/submit_partial_jobs.sh
+```
+
 ## Separate IGM Mask And Target Fields
 
 By default, the same density field defines the threshold mask and the clumping factor. To define the IGM mask from one field but measure clumping on another, use the `--mask-*` and `--target-*` options.
