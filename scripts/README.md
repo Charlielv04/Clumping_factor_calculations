@@ -19,6 +19,16 @@ bash scripts/submit_clumping_jobs.sh
 
 For Thesan-1 snapshot 81, set `BASE_PATH=../Thesan-1/output SNAPSHOT=81 SIMULATION_NAME=Thesan-1 LOAD_MODE=chunked`; results and logs will be written under simulation-specific subdirectories. Progress logging is enabled by default in PBS jobs; tune `CHUNK_SIZE` and `PROGRESS_INTERVAL` if needed.
 
+For multi-node processing, use `clumping-prepare-partials`, submit `clumping-compute-partial` as a PBS array over shard indices, then run `clumping-reduce-partials` after the array completes.
+
+Example partial submission:
+
+```bash
+MANIFEST=partials/Thesan-1/snapshot081/gas_sphere_grid256/manifest.json \
+SHARD_COUNT=32 MEM=8gb WALLTIME=12:00:00 \
+bash scripts/submit_partial_jobs.sh
+```
+
 Submit larger grids only after checking queue limits with `qstat -Q` or `qstat -Qf`.
 
 ```bash

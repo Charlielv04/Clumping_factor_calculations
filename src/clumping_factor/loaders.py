@@ -114,6 +114,7 @@ def iter_particle_chunks(
     particle_type: str,
     radius_mode: str,
     chunk_size: int,
+    file_indices: set[int] | None = None,
 ) -> Iterator[dict]:
     if particle_type not in PARTICLE_GROUPS:
         raise ValueError("particle_type must be 'gas' or 'dm'.")
@@ -127,6 +128,8 @@ def iter_particle_chunks(
     mean_spacing = metadata.lbox / total_count ** (1.0 / 3.0) if total_count else 0.0
 
     for file_index, path in enumerate(snapshot_file_paths(base_path, snapshot)):
+        if file_indices is not None and file_index not in file_indices:
+            continue
         with h5py.File(path, "r") as snapfile:
             if group_name not in snapfile:
                 continue
