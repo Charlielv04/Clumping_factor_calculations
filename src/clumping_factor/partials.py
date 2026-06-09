@@ -6,7 +6,6 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any, Callable, Iterable
 
-import h5py
 import numpy as np
 
 from .clumping import clumping_factor_sweep_with_mask
@@ -55,36 +54,15 @@ def _manifest_chunk_factory(manifest: dict[str, Any], file_indices: set[int] | N
     )
 
 
-def build_partial_manifest(args: argparse.Namespace) -> Path:
-    progress = _progress(args.verbose)
+def _summary_base_dir(output_dir: str | Path, simulation_name: str, snapshot: int, particle_type: str, backend: str, grid_size: int) -> Path:
+    return Path(output_dir) / simulation_name / f"snapshot{snapshot:03d}" / f"{particle_type}_{backend}_grid{grid_size}" / "summaries"
+
+
+def _common_partial_config(args: argparse.Namespace) -> dict[str, Any]:
     simulation_name = resolve_simulation_name(args.base_path, args.simulation_name)
     metadata = read_snapshot_metadata(args.base_path, args.snapshot)
-    chunk_factory = _manifest_chunk_factory(
-        {
-            "base_path": args.base_path,
-            "snapshot": args.snapshot,
-            "particle_type": args.particle_type,
-            "radius_mode": args.radius_mode,
-            "chunk_size": args.chunk_size,
-        }
-    )
-
-    summary = _summarize_chunk_stream(chunk_factory(), progress=progress, progress_interval=args.progress_interval)
-    plan = _radius_bin_plan(summary["radius_min"], summary["radius_max"], args.radius_bins)
-    partial_dir = _partial_base_dir(
-        args.partial_dir,
-        {
-            "simulation": {"name": simulation_name},
-            "snapshot": args.snapshot,
-            "particle_type": args.particle_type,
-            "backend": args.backend,
-            "grid_size": args.grid_size,
-        },
-    )
-
-    manifest = {
+    return {
         "schema_version": 1,
-        "kind": "clumping_partial_manifest",
         "simulation": {
             "name": simulation_name,
             "base_path": args.base_path,
@@ -103,6 +81,32 @@ def build_partial_manifest(args: argparse.Namespace) -> Path:
         "filter_type": args.filter_type,
         "lbox": metadata.lbox,
         "file_count": len(snapshot_file_paths(args.base_path, args.snapshot)),
+    }
+
+
+def build_partial_manifest(args: argparse.Namespace) -> Path:
+    progress = _progress(args.verbose)
+    config = _common_partial_config(args)
+    simulation_name = config["simulation"]["name"]
+    chunk_factory = _manifest_chunk_factory(config)
+
+    summary = _summarize_chunk_stream(chunk_factory(), progress=progress, progress_interval=args.progress_interval)
+    plan = _radius_bin_plan(summary["radius_min"], summary["radius_max"], args.radius_bins)
+    partial_dir = _partial_base_dir(
+        args.partial_dir,
+        {
+            "simulation": {"name": simulation_name},
+            "snapshot": config["snapshot"],
+            "particle_type": config["particle_type"],
+            "backend": config["backend"],
+            "grid_size": config["grid_size"],
+        },
+    )
+
+    manifest = {
+        "schema_version": 1,
+        "kind": "clumping_partial_manifest",
+        **config,
         "partial_dir": str(partial_dir),
         "summary": {
             "input_count": int(summary["input_count"]),
@@ -129,7 +133,116 @@ def build_partial_manifest(args: argparse.Namespace) -> Path:
     return output
 
 
+def summarize_partial(args: argparse.Namespace) -> Path:
+    progress = _progress(args.verbose)
+    config = _common_partial_config(args)
+    shard_count = int(args.shard_count)
+    shard_index = int(args.shard_index)
+    if shard_count < 1:
+        raise ValueError("--shard-count must be at least 1.")
+    if shard_index < 0 or shard_index >= shard_count:
+        raise ValueError("--shard-index must satisfy 0 <= shard_index < shard_count.")
+
+    file_indices = {index for index in range(int(config["file_count"])) if index % shard_count == shard_index}
+    if progress:
+        progress(f"summary shard {shard_index}/{shard_count} processing file indices: {sorted(file_indices)}")
+    summary = _summarize_chunk_stream(
+        _manifest_chunk_factory(config, file_indices)(),
+        progress=progress,
+        progress_interval=args.progress_interval,
+    )
+    document = {
+        "schema_version": 1,
+        "kind": "clumping_partial_summary",
+        "config": config,
+        "shard_index": shard_index,
+        "shard_count": shard_count,
+        "file_indices": sorted(file_indices),
+        "summary": {
+            "input_count": int(summary["input_count"]),
+            "valid_count": int(summary["valid_count"]),
+            "dropped_count": int(summary["dropped_count"]),
+            "chunk_count": int(summary["chunk_count"]),
+            "input_mass": float(summary["input_mass"]),
+            "radius_min": float(summary["radius_min"]),
+            "radius_max": float(summary["radius_max"]),
+        },
+    }
+    summary_dir = _summary_base_dir(
+        args.partial_dir,
+        config["simulation"]["name"],
+        int(config["snapshot"]),
+        config["particle_type"],
+        config["backend"],
+        int(config["grid_size"]),
+    )
+    output = Path(args.output) if args.output else summary_dir / f"summary_{shard_index:05d}_of_{shard_count:05d}.json"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(document, indent=2, sort_keys=True), encoding="utf-8")
+    if progress:
+        progress(f"wrote summary shard: {output}")
+    return output
+
+
+def merge_partial_summaries(args: argparse.Namespace) -> Path:
+    progress = _progress(args.verbose)
+    summary_paths = [Path(path) for path in args.summaries]
+    if not summary_paths:
+        summary_paths = sorted(Path(args.summary_dir).glob("summary_*_of_*.json"))
+    if not summary_paths:
+        raise ValueError("No summary files supplied or found.")
+
+    documents = [json.loads(path.read_text(encoding="utf-8")) for path in summary_paths]
+    config = documents[0]["config"]
+    for document in documents[1:]:
+        comparable = {key: value for key, value in document["config"].items() if key != "schema_version"}
+        first = {key: value for key, value in config.items() if key != "schema_version"}
+        if comparable != first:
+            raise ValueError("All summary files must share the same partial configuration.")
+
+    input_count = sum(int(document["summary"]["input_count"]) for document in documents)
+    valid_count = sum(int(document["summary"]["valid_count"]) for document in documents)
+    dropped_count = sum(int(document["summary"]["dropped_count"]) for document in documents)
+    chunk_count = sum(int(document["summary"]["chunk_count"]) for document in documents)
+    input_mass = sum(float(document["summary"]["input_mass"]) for document in documents)
+    radius_min = min(float(document["summary"]["radius_min"]) for document in documents)
+    radius_max = max(float(document["summary"]["radius_max"]) for document in documents)
+    plan = _radius_bin_plan(radius_min, radius_max, int(config["radius_bins"]))
+    partial_dir = _partial_base_dir(args.partial_dir, config)
+
+    manifest = {
+        "schema_version": 1,
+        "kind": "clumping_partial_manifest",
+        **config,
+        "partial_dir": str(partial_dir),
+        "summary": {
+            "input_count": input_count,
+            "valid_count": valid_count,
+            "dropped_count": dropped_count,
+            "chunk_count": chunk_count,
+            "input_mass": input_mass,
+            "radius_min": radius_min,
+            "radius_max": radius_max,
+            "summary_shards": len(documents),
+        },
+        "radius_plan": {
+            "radius_binning": plan["radius_binning"],
+            "radius_representative": "bin_center",
+            "edges": None if plan["edges"] is None else plan["edges"].astype(float).tolist(),
+            "group_radii": plan["group_radii"].astype(float).tolist(),
+        },
+    }
+    output = Path(args.output) if args.output else partial_dir / "manifest.json"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
+    if progress:
+        progress(f"merged {len(documents)} summaries into manifest: {output}")
+    return output
+
+
 def _write_partial_grid(output_path: Path, smoothed_mass_grid: np.ndarray, diagnostics: dict[str, Any], manifest: dict[str, Any]) -> Path:
+    import h5py
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with h5py.File(output_path, "w") as handle:
         handle.create_dataset("smoothed_mass_grid", data=smoothed_mass_grid)
@@ -313,6 +426,8 @@ def reduce_partials(args: argparse.Namespace) -> Path:
     for index, path in enumerate(partial_paths, start=1):
         if progress:
             progress(f"reducing partial {index}/{len(partial_paths)}: {path}")
+        import h5py
+
         with h5py.File(path, "r") as handle:
             accumulator += np.asarray(handle["smoothed_mass_grid"], dtype=np.float64)
             partial_diagnostics.append(json.loads(handle.attrs["diagnostics_json"]))
@@ -398,6 +513,39 @@ def build_prepare_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def build_summary_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Compute one distributed summary shard for partial-grid preparation.")
+    parser.add_argument("--base-path", required=True)
+    parser.add_argument("--simulation-name")
+    parser.add_argument("--snapshot", type=int, required=True)
+    parser.add_argument("--particle-type", choices=["gas", "dm"], required=True)
+    parser.add_argument("--backend", choices=["sphere", "cube", "pylians"], required=True)
+    parser.add_argument("--grid-size", type=int, default=256)
+    parser.add_argument("--radius-bins", type=int, default=10)
+    parser.add_argument("--radius-mode", choices=["sphere", "cube"], default="sphere")
+    parser.add_argument("--chunk-size", type=int, default=1_000_000)
+    parser.add_argument("--partial-dir", default="partials")
+    parser.add_argument("--output")
+    parser.add_argument("--shard-index", type=int, required=True)
+    parser.add_argument("--shard-count", type=int, required=True)
+    parser.add_argument("--mas", default="CIC")
+    parser.add_argument("--filter-type", default="Top-Hat")
+    parser.add_argument("--threads", type=int, default=1)
+    parser.add_argument("--progress-interval", type=int, default=25)
+    parser.add_argument("--verbose", action="store_true")
+    return parser
+
+
+def build_merge_summaries_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Merge distributed summary shards into a partial-grid manifest.")
+    parser.add_argument("summaries", nargs="*")
+    parser.add_argument("--summary-dir", default="partials")
+    parser.add_argument("--partial-dir", default="partials")
+    parser.add_argument("--output")
+    parser.add_argument("--verbose", action="store_true")
+    return parser
+
+
 def build_partial_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Compute one distributed clumping partial grid.")
     parser.add_argument("--manifest", required=True)
@@ -427,6 +575,18 @@ def build_reduce_parser() -> argparse.ArgumentParser:
 def prepare_main(argv: list[str] | None = None) -> None:
     parser = build_prepare_parser()
     output = build_partial_manifest(parser.parse_args(argv))
+    print(f"Wrote partial manifest: {output}")
+
+
+def summary_main(argv: list[str] | None = None) -> None:
+    parser = build_summary_parser()
+    output = summarize_partial(parser.parse_args(argv))
+    print(f"Wrote partial summary: {output}")
+
+
+def merge_summaries_main(argv: list[str] | None = None) -> None:
+    parser = build_merge_summaries_parser()
+    output = merge_partial_summaries(parser.parse_args(argv))
     print(f"Wrote partial manifest: {output}")
 
 

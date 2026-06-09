@@ -6,7 +6,6 @@ import re
 from time import perf_counter
 from typing import Iterator
 
-import h5py
 import numpy as np
 
 from .models import ParticleData
@@ -64,6 +63,8 @@ def snapshot_file_paths(base_path: str | Path, snapshot: int) -> list[Path]:
 
 
 def read_snapshot_metadata(base_path: str | Path, snapshot: int) -> SnapshotMetadata:
+    import h5py
+
     base_path = Path(base_path)
     header_path = snapshot_header_path(base_path, snapshot)
     if not header_path.exists():
@@ -116,6 +117,8 @@ def iter_particle_chunks(
     chunk_size: int,
     file_indices: set[int] | None = None,
 ) -> Iterator[dict]:
+    import h5py
+
     if particle_type not in PARTICLE_GROUPS:
         raise ValueError("particle_type must be 'gas' or 'dm'.")
     if chunk_size < 1:
@@ -185,6 +188,8 @@ def iter_particle_chunks(
 
 
 def load_tng_particles(base_path: str | Path, snapshot: int, particle_type: str, radius_mode: str, verbose: bool = False) -> tuple[ParticleData, dict[str, float]]:
+    import h5py
+
     t0 = perf_counter()
     il = _load_illustris_python()
     base_path = Path(base_path)
@@ -240,6 +245,8 @@ def load_tng_particles(base_path: str | Path, snapshot: int, particle_type: str,
 
 
 def load_tng_gas_cells(base_path: str | Path, snapshot: int, verbose: bool = False) -> tuple[dict, dict[str, float]]:
+    import h5py
+
     t0 = perf_counter()
     il = _load_illustris_python()
     base_path = Path(base_path)

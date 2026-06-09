@@ -1,0 +1,58 @@
+#!/bin/bash
+
+set -euo pipefail
+
+set +u
+source ~/.bashrc
+set -u
+conda activate "${CONDA_ENV:-clumping-factor}"
+
+cd "${PROJECT_DIR:-$PBS_O_WORKDIR}"
+
+: "${BASE_PATH:?BASE_PATH must be set}"
+: "${SNAPSHOT:?SNAPSHOT must be set}"
+: "${PARTICLE:?PARTICLE must be set}"
+: "${BACKEND:?BACKEND must be set}"
+: "${GRID:?GRID must be set}"
+: "${SHARD_INDEX:?SHARD_INDEX must be set}"
+: "${SHARD_COUNT:?SHARD_COUNT must be set}"
+
+SIMULATION_NAME="${SIMULATION_NAME:-}"
+RADIUS_BINS="${RADIUS_BINS:-10}"
+RADIUS_MODE="${RADIUS_MODE:-sphere}"
+CHUNK_SIZE="${CHUNK_SIZE:-1000000}"
+PARTIAL_DIR="${PARTIAL_DIR:-partials}"
+THREADS="${THREADS:-1}"
+PROGRESS_INTERVAL="${PROGRESS_INTERVAL:-25}"
+VERBOSE="${VERBOSE:-1}"
+EXTRA_ARGS=()
+if [[ "${VERBOSE}" == "1" ]]; then
+  EXTRA_ARGS+=(--verbose)
+fi
+if [[ -n "${SIMULATION_NAME}" ]]; then
+  EXTRA_ARGS+=(--simulation-name "${SIMULATION_NAME}")
+fi
+
+echo "Started: $(date)"
+echo "Host: $(hostname)"
+echo "Summary shard: ${SHARD_INDEX}/${SHARD_COUNT}"
+echo "Base path: ${BASE_PATH}"
+echo "Snapshot: ${SNAPSHOT}"
+
+clumping-summarize-partial \
+  --base-path "${BASE_PATH}" \
+  --snapshot "${SNAPSHOT}" \
+  --particle-type "${PARTICLE}" \
+  --backend "${BACKEND}" \
+  --grid-size "${GRID}" \
+  --radius-bins "${RADIUS_BINS}" \
+  --radius-mode "${RADIUS_MODE}" \
+  --chunk-size "${CHUNK_SIZE}" \
+  --partial-dir "${PARTIAL_DIR}" \
+  --shard-index "${SHARD_INDEX}" \
+  --shard-count "${SHARD_COUNT}" \
+  --threads "${THREADS}" \
+  --progress-interval "${PROGRESS_INTERVAL}" \
+  "${EXTRA_ARGS[@]}"
+
+echo "Finished: $(date)"

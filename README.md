@@ -68,10 +68,10 @@ clumping-compute \
   --verbose
 ```
 
-For multi-node runs, use the partial-grid workflow. First prepare one manifest with the global radius bins:
+For multi-node runs, use the partial-grid workflow. The fully distributed version first summarizes shards, then merges the tiny summary JSON files into one manifest:
 
 ```bash
-clumping-prepare-partials \
+clumping-summarize-partial \
   --base-path ../Thesan-1/output \
   --simulation-name Thesan-1 \
   --snapshot 81 \
@@ -79,10 +79,18 @@ clumping-prepare-partials \
   --backend sphere \
   --grid-size 256 \
   --radius-bins 10 \
+  --shard-index 0 \
+  --shard-count 32 \
   --verbose
 ```
 
-Then submit many workers, each with a unique shard index:
+After all summaries finish:
+
+```bash
+clumping-merge-summaries partials/Thesan-1/snapshot081/gas_sphere_grid256/summaries/*.json --verbose
+```
+
+Then submit grid workers, each with a unique shard index:
 
 ```bash
 clumping-compute-partial --manifest partials/Thesan-1/snapshot081/gas_sphere_grid256/manifest.json --shard-index 0 --shard-count 32 --verbose
