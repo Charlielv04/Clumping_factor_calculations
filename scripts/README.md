@@ -17,46 +17,7 @@ GRIDS=256 MEM_256=4gb WALLTIME_256=04:00:00 NCPUS=2 \
 bash scripts/submit_clumping_jobs.sh
 ```
 
-For Thesan-1 snapshot 81, set `BASE_PATH=../Thesan-1/output SNAPSHOT=81 SIMULATION_NAME=Thesan-1 LOAD_MODE=chunked`; results and logs will be written under simulation-specific subdirectories. Progress logging is enabled by default in PBS jobs; tune `CHUNK_SIZE` and `PROGRESS_INTERVAL` if needed.
-
-For multi-node processing, submit `clumping-summarize-partial` jobs first, merge them with `clumping-merge-summaries`, submit `clumping-compute-partial` jobs over shard indices, then run `clumping-reduce-partials` after the grid array completes.
-
-Example distributed summary submission:
-
-```bash
-BASE_PATH=../Thesan-1/output SNAPSHOT=81 SIMULATION_NAME=Thesan-1 \
-PARTICLE=gas BACKEND=sphere GRID=256 SHARD_COUNT=32 \
-bash scripts/submit_summary_jobs.sh
-```
-
-Monitor summary jobs:
-
-```bash
-qstat -u "$USER"
-tail -f logs/partials/cf_summary_0_of_32.out
-grep -h "summary pass read" logs/partials/cf_summary_*_of_*.out | tail
-find partials -name 'summary_*_of_*.json' | wc -l
-```
-
-Merge summaries:
-
-```bash
-clumping-merge-summaries partials/Thesan-1/snapshot081/gas_sphere_grid256/summaries/*.json --verbose
-```
-
-Only submit compute partials after `manifest.json` exists:
-
-```bash
-ls -lh partials/Thesan-1/snapshot081/gas_sphere_grid256/manifest.json
-```
-
-Example partial submission:
-
-```bash
-MANIFEST=partials/Thesan-1/snapshot081/gas_sphere_grid256/manifest.json \
-SHARD_COUNT=32 MEM=8gb WALLTIME=12:00:00 \
-bash scripts/submit_partial_jobs.sh
-```
+For Thesan-1 snapshot 81, set `BASE_PATH=../Thesan-1/output SNAPSHOT=81 SIMULATION_NAME=Thesan-1 LOAD_MODE=chunked THREADS=<n>`; results and logs will be written under simulation-specific subdirectories. Progress logging is enabled by default in PBS jobs; tune `CHUNK_SIZE`, `THREADS`, and `PROGRESS_INTERVAL` if needed. Chunked gridded runs use same-node local workers and cap the effective worker count by the number of snapshot files.
 
 Submit larger grids only after checking queue limits with `qstat -Q` or `qstat -Qf`.
 

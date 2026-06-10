@@ -118,10 +118,22 @@ def _build_density_grid_scipy_chunked(*args, **kwargs):
     return build_density_grid_scipy_chunked(*args, **kwargs)
 
 
+def _build_density_grid_scipy_chunked_parallel(*args, **kwargs):
+    from .grid import build_density_grid_scipy_chunked_parallel
+
+    return build_density_grid_scipy_chunked_parallel(*args, **kwargs)
+
+
 def _build_density_grid_pylians_chunked(*args, **kwargs):
     from .grid import build_density_grid_pylians_chunked
 
     return build_density_grid_pylians_chunked(*args, **kwargs)
+
+
+def _build_density_grid_pylians_chunked_parallel(*args, **kwargs):
+    from .grid import build_density_grid_pylians_chunked_parallel
+
+    return build_density_grid_pylians_chunked_parallel(*args, **kwargs)
 
 
 def _clumping_factor_sweep(*args, **kwargs):
@@ -276,26 +288,32 @@ def _build_single_density_grid(args: argparse.Namespace, particle_type: str, bac
         estimated_text = "unknown" if estimated_gb is None else f"{estimated_gb:.2f} GiB"
         progress(f"building {particle_type} {backend} density field with load_mode={selected_load_mode}; estimated full load={estimated_text}")
     if selected_load_mode == "chunked":
-        chunk_factory = _chunk_factory(args, particle_type, load_radius_mode)
         if backend == "pylians":
-            grid_result = _build_density_grid_pylians_chunked(
-                chunk_factory,
+            grid_result = _build_density_grid_pylians_chunked_parallel(
+                args.base_path,
+                args.snapshot,
+                particle_type,
+                load_radius_mode,
                 args.grid_size,
                 args.radius_bins,
                 getattr(args, "chunk_size", 1_000_000),
-                mas=args.mas,
-                filter_type=args.filter_type,
-                threads=args.threads,
+                args.threads,
+                mas=getattr(args, "mas", "CIC"),
+                filter_type=getattr(args, "filter_type", "Top-Hat"),
                 progress=progress,
                 progress_interval=getattr(args, "progress_interval", 25),
             )
         else:
-            grid_result = _build_density_grid_scipy_chunked(
-                chunk_factory,
+            grid_result = _build_density_grid_scipy_chunked_parallel(
+                args.base_path,
+                args.snapshot,
+                particle_type,
+                load_radius_mode,
                 args.grid_size,
                 args.radius_bins,
                 backend,
                 getattr(args, "chunk_size", 1_000_000),
+                args.threads,
                 progress=progress,
                 progress_interval=getattr(args, "progress_interval", 25),
             )

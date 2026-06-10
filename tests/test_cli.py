@@ -5,7 +5,6 @@ import numpy as np
 
 from clumping_factor.cli import build_compute_parser, plot_main, run_compute
 from clumping_factor.models import GridResult, ParticleData
-from clumping_factor.partials import build_merge_summaries_parser, build_summary_parser
 from clumping_factor.results import default_output_path, resolve_simulation_name
 
 
@@ -21,14 +20,7 @@ def test_compute_help():
     assert "--load-mode" in help_text
     assert "--chunk-size" in help_text
     assert "--progress-interval" in help_text
-
-
-def test_partial_summary_help():
-    summary_help = build_summary_parser().format_help()
-    merge_help = build_merge_summaries_parser().format_help()
-    assert "--shard-index" in summary_help
-    assert "--shard-count" in summary_help
-    assert "summaries" in merge_help
+    assert "--threads" in help_text
 
 
 def test_simulation_name_inferred_from_base_path():

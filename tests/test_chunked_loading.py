@@ -4,7 +4,7 @@ import h5py
 import numpy as np
 
 from clumping_factor.cli import _select_load_mode
-from clumping_factor.grid import build_density_grid_scipy, build_density_grid_scipy_chunked
+from clumping_factor.grid import build_density_grid_scipy, build_density_grid_scipy_chunked, build_density_grid_scipy_chunked_parallel
 from clumping_factor.loaders import SnapshotMetadata, iter_particle_chunks, read_snapshot_metadata
 from clumping_factor.models import ParticleData
 from clumping_factor.raw_gas import raw_gas_clumping_sweep, raw_gas_clumping_sweep_chunked
@@ -94,6 +94,68 @@ def test_chunked_scipy_grid_matches_full_grid_for_single_radius(tmp_path):
     assert np.allclose(full.density_grid, chunked.density_grid)
     assert abs(chunked.diagnostics["relative_mass_error"]) < 1e-6
     assert chunked.diagnostics["load_mode"] == "chunked"
+
+
+def test_parallel_chunked_cube_matches_serial_chunked(tmp_path):
+    base_path = write_split_snapshot(tmp_path)
+    chunk_factory = lambda: iter_particle_chunks(base_path, 0, "gas", "cube", chunk_size=1)
+    serial = build_density_grid_scipy_chunked(chunk_factory, grid_size=4, radius_bins=3, backend="cube", chunk_size=1)
+    parallel = build_density_grid_scipy_chunked_parallel(
+        str(base_path),
+        0,
+        "gas",
+        "cube",
+        grid_size=4,
+        radius_bins=3,
+        backend="cube",
+        chunk_size=1,
+        threads=2,
+    )
+
+    assert np.allclose(serial.density_grid, parallel.density_grid)
+    assert parallel.diagnostics["parallel_mode"] == "single_node_process_workers"
+    assert parallel.diagnostics["requested_threads"] == 2
+    assert parallel.diagnostics["effective_workers"] == 2
+    assert parallel.diagnostics["estimated_bytes_per_worker"] == 2 * parallel.diagnostics["bytes_per_grid"]
+
+
+def test_parallel_chunked_sphere_matches_serial_chunked(tmp_path):
+    base_path = write_split_snapshot(tmp_path)
+    chunk_factory = lambda: iter_particle_chunks(base_path, 0, "gas", "sphere", chunk_size=1)
+    serial = build_density_grid_scipy_chunked(chunk_factory, grid_size=4, radius_bins=3, backend="sphere", chunk_size=1)
+    parallel = build_density_grid_scipy_chunked_parallel(
+        str(base_path),
+        0,
+        "gas",
+        "sphere",
+        grid_size=4,
+        radius_bins=3,
+        backend="sphere",
+        chunk_size=1,
+        threads=2,
+    )
+
+    assert np.allclose(serial.density_grid, parallel.density_grid)
+    assert abs(parallel.diagnostics["relative_mass_error"]) < 1e-6
+
+
+def test_parallel_chunked_workers_are_capped_by_file_count(tmp_path):
+    base_path = write_split_snapshot(tmp_path)
+    parallel = build_density_grid_scipy_chunked_parallel(
+        str(base_path),
+        0,
+        "gas",
+        "cube",
+        grid_size=4,
+        radius_bins=3,
+        backend="cube",
+        chunk_size=1,
+        threads=8,
+    )
+
+    assert parallel.diagnostics["requested_threads"] == 8
+    assert parallel.diagnostics["effective_workers"] == 2
+    assert len(parallel.diagnostics["workers"]) == 2
 
 
 def test_chunked_raw_gas_matches_full_raw_gas(tmp_path):

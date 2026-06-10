@@ -4,6 +4,26 @@ Modular clumping factor tools for TNG gas and dark matter snapshots.
 
 The calculation command writes JSON summaries. Plotting is intentionally separate, so compute runs do not create figures unless requested.
 
+## Repository Structure
+
+```text
+Clumping_factor_calculations/
+  src/clumping_factor/
+    cli.py          Command-line entry points for compute and plot.
+    grid.py         Density-grid construction, smoothing, and same-node chunked parallelism.
+    loaders.py      Snapshot metadata, full particle loading, and chunked HDF5 readers.
+    clumping.py     Threshold sweeps and mask/target clumping-factor calculations.
+    raw_gas.py      Raw gas-cell clumping paths that do not build particle grids.
+    preprocess.py   Validation, gas-cell radius calculation, and particle indexing helpers.
+    plotting.py     Plot generation from JSON result files.
+    results.py      Output path handling and JSON serialization.
+  tests/            Unit tests for CLI behavior, loading, grids, masks, plotting, and raw gas paths.
+  scripts/          PBS helper scripts for same-node cluster runs.
+  pyproject.toml    Package metadata and console scripts.
+```
+
+Only `clumping-compute` and `clumping-plot` are user-facing console commands. The previous multi-node partial/shard workflow has been removed; chunked gridded runs now parallelize on one node through `clumping-compute --load-mode chunked --threads N`.
+
 ## Install
 
 ```bash
@@ -54,6 +74,8 @@ Outputs are saved under `results/<simulation>/` unless `--output` is supplied. T
 
 For large snapshots, `--load-mode auto` estimates whether a full particle load is safe and switches to chunked HDF5 reads when needed. Use `--load-mode chunked` to force streaming, `--chunk-size` to control particle/cell reads per chunk, and `--max-full-load-gb` to tune the automatic cutoff. Add `--verbose` for progress logs; `--progress-interval 10` reports every 10 chunks instead of the default 25.
 
+For gridded chunked runs, `--threads` controls same-node parallel grid building. Snapshot files are split across local workers, each worker builds private grid accumulators, and the main process reduces those grids into the final density field. The effective worker count is capped by the number of snapshot files.
+
 Thesan-1 snapshot 81 can be run with:
 
 ```bash
@@ -65,87 +87,8 @@ clumping-compute \
   --backend sphere \
   --grid-size 256 \
   --load-mode chunked \
+  --threads 8 \
   --verbose
-```
-
-For multi-node runs, use the partial-grid workflow. The fully distributed version first summarizes shards, then merges the tiny summary JSON files into one manifest:
-
-```bash
-clumping-summarize-partial \
-  --base-path ../Thesan-1/output \
-  --simulation-name Thesan-1 \
-  --snapshot 81 \
-  --particle-type gas \
-  --backend sphere \
-  --grid-size 256 \
-  --radius-bins 10 \
-  --shard-index 0 \
-  --shard-count 32 \
-  --verbose
-```
-
-After all summaries finish:
-
-```bash
-clumping-merge-summaries partials/Thesan-1/snapshot081/gas_sphere_grid256/summaries/*.json --verbose
-```
-
-Then submit grid workers, each with a unique shard index:
-
-```bash
-clumping-compute-partial --manifest partials/Thesan-1/snapshot081/gas_sphere_grid256/manifest.json --shard-index 0 --shard-count 32 --verbose
-```
-
-After all shards finish, reduce them:
-
-```bash
-clumping-reduce-partials --manifest partials/Thesan-1/snapshot081/gas_sphere_grid256/manifest.json --verbose
-```
-
-### Monitoring Partial Jobs On idark
-
-The distributed workflow must run in this order:
-
-1. Submit summary shards.
-2. Wait for all summary JSON files.
-3. Merge summaries into `manifest.json`.
-4. Submit compute partial shards.
-5. Reduce partial grids into the final result JSON.
-
-Do not submit `clumping-compute-partial` before the manifest exists. If workers fail with `FileNotFoundError: ... manifest.json`, merge the summaries first and resubmit the compute partial jobs.
-
-Summary and compute workers submitted by the helper scripts write PBS logs under:
-
-```bash
-logs/partials/
-```
-
-Useful checks:
-
-```bash
-qstat -u "$USER"
-tail -f logs/partials/cf_summary_0_of_32.out
-grep -h "summary pass read" logs/partials/cf_summary_*_of_*.out | tail
-grep -h "Wrote partial summary" logs/partials/cf_summary_*_of_*.out
-find partials -name 'summary_*_of_*.json' | wc -l
-tail -n 40 logs/partials/cf_summary_*_of_*.err
-```
-
-The expected number of chunks is approximately `ceil(particle_count / chunk_size)`. For Thesan-1 snapshot 81 gas, the run that failed attempted to load about `9,133,408,933` gas cells. With the default `--chunk-size 1000000`, that is about `9134` chunks per full pass. If the summary pass reports `1000` chunks in about `400` seconds, a single serial pass would take roughly one hour; use the distributed summary workflow to split that pass across many jobs.
-
-After all summary JSON files exist, merge them:
-
-```bash
-clumping-merge-summaries partials/Thesan-1/snapshot081/gas_sphere_grid256/summaries/*.json --verbose
-ls -lh partials/Thesan-1/snapshot081/gas_sphere_grid256/manifest.json
-```
-
-Then submit compute partial jobs:
-
-```bash
-MANIFEST=partials/Thesan-1/snapshot081/gas_sphere_grid256/manifest.json \
-SHARD_COUNT=32 \
-bash scripts/submit_partial_jobs.sh
 ```
 
 ## Separate IGM Mask And Target Fields
