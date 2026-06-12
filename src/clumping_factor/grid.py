@@ -245,6 +245,9 @@ def build_density_grid_scipy(particles: ParticleData, grid_size: int, radius_bin
     t0 = perf_counter()
     density_grid = smoothed_mass_grid / cell_volume
     timings["density_conversion"] = perf_counter() - t0
+    timings["deposit_total"] = sum(float(summary["deposit_seconds"]) for summary in group_summaries)
+    timings["smooth_total"] = sum(float(summary["smooth_seconds"]) for summary in group_summaries)
+    timings["group_total_sum"] = sum(float(summary["total_seconds"]) for summary in group_summaries)
     timings["build_density_grid"] = perf_counter() - total_t0
 
     input_mass = float(np.sum(particles.masses, dtype=np.float64))
@@ -349,6 +352,9 @@ def build_density_grid_scipy_chunked(
     t0 = perf_counter()
     density_grid = smoothed_mass_grid / cell_volume
     timings["density_conversion"] = perf_counter() - t0
+    timings["deposit_total"] = sum(float(summary["deposit_seconds"]) for summary in group_summaries)
+    timings["smooth_total"] = sum(float(summary["smooth_seconds"]) for summary in group_summaries)
+    timings["group_total_sum"] = sum(float(summary["total_seconds"]) for summary in group_summaries)
     timings["build_density_grid"] = perf_counter() - total_t0
 
     input_mass = float(stream_summary["input_mass"])
@@ -411,13 +417,22 @@ def _compute_scipy_chunked_worker(
     dropped_count = 0
     input_mass = 0.0
     chunks_seen: set[tuple[int, int, int]] = set()
+    worker_t0 = perf_counter()
+    stream_seconds = 0.0
+    deposit_seconds = 0.0
+    smooth_seconds = 0.0
+    accumulate_seconds = 0.0
 
     for group_id, group_radius in enumerate(group_radii):
         group_t0 = perf_counter()
         group_mass_grid = np.zeros_like(smoothed_mass_grid)
         deposited_count = 0
         chunk_count = 0
+        group_stream_seconds = 0.0
+        group_deposit_seconds = 0.0
+        stream_t0 = perf_counter()
         for chunk in iter_particle_chunks(base_path, snapshot, particle_type, radius_mode, chunk_size, file_indices=selected_files):
+            group_stream_seconds += perf_counter() - stream_t0
             chunk_key = (int(chunk["file_index"]), int(chunk["start"]), int(chunk["stop"]))
             if chunk_key not in chunks_seen:
                 chunks_seen.add(chunk_key)
@@ -430,13 +445,25 @@ def _compute_scipy_chunked_worker(
             group_mask = group_ids == group_id
             n_group = int(np.count_nonzero(group_mask))
             if n_group == 0:
+                stream_t0 = perf_counter()
                 continue
             deposited_count += n_group
+            deposit_t0 = perf_counter()
             _add_deposited_mass(group_mass_grid, chunk["coords"][group_mask], chunk["masses"][group_mask], lbox, grid_size)
+            group_deposit_seconds += perf_counter() - deposit_t0
+            stream_t0 = perf_counter()
+        stream_seconds += group_stream_seconds
+        deposit_seconds += group_deposit_seconds
         if deposited_count == 0:
             continue
+        smooth_t0 = perf_counter()
         smoothed_group, smooth_metadata = _smooth_group_mass_grid(group_mass_grid, float(group_radius), cell_size, backend)
+        group_smooth_seconds = perf_counter() - smooth_t0
+        smooth_seconds += group_smooth_seconds
+        accumulate_t0 = perf_counter()
         smoothed_mass_grid += smoothed_group.astype(np.float64, copy=False)
+        group_accumulate_seconds = perf_counter() - accumulate_t0
+        accumulate_seconds += group_accumulate_seconds
         group_summaries.append(
             {
                 "group_id": int(group_id),
@@ -445,6 +472,10 @@ def _compute_scipy_chunked_worker(
                 "radius_grid_cells": float(group_radius / cell_size),
                 "chunk_count": int(chunk_count),
                 "file_indices": list(file_indices),
+                "stream_seconds": group_stream_seconds,
+                "deposit_seconds": group_deposit_seconds,
+                "smooth_seconds": group_smooth_seconds,
+                "accumulate_seconds": group_accumulate_seconds,
                 "total_seconds": perf_counter() - group_t0,
                 **smooth_metadata,
             }
@@ -458,6 +489,11 @@ def _compute_scipy_chunked_worker(
         "input_mass": input_mass,
         "chunk_count": len(chunks_seen),
         "grid_mass": float(np.sum(smoothed_mass_grid, dtype=np.float64)),
+        "stream_seconds": stream_seconds,
+        "deposit_seconds": deposit_seconds,
+        "smooth_seconds": smooth_seconds,
+        "accumulate_seconds": accumulate_seconds,
+        "worker_total_seconds": perf_counter() - worker_t0,
     }
     return smoothed_mass_grid, group_summaries, worker_summary
 
@@ -535,14 +571,22 @@ def build_density_grid_scipy_chunked_parallel(
     smoothed_mass_grid = np.zeros((grid_size, grid_size, grid_size), dtype=np.float64)
     group_summaries: list[dict[str, Any]] = []
     worker_summaries: list[dict[str, Any]] = []
+    t0 = perf_counter()
     for worker_grid, worker_groups, worker_summary in worker_results:
         smoothed_mass_grid += worker_grid.astype(np.float64, copy=False)
         group_summaries.extend(worker_groups)
         worker_summaries.append(worker_summary)
+    timings["reduce_worker_grids"] = perf_counter() - t0
 
     t0 = perf_counter()
     density_grid = smoothed_mass_grid / cell_volume
     timings["density_conversion"] = perf_counter() - t0
+    timings["worker_stream_total"] = sum(float(summary["stream_seconds"]) for summary in worker_summaries)
+    timings["worker_deposit_total"] = sum(float(summary["deposit_seconds"]) for summary in worker_summaries)
+    timings["worker_smooth_total"] = sum(float(summary["smooth_seconds"]) for summary in worker_summaries)
+    timings["worker_accumulate_total"] = sum(float(summary["accumulate_seconds"]) for summary in worker_summaries)
+    timings["worker_total_sum"] = sum(float(summary["worker_total_seconds"]) for summary in worker_summaries)
+    timings["worker_total_max"] = max((float(summary["worker_total_seconds"]) for summary in worker_summaries), default=0.0)
     timings["build_density_grid"] = perf_counter() - total_t0
 
     input_mass = float(stream_summary["input_mass"])
@@ -664,6 +708,10 @@ def build_density_grid_pylians(
         )
 
     density_grid = smoothed_mass_grid / cell_volume
+    timings["assignment_total"] = sum(float(summary["assignment_seconds"]) for summary in group_summaries)
+    timings["filter_total"] = sum(float(summary["filter_seconds"]) for summary in group_summaries)
+    timings["smooth_total"] = sum(float(summary["smooth_seconds"]) for summary in group_summaries)
+    timings["group_total_sum"] = sum(float(summary["total_seconds"]) for summary in group_summaries)
     timings["build_density_grid"] = perf_counter() - total_t0
 
     input_mass = float(np.sum(particles.masses, dtype=np.float64))
@@ -788,7 +836,13 @@ def build_density_grid_pylians_chunked(
             }
         )
 
+    t0 = perf_counter()
     density_grid = smoothed_mass_grid / cell_volume
+    timings["density_conversion"] = perf_counter() - t0
+    timings["assignment_total"] = sum(float(summary["assignment_seconds"]) for summary in group_summaries)
+    timings["filter_total"] = sum(float(summary["filter_seconds"]) for summary in group_summaries)
+    timings["smooth_total"] = sum(float(summary["smooth_seconds"]) for summary in group_summaries)
+    timings["group_total_sum"] = sum(float(summary["total_seconds"]) for summary in group_summaries)
     timings["build_density_grid"] = perf_counter() - total_t0
 
     input_mass = float(stream_summary["input_mass"])
@@ -856,13 +910,23 @@ def _compute_pylians_chunked_worker(
     dropped_count = 0
     input_mass = 0.0
     chunks_seen: set[tuple[int, int, int]] = set()
+    worker_t0 = perf_counter()
+    stream_seconds = 0.0
+    assignment_seconds = 0.0
+    filter_seconds = 0.0
+    smooth_seconds = 0.0
+    accumulate_seconds = 0.0
 
     for group_id, group_radius in enumerate(group_radii):
         group_t0 = perf_counter()
         group_mass_grid = np.zeros_like(smoothed_mass_grid)
         assigned_count = 0
         chunk_count = 0
+        group_stream_seconds = 0.0
+        group_assignment_seconds = 0.0
+        stream_t0 = perf_counter()
         for chunk in iter_particle_chunks(base_path, snapshot, particle_type, radius_mode, chunk_size, file_indices=selected_files):
+            group_stream_seconds += perf_counter() - stream_t0
             chunk_key = (int(chunk["file_index"]), int(chunk["start"]), int(chunk["stop"]))
             if chunk_key not in chunks_seen:
                 chunks_seen.add(chunk_key)
@@ -875,10 +939,12 @@ def _compute_pylians_chunked_worker(
             group_mask = group_ids == group_id
             n_group = int(np.count_nonzero(group_mask))
             if n_group == 0:
+                stream_t0 = perf_counter()
                 continue
             assigned_count += n_group
             group_pos = np.ascontiguousarray(chunk["coords"][group_mask], dtype=np.float32)
             group_masses = np.ascontiguousarray(chunk["masses"][group_mask], dtype=np.float32)
+            assignment_t0 = perf_counter()
             try:
                 MASL.MA(group_pos, group_mass_grid, lbox, mas, W=group_masses, verbose=False)
             except TypeError:
@@ -887,10 +953,24 @@ def _compute_pylians_chunked_worker(
                 temp_grid = np.zeros_like(group_mass_grid)
                 MASL.MA(group_pos, temp_grid, lbox, mas, verbose=False)
                 group_mass_grid += temp_grid * group_masses[0]
+            group_assignment_seconds += perf_counter() - assignment_t0
+            stream_t0 = perf_counter()
+        stream_seconds += group_stream_seconds
+        assignment_seconds += group_assignment_seconds
         if assigned_count == 0:
             continue
+        filter_t0 = perf_counter()
         filter_kernel = SL.FT_filter(lbox, float(group_radius), grid_size, filter_type, pylians_threads)
-        smoothed_mass_grid += SL.field_smoothing(group_mass_grid, filter_kernel, pylians_threads).astype(np.float32, copy=False)
+        group_filter_seconds = perf_counter() - filter_t0
+        filter_seconds += group_filter_seconds
+        smooth_t0 = perf_counter()
+        smoothed_group = SL.field_smoothing(group_mass_grid, filter_kernel, pylians_threads).astype(np.float32, copy=False)
+        group_smooth_seconds = perf_counter() - smooth_t0
+        smooth_seconds += group_smooth_seconds
+        accumulate_t0 = perf_counter()
+        smoothed_mass_grid += smoothed_group
+        group_accumulate_seconds = perf_counter() - accumulate_t0
+        accumulate_seconds += group_accumulate_seconds
         group_summaries.append(
             {
                 "group_id": int(group_id),
@@ -900,6 +980,11 @@ def _compute_pylians_chunked_worker(
                 "chunk_count": int(chunk_count),
                 "file_indices": list(file_indices),
                 "pylians_threads": pylians_threads,
+                "stream_seconds": group_stream_seconds,
+                "assignment_seconds": group_assignment_seconds,
+                "filter_seconds": group_filter_seconds,
+                "smooth_seconds": group_smooth_seconds,
+                "accumulate_seconds": group_accumulate_seconds,
                 "total_seconds": perf_counter() - group_t0,
             }
         )
@@ -913,6 +998,12 @@ def _compute_pylians_chunked_worker(
         "chunk_count": len(chunks_seen),
         "grid_mass": float(np.sum(smoothed_mass_grid, dtype=np.float64)),
         "pylians_threads_per_worker": pylians_threads,
+        "stream_seconds": stream_seconds,
+        "assignment_seconds": assignment_seconds,
+        "filter_seconds": filter_seconds,
+        "smooth_seconds": smooth_seconds,
+        "accumulate_seconds": accumulate_seconds,
+        "worker_total_seconds": perf_counter() - worker_t0,
     }
     return smoothed_mass_grid, group_summaries, worker_summary
 
@@ -998,12 +1089,23 @@ def build_density_grid_pylians_chunked_parallel(
     smoothed_mass_grid = np.zeros((grid_size, grid_size, grid_size), dtype=np.float32)
     group_summaries: list[dict[str, Any]] = []
     worker_summaries: list[dict[str, Any]] = []
+    t0 = perf_counter()
     for worker_grid, worker_groups, worker_summary in worker_results:
         smoothed_mass_grid += worker_grid.astype(np.float32, copy=False)
         group_summaries.extend(worker_groups)
         worker_summaries.append(worker_summary)
+    timings["reduce_worker_grids"] = perf_counter() - t0
 
+    t0 = perf_counter()
     density_grid = smoothed_mass_grid / cell_volume
+    timings["density_conversion"] = perf_counter() - t0
+    timings["worker_stream_total"] = sum(float(summary["stream_seconds"]) for summary in worker_summaries)
+    timings["worker_assignment_total"] = sum(float(summary["assignment_seconds"]) for summary in worker_summaries)
+    timings["worker_filter_total"] = sum(float(summary["filter_seconds"]) for summary in worker_summaries)
+    timings["worker_smooth_total"] = sum(float(summary["smooth_seconds"]) for summary in worker_summaries)
+    timings["worker_accumulate_total"] = sum(float(summary["accumulate_seconds"]) for summary in worker_summaries)
+    timings["worker_total_sum"] = sum(float(summary["worker_total_seconds"]) for summary in worker_summaries)
+    timings["worker_total_max"] = max((float(summary["worker_total_seconds"]) for summary in worker_summaries), default=0.0)
     timings["build_density_grid"] = perf_counter() - total_t0
 
     input_mass = float(stream_summary["input_mass"])

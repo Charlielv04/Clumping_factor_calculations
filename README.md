@@ -76,6 +76,18 @@ For large snapshots, `--load-mode auto` estimates whether a full particle load i
 
 For gridded chunked runs, `--threads` controls same-node parallel grid building. Snapshot files are split across local workers, each worker builds private grid accumulators, and the main process reduces those grids into the final density field. The effective worker count is capped by the number of snapshot files.
 
+Benchmark timings are written into the result JSON under `timings`. For chunked gridded runs, the most useful fields are:
+
+- `chunk_summary`: initial pass used to find valid counts and radius bins.
+- `parallel_grid_build`: wall time spent inside the local worker pool.
+- `reduce_worker_grids`: time spent summing worker-private grids in the parent process.
+- `density_conversion`: final mass-grid to density-grid conversion.
+- `worker_stream_total`: summed worker time spent reading/streaming chunks.
+- `worker_deposit_total` or `worker_assignment_total`: summed worker time spent depositing particles into grids.
+- `worker_smooth_total`: summed worker smoothing time.
+- `worker_total_max`: slowest worker runtime, usually the best indicator of parallel wall-clock balance.
+- `build_density_grid`: total density-grid construction time.
+
 Thesan-1 snapshot 81 can be run with:
 
 ```bash
