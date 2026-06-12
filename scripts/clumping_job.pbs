@@ -20,6 +20,8 @@ SNAPSHOT="${SNAPSHOT:-98}"
 RADIUS_BINS="${RADIUS_BINS:-10}"
 RADIUS_MODE="${RADIUS_MODE:-sphere}"
 THREADS="${THREADS:-1}"
+NCPUS="${NCPUS:-${THREADS}}"
+RESOURCE_SIZE="${RESOURCE_SIZE:-unknown}"
 LOAD_MODE="${LOAD_MODE:-auto}"
 CHUNK_SIZE="${CHUNK_SIZE:-1000000}"
 MAX_FULL_LOAD_GB="${MAX_FULL_LOAD_GB:-16}"
@@ -33,7 +35,7 @@ if [[ -z "${SIMULATION_NAME}" ]]; then
   fi
 fi
 mkdir -p "results/${SIMULATION_NAME}"
-OUTPUT_STEM="results/${SIMULATION_NAME}/${PARTICLE}_${BACKEND}_${GRID}"
+OUTPUT_STEM="results/${SIMULATION_NAME}/${PARTICLE}_${BACKEND}_grid${GRID}_threads${THREADS}"
 EXTRA_ARGS=()
 if [[ "${VERBOSE}" == "1" ]]; then
   EXTRA_ARGS+=(--verbose)
@@ -73,6 +75,8 @@ echo "Simulation: ${SIMULATION_NAME}"
 echo "Grid size: ${GRID}"
 echo "Radius mode: ${RADIUS_MODE}"
 echo "Load mode: ${LOAD_MODE}"
+echo "Resource size: ${RESOURCE_SIZE}"
+echo "Allocated CPUs requested: ${NCPUS}"
 echo "Threads: ${THREADS}"
 echo "Progress interval: ${PROGRESS_INTERVAL}"
 echo "Output: ${OUTPUT}"
