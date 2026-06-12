@@ -3,7 +3,7 @@
 The IPMU idark documentation uses PBS resource requests of the form `select=1:ncpus=<n>:mem=<size>`. The submission helpers use `QUEUE=auto` by default:
 
 - one-CPU jobs are submitted to `tiny`;
-- jobs requesting more than one CPU omit `-q`, allowing PBS to select the normal queue;
+- jobs requesting more than one CPU are submitted to `mini`;
 - explicitly setting `QUEUE=tiny` with `NCPUS>1` is rejected before submission;
 - set `QUEUE=<name>` to request a specific larger queue when required locally.
 
@@ -37,13 +37,14 @@ for ncpus in 1 2 4 8; do
   LOAD_MODE=chunked \
   NCPUS="${ncpus}" \
   THREADS="${ncpus}" \
+  RADIUS_BIN_BATCH_SIZE=2 \
   MEM_128=8gb MEM_256=16gb MEM_512=32gb \
   WALLTIME_128=01:00:00 WALLTIME_256=02:00:00 WALLTIME_512=08:00:00 \
   bash scripts/submit_clumping_jobs.sh
 done
 ```
 
-With `QUEUE=auto`, only the `ncpus=1` jobs use `tiny`. Output names contain `_grid<grid>_threads<threads>`, while PBS job names contain `_g<grid>_serial` or `_g<grid>_parallel<ncpus>`.
+With `QUEUE=auto`, the `ncpus=1` jobs use `tiny` and parallel jobs use `mini`. Output names contain `_grid<grid>_threads<threads>_batch<batch-size>`, while PBS job names also include `_b<batch-size>`.
 
 For Thesan-1 snapshot 81, set `BASE_PATH=../Thesan-1/output SNAPSHOT=81 SIMULATION_NAME=Thesan-1 LOAD_MODE=chunked THREADS=<n>`; results and logs will be written under simulation-specific subdirectories. Progress logging is enabled by default in PBS jobs; tune `CHUNK_SIZE`, `THREADS`, and `PROGRESS_INTERVAL` if needed. Chunked gridded runs use same-node local workers and cap the effective worker count by the number of snapshot files.
 

@@ -10,6 +10,7 @@ SIMULATION_NAME="${SIMULATION_NAME:-}"
 CONDA_ENV="${CONDA_ENV:-clumping-factor}"
 SNAPSHOT="${SNAPSHOT:-98}"
 RADIUS_BINS="${RADIUS_BINS:-10}"
+RADIUS_BIN_BATCH_SIZE="${RADIUS_BIN_BATCH_SIZE:-1}"
 RADIUS_MODE="${RADIUS_MODE:-sphere}"
 LOAD_MODE="${LOAD_MODE:-auto}"
 CHUNK_SIZE="${CHUNK_SIZE:-1000000}"
@@ -107,19 +108,19 @@ submit_one() {
   else
     resource_size="parallel${NCPUS}"
   fi
-  name="cf_${JOB_SIMULATION_NAME}_${particle}_${backend}_g${grid}_${resource_size}"
+  name="cf_${JOB_SIMULATION_NAME}_${particle}_${backend}_g${grid}_${resource_size}_b${RADIUS_BIN_BATCH_SIZE}"
 
   case "${QUEUE}" in
     auto)
       if (( NCPUS == 1 )); then
         selected_queue="tiny"
       else
-        selected_queue=""
+        selected_queue="mini"
       fi
       ;;
     tiny)
       if (( NCPUS > 1 )); then
-        echo "QUEUE=tiny cannot be used with NCPUS=${NCPUS}; use QUEUE=auto or QUEUE=<larger-queue>." >&2
+        echo "QUEUE=tiny cannot be used with NCPUS=${NCPUS}; use QUEUE=auto, QUEUE=mini, or another larger queue." >&2
         exit 1
       fi
       selected_queue="tiny"
@@ -140,7 +141,7 @@ submit_one() {
     -e "${PROJECT_DIR}/logs/${SIMULATION_NAME}/${name}.err" \
     -l "select=1:ncpus=${NCPUS}:mem=${mem}" \
     -l "walltime=${walltime}" \
-    -v "PROJECT_DIR=${PROJECT_DIR},BASE_PATH=${BASE_PATH},SIMULATION_NAME=${SIMULATION_NAME},CONDA_ENV=${CONDA_ENV},SNAPSHOT=${SNAPSHOT},RADIUS_BINS=${RADIUS_BINS},RADIUS_MODE=${RADIUS_MODE},THREADS=${THREADS},NCPUS=${NCPUS},RESOURCE_SIZE=${resource_size},LOAD_MODE=${LOAD_MODE},CHUNK_SIZE=${CHUNK_SIZE},MAX_FULL_LOAD_GB=${MAX_FULL_LOAD_GB},PROGRESS_INTERVAL=${PROGRESS_INTERVAL},VERBOSE=${VERBOSE},PARTICLE=${particle},BACKEND=${backend},GRID=${grid},TARGET_PARTICLE_TYPE=${TARGET_PARTICLE_TYPE},TARGET_BACKEND=${TARGET_BACKEND},MASK_PARTICLE_TYPE=${MASK_PARTICLE_TYPE},MASK_BACKEND=${MASK_BACKEND},TARGET_RADIUS_MODE=${TARGET_RADIUS_MODE},MASK_RADIUS_MODE=${MASK_RADIUS_MODE}" \
+    -v "PROJECT_DIR=${PROJECT_DIR},BASE_PATH=${BASE_PATH},SIMULATION_NAME=${SIMULATION_NAME},CONDA_ENV=${CONDA_ENV},SNAPSHOT=${SNAPSHOT},RADIUS_BINS=${RADIUS_BINS},RADIUS_BIN_BATCH_SIZE=${RADIUS_BIN_BATCH_SIZE},RADIUS_MODE=${RADIUS_MODE},THREADS=${THREADS},NCPUS=${NCPUS},RESOURCE_SIZE=${resource_size},LOAD_MODE=${LOAD_MODE},CHUNK_SIZE=${CHUNK_SIZE},MAX_FULL_LOAD_GB=${MAX_FULL_LOAD_GB},PROGRESS_INTERVAL=${PROGRESS_INTERVAL},VERBOSE=${VERBOSE},PARTICLE=${particle},BACKEND=${backend},GRID=${grid},TARGET_PARTICLE_TYPE=${TARGET_PARTICLE_TYPE},TARGET_BACKEND=${TARGET_BACKEND},MASK_PARTICLE_TYPE=${MASK_PARTICLE_TYPE},MASK_BACKEND=${MASK_BACKEND},TARGET_RADIUS_MODE=${TARGET_RADIUS_MODE},MASK_RADIUS_MODE=${MASK_RADIUS_MODE}" \
     scripts/clumping_job.pbs
   )
 

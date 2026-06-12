@@ -18,6 +18,7 @@ BASE_PATH="${BASE_PATH:-../tng100-3/output}"
 SIMULATION_NAME="${SIMULATION_NAME:-}"
 SNAPSHOT="${SNAPSHOT:-98}"
 RADIUS_BINS="${RADIUS_BINS:-10}"
+RADIUS_BIN_BATCH_SIZE="${RADIUS_BIN_BATCH_SIZE:-1}"
 RADIUS_MODE="${RADIUS_MODE:-sphere}"
 THREADS="${THREADS:-1}"
 NCPUS="${NCPUS:-${THREADS}}"
@@ -35,7 +36,7 @@ if [[ -z "${SIMULATION_NAME}" ]]; then
   fi
 fi
 mkdir -p "results/${SIMULATION_NAME}"
-OUTPUT_STEM="results/${SIMULATION_NAME}/${PARTICLE}_${BACKEND}_grid${GRID}_threads${THREADS}"
+OUTPUT_STEM="results/${SIMULATION_NAME}/${PARTICLE}_${BACKEND}_grid${GRID}_threads${THREADS}_batch${RADIUS_BIN_BATCH_SIZE}"
 EXTRA_ARGS=()
 if [[ "${VERBOSE}" == "1" ]]; then
   EXTRA_ARGS+=(--verbose)
@@ -78,6 +79,7 @@ echo "Load mode: ${LOAD_MODE}"
 echo "Resource size: ${RESOURCE_SIZE}"
 echo "Allocated CPUs requested: ${NCPUS}"
 echo "Threads: ${THREADS}"
+echo "Radius-bin batch size: ${RADIUS_BIN_BATCH_SIZE}"
 echo "Progress interval: ${PROGRESS_INTERVAL}"
 echo "Output: ${OUTPUT}"
 
@@ -94,6 +96,7 @@ clumping-compute \
   --progress-interval "${PROGRESS_INTERVAL}" \
   --grid-size "${GRID}" \
   --radius-bins "${RADIUS_BINS}" \
+  --radius-bin-batch-size "${RADIUS_BIN_BATCH_SIZE}" \
   --threads "${THREADS}" \
   "${EXTRA_ARGS[@]}" \
   --output "${OUTPUT}"

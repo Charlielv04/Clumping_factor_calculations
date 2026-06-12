@@ -110,6 +110,7 @@ def test_parallel_chunked_cube_matches_serial_chunked(tmp_path):
         backend="cube",
         chunk_size=1,
         threads=2,
+        radius_bin_batch_size=1,
     )
 
     assert np.allclose(serial.density_grid, parallel.density_grid)
@@ -133,6 +134,7 @@ def test_parallel_chunked_sphere_matches_serial_chunked(tmp_path):
         backend="sphere",
         chunk_size=1,
         threads=2,
+        radius_bin_batch_size=1,
     )
 
     assert np.allclose(serial.density_grid, parallel.density_grid)
@@ -151,11 +153,40 @@ def test_parallel_chunked_workers_are_capped_by_file_count(tmp_path):
         backend="cube",
         chunk_size=1,
         threads=8,
+        radius_bin_batch_size=1,
     )
 
     assert parallel.diagnostics["requested_threads"] == 8
     assert parallel.diagnostics["effective_workers"] == 2
     assert len(parallel.diagnostics["workers"]) == 2
+
+
+def test_parallel_chunked_radius_bin_batching_reduces_stream_passes(tmp_path):
+    snapdir = tmp_path / "snapdir_000"
+    snapdir.mkdir()
+    gas = {
+        "Coordinates": np.array(
+            [[0.1, 0.1, 0.1], [0.3, 0.3, 0.3], [0.6, 0.6, 0.6], [0.8, 0.8, 0.8]],
+            dtype=np.float32,
+        ),
+        "Density": np.array([64.0, 8.0, 1.0, 0.125], dtype=np.float32),
+        "Masses": np.ones(4, dtype=np.float32),
+    }
+    counts = np.array([4, 0, 0, 0, 0, 0], dtype=np.uint32)
+    write_snapshot_file(snapdir / "snap_000.0.hdf5", 4.0, counts, counts, gas=gas, file_count=1)
+
+    batch_one = build_density_grid_scipy_chunked_parallel(
+        str(tmp_path), 0, "gas", "cube", 4, 3, "cube", 2, 1, radius_bin_batch_size=1
+    )
+    batch_two = build_density_grid_scipy_chunked_parallel(
+        str(tmp_path), 0, "gas", "cube", 4, 3, "cube", 2, 1, radius_bin_batch_size=2
+    )
+
+    assert np.allclose(batch_one.density_grid, batch_two.density_grid)
+    assert batch_one.diagnostics["radius_bin_stream_passes"] == 3
+    assert batch_two.diagnostics["radius_bin_stream_passes"] == 2
+    assert batch_two.diagnostics["grids_per_worker"] == 4
+    assert batch_two.diagnostics["workers"][0]["stream_passes"] == 2
 
 
 def test_chunked_raw_gas_matches_full_raw_gas(tmp_path):

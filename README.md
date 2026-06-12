@@ -57,6 +57,7 @@ clumping-compute \
   --radius-mode sphere \
   --grid-size 256 \
   --radius-bins 10 \
+  --radius-bin-batch-size 2 \
   --load-mode auto
 ```
 
@@ -75,6 +76,14 @@ Outputs are saved under `results/<simulation>/` unless `--output` is supplied. T
 For large snapshots, `--load-mode auto` estimates whether a full particle load is safe and switches to chunked HDF5 reads when needed. Use `--load-mode chunked` to force streaming, `--chunk-size` to control particle/cell reads per chunk, and `--max-full-load-gb` to tune the automatic cutoff. Add `--verbose` for progress logs; `--progress-interval 10` reports every 10 chunks instead of the default 25.
 
 For gridded chunked runs, `--threads` controls same-node parallel grid building. Snapshot files are split across local workers, each worker builds private grid accumulators, and the main process reduces those grids into the final density field. The effective worker count is capped by the number of snapshot files.
+
+`--radius-bin-batch-size` controls how many radius-bin grids each worker fills during one particle-file pass. The default is `1` for memory safety. Larger values reduce repeated particle reads. Each worker uses approximately `batch size + 2` full grids at peak: one final grid, the active batch grids, and one smoothing output grid. Use `radius_bin_stream_passes`, `grids_per_worker`, and `estimated_total_worker_grid_bytes` from the result diagnostics when selecting a value.
+
+Conservative starting points are:
+
+- grid 128: batch size `5` or `10`;
+- grid 256: batch size `2` or `5`;
+- grid 512: start with batch size `1`; use `2` only with enough memory for all worker-private grids plus parent-process overhead.
 
 Benchmark timings are written into the result JSON under `timings`. For chunked gridded runs, the most useful fields are:
 

@@ -16,6 +16,7 @@ SNAPSHOT="${SNAPSHOT:-98}"
 RADIUS_BINS="${RADIUS_BINS:-4}"
 THRESHOLD_COUNT="${THRESHOLD_COUNT:-16}"
 THREADS="${THREADS:-1}"
+RADIUS_BIN_BATCH_SIZE="${RADIUS_BIN_BATCH_SIZE:-1}"
 RADIUS_MODE="${RADIUS_MODE:-sphere}"
 LOAD_MODE="${LOAD_MODE:-auto}"
 CHUNK_SIZE="${CHUNK_SIZE:-1000000}"
@@ -39,7 +40,7 @@ fi
 : "${PARTICLE:?PARTICLE must be set}"
 : "${BACKEND:?BACKEND must be set}"
 
-name="smoke_${PARTICLE}_${BACKEND}_${GRID}"
+name="smoke_${PARTICLE}_${BACKEND}_${GRID}_batch${RADIUS_BIN_BATCH_SIZE}"
 mkdir -p "results/${SIMULATION_NAME}"
 
 clumping-compute \
@@ -55,6 +56,7 @@ clumping-compute \
   --progress-interval "${PROGRESS_INTERVAL}" \
   --grid-size "${GRID}" \
   --radius-bins "${RADIUS_BINS}" \
+  --radius-bin-batch-size "${RADIUS_BIN_BATCH_SIZE}" \
   --threshold-count "${THRESHOLD_COUNT}" \
   --threads "${THREADS}" \
   "${EXTRA_ARGS[@]}" \

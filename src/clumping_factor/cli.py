@@ -37,6 +37,12 @@ def build_compute_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--grid-size", type=int, default=256)
     parser.add_argument("--radius-bins", type=int, default=10)
+    parser.add_argument(
+        "--radius-bin-batch-size",
+        type=int,
+        default=1,
+        help="Radius bins deposited per chunk pass for same-node chunked grid builds.",
+    )
     parser.add_argument("--load-mode", choices=["auto", "full", "chunked"], default="auto")
     parser.add_argument("--chunk-size", type=int, default=1_000_000)
     parser.add_argument("--max-full-load-gb", type=float, default=16.0)
@@ -217,6 +223,8 @@ def _validate_compute_args(args: argparse.Namespace) -> None:
         raise ValueError("--threads must be at least 1.")
     if getattr(args, "chunk_size", 1) < 1:
         raise ValueError("--chunk-size must be at least 1.")
+    if getattr(args, "radius_bin_batch_size", 1) < 1:
+        raise ValueError("--radius-bin-batch-size must be at least 1.")
     if getattr(args, "max_full_load_gb", 1.0) <= 0:
         raise ValueError("--max-full-load-gb must be positive.")
     if getattr(args, "progress_interval", 1) < 1:
@@ -298,6 +306,7 @@ def _build_single_density_grid(args: argparse.Namespace, particle_type: str, bac
                 args.radius_bins,
                 getattr(args, "chunk_size", 1_000_000),
                 args.threads,
+                radius_bin_batch_size=getattr(args, "radius_bin_batch_size", 1),
                 mas=getattr(args, "mas", "CIC"),
                 filter_type=getattr(args, "filter_type", "Top-Hat"),
                 progress=progress,
@@ -314,6 +323,7 @@ def _build_single_density_grid(args: argparse.Namespace, particle_type: str, bac
                 backend,
                 getattr(args, "chunk_size", 1_000_000),
                 args.threads,
+                radius_bin_batch_size=getattr(args, "radius_bin_batch_size", 1),
                 progress=progress,
                 progress_interval=getattr(args, "progress_interval", 25),
             )
@@ -524,6 +534,7 @@ def run_compute(args: argparse.Namespace) -> Path:
         "snapshot": args.snapshot,
         "grid_size": args.grid_size,
         "radius_bins": args.radius_bins,
+        "radius_bin_batch_size": getattr(args, "radius_bin_batch_size", 1),
         "threshold_min": args.threshold_min,
         "threshold_max": args.threshold_max,
         "threshold_count": args.threshold_count,
