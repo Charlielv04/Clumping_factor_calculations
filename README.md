@@ -161,3 +161,14 @@ Multiple JSON files can be plotted together:
 ```bash
 clumping-plot results/*/*.json --output results/comparison.png
 ```
+
+Plot the number of cells included in the IGM mask as a function of overdensity threshold:
+
+```bash
+clumping-plot \
+  results/tng100-3/gas_sphere_256.json \
+  results/tng100-3/gas_cube_256.json \
+  results/tng100-3/gas_pylians_256.json \
+  --quantity cell-count \
+  --output results/tng100-3/gas_backend_igm_cell_counts.png
+```

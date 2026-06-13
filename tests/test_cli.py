@@ -24,6 +24,14 @@ def test_compute_help():
     assert "--threads" in help_text
 
 
+def test_plot_help_includes_quantity():
+    from clumping_factor.cli import build_plot_parser
+
+    help_text = build_plot_parser().format_help()
+    assert "--quantity" in help_text
+    assert "cell-count" in help_text
+
+
 def test_simulation_name_inferred_from_base_path():
     assert resolve_simulation_name("../Thesan-1") == "Thesan-1"
     assert resolve_simulation_name("./tng100-3/output") == "tng100-3"
@@ -212,6 +220,37 @@ def test_plot_command_reads_json_and_writes_plot(tmp_path):
     plot_main([str(result_json), "--output", str(output)])
     assert output.exists()
     assert output.stat().st_size > 0
+
+
+def test_plot_command_writes_selected_cell_count_plot(tmp_path):
+    result_json = tmp_path / "result.json"
+    result_json.write_text(
+        json.dumps(
+            {
+                "particle_type": "gas",
+                "backend": {"backend": "sphere"},
+                "thresholds": [-1.0, 0.0, 1.0],
+                "clumping_factors": [None, 1.0, 1.2],
+                "diagnostics": {"clumping": {"selected_cell_counts": [0, 4, 8]}},
+            }
+        )
+    )
+    output = tmp_path / "cell-counts.png"
+    plot_main([str(result_json), "--quantity", "cell-count", "--output", str(output)])
+    assert output.exists()
+    assert output.stat().st_size > 0
+
+
+def test_cell_count_plot_rejects_missing_diagnostics(tmp_path):
+    result_json = tmp_path / "result.json"
+    result_json.write_text(json.dumps({"thresholds": [-1.0, 0.0], "clumping_factors": [None, 1.0]}))
+    output = tmp_path / "cell-counts.png"
+    try:
+        plot_main([str(result_json), "--quantity", "cell-count", "--output", str(output)])
+    except ValueError as exc:
+        assert "cell-count" in str(exc)
+    else:
+        raise AssertionError("cell-count plotting should reject missing diagnostics")
 
 
 def test_plot_command_rejects_malformed_result(tmp_path):

@@ -76,10 +76,16 @@ def build_compute_parser() -> argparse.ArgumentParser:
 
 
 def build_plot_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Plot clumping factor curves from JSON result files.")
+    parser = argparse.ArgumentParser(description="Plot clumping diagnostics from JSON result files.")
     parser.add_argument("results", nargs="+", help="JSON result files to plot.")
     parser.add_argument("--output", required=True, help="PNG/PDF/etc. output path.")
     parser.add_argument("--title")
+    parser.add_argument(
+        "--quantity",
+        choices=["clumping-factor", "cell-count"],
+        default="clumping-factor",
+        help="Quantity to plot against overdensity threshold.",
+    )
     parser.add_argument(
         "--min-selected-density-fraction",
         type=float,
@@ -596,6 +602,7 @@ def plot_main(argv: list[str] | None = None) -> None:
         args.results,
         args.output,
         title=args.title,
+        quantity=args.quantity,
         min_selected_density_fraction=args.min_selected_density_fraction,
         x_min=args.x_min,
         alternate_linestyles=args.alternate_linestyles,
