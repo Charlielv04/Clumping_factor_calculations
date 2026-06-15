@@ -12,9 +12,18 @@ SNAPSHOT="${SNAPSHOT:-98}"
 RADIUS_BINS="${RADIUS_BINS:-10}"
 RADIUS_BIN_BATCH_SIZE="${RADIUS_BIN_BATCH_SIZE:-1}"
 RADIUS_MODE="${RADIUS_MODE:-sphere}"
+MAS="${MAS:-CIC}"
+MAS="${MAS^^}"
 LOAD_MODE="${LOAD_MODE:-auto}"
 CHUNK_SIZE="${CHUNK_SIZE:-1000000}"
 MAX_FULL_LOAD_GB="${MAX_FULL_LOAD_GB:-16}"
+MEMORY_SAFETY_FRACTION="${MEMORY_SAFETY_FRACTION:-0.1}"
+SUMMARY_CACHE="${SUMMARY_CACHE:-auto}"
+SUMMARY_CACHE_DIR="${SUMMARY_CACHE_DIR:-results/.cache/summaries}"
+WORK_PARTITION="${WORK_PARTITION:-auto}"
+MAX_FILE_READERS="${MAX_FILE_READERS:-2}"
+SUBMIT_MODE="${SUBMIT_MODE:-throttled}"
+REPETITIONS="${REPETITIONS:-1}"
 PROGRESS_INTERVAL="${PROGRESS_INTERVAL:-25}"
 VERBOSE="${VERBOSE:-1}"
 NCPUS="${NCPUS:-2}"
@@ -46,6 +55,12 @@ MASK_PARTICLE_TYPE="${MASK_PARTICLE_TYPE:-}"
 MASK_BACKEND="${MASK_BACKEND:-}"
 TARGET_RADIUS_MODE="${TARGET_RADIUS_MODE:-}"
 MASK_RADIUS_MODE="${MASK_RADIUS_MODE:-}"
+LAST_JOB_ID=""
+
+if [[ "${MAS}" != "CIC" && "${MAS}" != "TSC" ]]; then
+  echo "MAS must be CIC or TSC, got: ${MAS}" >&2
+  exit 1
+fi
 
 if [[ -z "${SIMULATION_NAME}" ]]; then
   base_trimmed="${BASE_PATH%/}"
@@ -61,7 +76,10 @@ submit_one() {
   local particle="$1"
   local backend="$2"
   local grid="$3"
+  local run_label="$4"
+  local dependency="$5"
   local mem walltime name selected_queue resource_size
+  local submission_output
   local -a qsub_args
 
   case "${grid}" in
@@ -109,6 +127,10 @@ submit_one() {
     resource_size="parallel${NCPUS}"
   fi
   name="cf_${JOB_SIMULATION_NAME}_${particle}_${backend}_g${grid}_${resource_size}_b${RADIUS_BIN_BATCH_SIZE}"
+  name="${name}_r${run_label}"
+  if [[ "${MAS}" != "CIC" ]]; then
+    name="${name}_mas${MAS,,}"
+  fi
 
   case "${QUEUE}" in
     auto)
@@ -133,7 +155,7 @@ submit_one() {
       ;;
   esac
 
-  echo "Submitting ${name}: grid=${grid}, ncpus=${NCPUS}, threads=${THREADS}, mem=${mem}, walltime=${walltime}, queue=${selected_queue:-default}"
+  echo "Submitting ${name}: grid=${grid}, ncpus=${NCPUS}, threads=${THREADS}, mem=${mem}, walltime=${walltime}, queue=${selected_queue:-default}, dependency=${dependency:-none}"
 
   qsub_args=(
     -N "${name}" \
@@ -141,7 +163,7 @@ submit_one() {
     -e "${PROJECT_DIR}/logs/${SIMULATION_NAME}/${name}.err" \
     -l "select=1:ncpus=${NCPUS}:mem=${mem}" \
     -l "walltime=${walltime}" \
-    -v "PROJECT_DIR=${PROJECT_DIR},BASE_PATH=${BASE_PATH},SIMULATION_NAME=${SIMULATION_NAME},CONDA_ENV=${CONDA_ENV},SNAPSHOT=${SNAPSHOT},RADIUS_BINS=${RADIUS_BINS},RADIUS_BIN_BATCH_SIZE=${RADIUS_BIN_BATCH_SIZE},RADIUS_MODE=${RADIUS_MODE},THREADS=${THREADS},NCPUS=${NCPUS},RESOURCE_SIZE=${resource_size},LOAD_MODE=${LOAD_MODE},CHUNK_SIZE=${CHUNK_SIZE},MAX_FULL_LOAD_GB=${MAX_FULL_LOAD_GB},PROGRESS_INTERVAL=${PROGRESS_INTERVAL},VERBOSE=${VERBOSE},PARTICLE=${particle},BACKEND=${backend},GRID=${grid},TARGET_PARTICLE_TYPE=${TARGET_PARTICLE_TYPE},TARGET_BACKEND=${TARGET_BACKEND},MASK_PARTICLE_TYPE=${MASK_PARTICLE_TYPE},MASK_BACKEND=${MASK_BACKEND},TARGET_RADIUS_MODE=${TARGET_RADIUS_MODE},MASK_RADIUS_MODE=${MASK_RADIUS_MODE}" \
+    -v "PROJECT_DIR=${PROJECT_DIR},BASE_PATH=${BASE_PATH},SIMULATION_NAME=${SIMULATION_NAME},CONDA_ENV=${CONDA_ENV},SNAPSHOT=${SNAPSHOT},RADIUS_BINS=${RADIUS_BINS},RADIUS_BIN_BATCH_SIZE=${RADIUS_BIN_BATCH_SIZE},RADIUS_MODE=${RADIUS_MODE},MAS=${MAS},THREADS=${THREADS},NCPUS=${NCPUS},RESOURCE_SIZE=${resource_size},MEMORY_LIMIT=${mem},MEMORY_SAFETY_FRACTION=${MEMORY_SAFETY_FRACTION},SUMMARY_CACHE=${SUMMARY_CACHE},SUMMARY_CACHE_DIR=${SUMMARY_CACHE_DIR},WORK_PARTITION=${WORK_PARTITION},MAX_FILE_READERS=${MAX_FILE_READERS},RUN_LABEL=${run_label},LOAD_MODE=${LOAD_MODE},CHUNK_SIZE=${CHUNK_SIZE},MAX_FULL_LOAD_GB=${MAX_FULL_LOAD_GB},PROGRESS_INTERVAL=${PROGRESS_INTERVAL},VERBOSE=${VERBOSE},PARTICLE=${particle},BACKEND=${backend},GRID=${grid},TARGET_PARTICLE_TYPE=${TARGET_PARTICLE_TYPE},TARGET_BACKEND=${TARGET_BACKEND},MASK_PARTICLE_TYPE=${MASK_PARTICLE_TYPE},MASK_BACKEND=${MASK_BACKEND},TARGET_RADIUS_MODE=${TARGET_RADIUS_MODE},MASK_RADIUS_MODE=${MASK_RADIUS_MODE}" \
     scripts/clumping_job.pbs
   )
 
@@ -153,13 +175,32 @@ submit_one() {
     qsub_args=(-M "${MAIL_USER}" -m ae "${qsub_args[@]}")
   fi
 
-  qsub "${qsub_args[@]}"
+  if [[ -n "${dependency}" ]]; then
+    qsub_args=(-W "depend=afterok:${dependency}" "${qsub_args[@]}")
+  fi
+
+  submission_output="$(qsub "${qsub_args[@]}")"
+  echo "${submission_output}"
+  LAST_JOB_ID="${submission_output}"
 }
 
-for grid in ${GRIDS}; do
-  for particle in ${PARTICLES}; do
-    for backend in ${BACKENDS}; do
-      submit_one "${particle}" "${backend}" "${grid}"
+previous_job="${DEPEND_ON:-}"
+for repetition in $(seq 1 "${REPETITIONS}"); do
+  for grid in ${GRIDS}; do
+    for particle in ${PARTICLES}; do
+      for backend in ${BACKENDS}; do
+        dependency=""
+        if [[ "${SUBMIT_MODE}" == "throttled" ]]; then
+          dependency="${previous_job}"
+        elif [[ "${SUBMIT_MODE}" != "parallel" ]]; then
+          echo "SUBMIT_MODE must be throttled or parallel, got: ${SUBMIT_MODE}" >&2
+          exit 1
+        fi
+        submit_one "${particle}" "${backend}" "${grid}" "${repetition}" "${dependency}"
+        if [[ "${SUBMIT_MODE}" == "throttled" ]]; then
+          previous_job="${LAST_JOB_ID}"
+        fi
+      done
     done
   done
 done

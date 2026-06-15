@@ -38,6 +38,27 @@ def test_sphere_backend_mass_conservation():
     assert abs(result.diagnostics["relative_mass_error"]) < 1e-6
 
 
+def test_tsc_assignment_conserves_mass_for_scipy_backends():
+    for backend in ("sphere", "cube"):
+        result = build_density_grid_scipy(synthetic_particles(), grid_size=4, radius_bins=2, backend=backend, mas="TSC")
+        assert abs(result.diagnostics["relative_mass_error"]) < 1e-6
+        assert result.backend_metadata["mas"] == "TSC"
+
+
+def test_tsc_spreads_mass_over_more_cells_than_cic():
+    particles = ParticleData(
+        coords=np.array([[0.37, 0.42, 0.58]], dtype=np.float32),
+        radii=np.array([0.0], dtype=np.float32),
+        masses=np.array([1.0], dtype=np.float32),
+        lbox=1.0,
+        particle_type="dm",
+    )
+    cic = build_density_grid_scipy(particles, grid_size=8, radius_bins=1, backend="cube", mas="CIC")
+    tsc = build_density_grid_scipy(particles, grid_size=8, radius_bins=1, backend="cube", mas="TSC")
+    assert np.count_nonzero(cic.density_grid) <= 8
+    assert np.count_nonzero(tsc.density_grid) > np.count_nonzero(cic.density_grid)
+
+
 def test_grid_size_above_limit_is_rejected(monkeypatch):
     monkeypatch.setattr("clumping_factor.grid.MAX_GRID_CELLS", 7)
     try:

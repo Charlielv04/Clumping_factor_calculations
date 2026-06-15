@@ -1,11 +1,19 @@
 from argparse import Namespace
+import os
 
 import h5py
 import numpy as np
 
 from clumping_factor.cli import _select_load_mode
-from clumping_factor.grid import build_density_grid_scipy, build_density_grid_scipy_chunked, build_density_grid_scipy_chunked_parallel
-from clumping_factor.loaders import SnapshotMetadata, iter_particle_chunks, read_snapshot_metadata
+from clumping_factor.grid import (
+    _balance_file_indices,
+    _fit_parallel_memory_policy,
+    _plan_particle_work,
+    build_density_grid_scipy,
+    build_density_grid_scipy_chunked,
+    build_density_grid_scipy_chunked_parallel,
+)
+from clumping_factor.loaders import SnapshotMetadata, iter_particle_chunks, read_snapshot_metadata, snapshot_file_particle_counts
 from clumping_factor.models import ParticleData
 from clumping_factor.raw_gas import raw_gas_clumping_sweep, raw_gas_clumping_sweep_chunked
 
@@ -117,7 +125,9 @@ def test_parallel_chunked_cube_matches_serial_chunked(tmp_path):
     assert parallel.diagnostics["parallel_mode"] == "single_node_process_workers"
     assert parallel.diagnostics["requested_threads"] == 2
     assert parallel.diagnostics["effective_workers"] == 2
-    assert parallel.diagnostics["estimated_bytes_per_worker"] == 2 * parallel.diagnostics["bytes_per_grid"]
+    assert parallel.diagnostics["estimated_bytes_per_worker"] == 3 * parallel.diagnostics["bytes_per_grid"]
+    assert parallel.diagnostics["temporary_grid_storage"] == "npy_mmap"
+    assert not list(tmp_path.glob("clumping-grid-*"))
 
 
 def test_parallel_chunked_sphere_matches_serial_chunked(tmp_path):
@@ -187,6 +197,145 @@ def test_parallel_chunked_radius_bin_batching_reduces_stream_passes(tmp_path):
     assert batch_two.diagnostics["radius_bin_stream_passes"] == 2
     assert batch_two.diagnostics["grids_per_worker"] == 4
     assert batch_two.diagnostics["workers"][0]["stream_passes"] == 2
+
+
+def test_file_counts_and_weighted_assignments_are_deterministic(tmp_path):
+    base_path = write_split_snapshot(tmp_path)
+    assert snapshot_file_particle_counts(base_path, 0, "gas") == [2, 2]
+    counts = [100, 90, 10, 1]
+    weighted = _balance_file_indices(counts, 2)
+    assert weighted == _balance_file_indices(counts, 2)
+    weighted_loads = [sum(counts[index] for index in files) for files in weighted]
+    round_robin_loads = [counts[0] + counts[2], counts[1] + counts[3]]
+    assert max(weighted_loads) - min(weighted_loads) < max(round_robin_loads) - min(round_robin_loads)
+
+
+def test_range_work_plan_covers_particles_once_and_improves_imbalance():
+    counts = [100, 20]
+    plan = _plan_particle_work(counts, 2, partition_mode="auto", max_ranges_per_file=2)
+    assert plan["mode"] == "ranges"
+    units = [unit for assignment in plan["assignments"] for unit in assignment]
+    for file_index, count in enumerate(counts):
+        ranges = sorted((start, stop) for index, start, stop in units if index == file_index)
+        assert ranges[0][0] == 0
+        assert ranges[-1][1] == count
+        assert all(left[1] == right[0] for left, right in zip(ranges, ranges[1:]))
+    assert plan["imbalance"] < plan["file_only_imbalance"]
+
+
+def test_file_work_plan_is_kept_when_already_balanced():
+    plan = _plan_particle_work([100, 99, 100, 99], 2, partition_mode="auto", max_ranges_per_file=2)
+    assert plan["mode"] == "files"
+    assert plan["work_unit_count"] == 4
+
+
+def test_memory_policy_reduces_workers_before_batch_size():
+    grid_bytes = 1024
+    policy = _fit_parallel_memory_policy(4, 4, 4, grid_bytes, 11 * grid_bytes / 1024**3, 0.0)
+    assert policy["effective_workers"] == 1
+    assert policy["effective_batch_size"] == 4
+
+
+def test_memory_policy_reduces_batch_and_can_fail():
+    grid_bytes = 1024
+    policy = _fit_parallel_memory_policy(1, 4, 4, grid_bytes, 5 * grid_bytes / 1024**3, 0.0)
+    assert policy["effective_batch_size"] == 2
+    try:
+        _fit_parallel_memory_policy(1, 1, 1, grid_bytes, 3 * grid_bytes / 1024**3, 0.0)
+    except MemoryError:
+        pass
+    else:
+        raise AssertionError("memory policy should fail below the one-worker minimum")
+
+
+def test_parallel_chunked_uses_requested_temp_parent_and_cleans_up(tmp_path):
+    base_path = tmp_path / "snapshot"
+    base_path.mkdir()
+    write_split_snapshot(base_path)
+    temp_parent = tmp_path / "worker-temp"
+    temp_parent.mkdir()
+    result = build_density_grid_scipy_chunked_parallel(
+        str(base_path), 0, "gas", "cube", 4, 3, "cube", 1, 2,
+        radius_bin_batch_size=2, temp_dir=str(temp_parent), memory_limit="1gb",
+    )
+    assert result.diagnostics["effective_workers"] == 2
+    assert list(temp_parent.iterdir()) == []
+
+
+def test_parallel_chunked_range_partition_matches_file_partition(tmp_path):
+    base_path = write_split_snapshot(tmp_path)
+    files = build_density_grid_scipy_chunked_parallel(
+        str(base_path), 0, "gas", "cube", 4, 3, "cube", 1, 2, work_partition="files"
+    )
+    ranges = build_density_grid_scipy_chunked_parallel(
+        str(base_path), 0, "gas", "cube", 4, 3, "cube", 1, 2,
+        work_partition="ranges", max_file_readers=2,
+    )
+    assert np.allclose(files.density_grid, ranges.density_grid)
+    assert ranges.diagnostics["work_partition_mode"] == "ranges"
+    assert ranges.diagnostics["work_unit_count"] == 4
+
+
+def test_summary_cache_is_reused_and_invalidated(tmp_path):
+    snapshot_root = tmp_path / "snapshot"
+    snapshot_root.mkdir()
+    base_path = write_split_snapshot(snapshot_root)
+    cache_dir = tmp_path / "cache"
+    first = build_density_grid_scipy_chunked_parallel(
+        str(base_path), 0, "gas", "cube", 4, 3, "cube", 1, 1,
+        summary_cache="auto", summary_cache_dir=str(cache_dir),
+    )
+    second = build_density_grid_scipy_chunked_parallel(
+        str(base_path), 0, "gas", "cube", 4, 3, "cube", 1, 1,
+        summary_cache="auto", summary_cache_dir=str(cache_dir),
+    )
+    assert first.diagnostics["summary_cache"]["status"] == "built"
+    assert second.diagnostics["summary_cache"]["status"] == "hit"
+    assert np.allclose(first.density_grid, second.density_grid)
+
+    snapshot_file = tmp_path / "snapshot" / "snapdir_000" / "snap_000.0.hdf5"
+    stat = snapshot_file.stat()
+    os.utime(snapshot_file, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+    third = build_density_grid_scipy_chunked_parallel(
+        str(base_path), 0, "gas", "cube", 4, 3, "cube", 1, 1,
+        summary_cache="auto", summary_cache_dir=str(cache_dir),
+    )
+    assert third.diagnostics["summary_cache"]["status"] == "built"
+    assert len(list(cache_dir.glob("*.json"))) == 2
+
+
+def test_parallel_summary_tolerates_snapshot_file_without_particle_group(tmp_path):
+    base_path = write_split_snapshot(tmp_path)
+    snapdir = tmp_path / "snapdir_000"
+    counts = np.array([0, 0, 0, 0, 0, 0], dtype=np.uint32)
+    write_snapshot_file(snapdir / "snap_000.2.hdf5", 1.0, counts, np.array([4, 2, 0, 0, 0, 0]), file_count=3)
+    result = build_density_grid_scipy_chunked_parallel(
+        str(base_path), 0, "gas", "cube", 4, 3, "cube", 1, 3, radius_bin_batch_size=1
+    )
+    assert result.diagnostics["valid_count"] == 4
+    assert result.diagnostics["file_particle_counts"] == [2, 2, 0]
+
+
+def test_temporary_directory_is_cleaned_after_worker_failure(monkeypatch, tmp_path):
+    data_path = tmp_path / "data"
+    data_path.mkdir()
+    base_path = write_split_snapshot(data_path)
+    temp_parent = tmp_path / "worker-temp"
+    temp_parent.mkdir()
+
+    def fail_write(*_args, **_kwargs):
+        raise RuntimeError("simulated worker write failure")
+
+    monkeypatch.setattr("clumping_factor.grid._write_worker_grid", fail_write)
+    try:
+        build_density_grid_scipy_chunked_parallel(
+            str(base_path), 0, "gas", "cube", 4, 3, "cube", 1, 1, temp_dir=str(temp_parent)
+        )
+    except RuntimeError as exc:
+        assert "simulated" in str(exc)
+    else:
+        raise AssertionError("simulated worker failure should propagate")
+    assert list(temp_parent.iterdir()) == []
 
 
 def test_chunked_raw_gas_matches_full_raw_gas(tmp_path):

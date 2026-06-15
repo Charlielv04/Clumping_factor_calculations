@@ -46,6 +46,36 @@ def build_compute_parser() -> argparse.ArgumentParser:
     parser.add_argument("--load-mode", choices=["auto", "full", "chunked"], default="auto")
     parser.add_argument("--chunk-size", type=int, default=1_000_000)
     parser.add_argument("--max-full-load-gb", type=float, default=16.0)
+    parser.add_argument(
+        "--memory-limit",
+        help="Memory allocation for chunked grid builds, for example 24gb or 24GiB.",
+    )
+    parser.add_argument(
+        "--memory-safety-fraction",
+        type=float,
+        default=0.1,
+        help="Fraction of --memory-limit reserved for Python and non-grid allocations.",
+    )
+    parser.add_argument("--temp-dir", help="Directory for worker grid files. Defaults to $TMPDIR or the system temporary directory.")
+    parser.add_argument(
+        "--summary-cache",
+        choices=["auto", "off", "refresh"],
+        default="auto",
+        help="Reuse, disable, or rebuild the snapshot summary cache.",
+    )
+    parser.add_argument("--summary-cache-dir", default="results/.cache/summaries")
+    parser.add_argument(
+        "--work-partition",
+        choices=["auto", "files", "ranges"],
+        default="auto",
+        help="Partition chunked work by whole files or particle ranges.",
+    )
+    parser.add_argument(
+        "--max-file-readers",
+        type=int,
+        default=2,
+        help="Maximum particle ranges created per snapshot file.",
+    )
     parser.add_argument("--progress-interval", type=int, default=25, help="When --verbose is set, report progress every N chunks.")
     parser.add_argument(
         "--radius-mode",
@@ -68,9 +98,14 @@ def build_compute_parser() -> argparse.ArgumentParser:
     parser.add_argument("--threshold-count", type=int, default=200)
     parser.add_argument("--output")
     parser.add_argument("--output-dir", default="results")
-    parser.add_argument("--mas", default="CIC", help="Pylians mass-assignment scheme.")
+    parser.add_argument(
+        "--mas",
+        choices=["CIC", "TSC"],
+        default="CIC",
+        help="Pylians mass-assignment scheme: cloud-in-cell (CIC) or triangular-shaped cloud (TSC).",
+    )
     parser.add_argument("--filter-type", default="Top-Hat", help="Pylians smoothing filter.")
-    parser.add_argument("--threads", type=int, default=1, help="Pylians thread count.")
+    parser.add_argument("--threads", type=int, default=1, help="Local worker count for chunked grid builds.")
     parser.add_argument("--verbose", action="store_true")
     return parser
 
@@ -233,8 +268,12 @@ def _validate_compute_args(args: argparse.Namespace) -> None:
         raise ValueError("--radius-bin-batch-size must be at least 1.")
     if getattr(args, "max_full_load_gb", 1.0) <= 0:
         raise ValueError("--max-full-load-gb must be positive.")
+    if not 0 <= getattr(args, "memory_safety_fraction", 0.1) < 1:
+        raise ValueError("--memory-safety-fraction must be in [0, 1).")
     if getattr(args, "progress_interval", 1) < 1:
         raise ValueError("--progress-interval must be at least 1.")
+    if getattr(args, "max_file_readers", 1) < 1:
+        raise ValueError("--max-file-readers must be at least 1.")
     if args.backend not in {"raw", "raw-volume"}:
         if args.grid_size < 1:
             raise ValueError("--grid-size must be at least 1.")
@@ -242,6 +281,8 @@ def _validate_compute_args(args: argparse.Namespace) -> None:
             raise ValueError("--radius-bins must be at least 1.")
     if args.backend in {"raw", "raw-volume"} and args.particle_type != "gas":
         raise ValueError("--backend raw and --backend raw-volume are only valid with --particle-type gas.")
+    if getattr(args, "mas", "CIC") != "CIC" and args.backend in {"raw", "raw-volume"}:
+        raise ValueError("--mas TSC is only valid for gridded backends.")
     if args.backend in {"raw", "raw-volume"} and (
         getattr(args, "target_particle_type", None)
         or getattr(args, "target_backend", None)
@@ -317,6 +358,13 @@ def _build_single_density_grid(args: argparse.Namespace, particle_type: str, bac
                 filter_type=getattr(args, "filter_type", "Top-Hat"),
                 progress=progress,
                 progress_interval=getattr(args, "progress_interval", 25),
+                memory_limit=getattr(args, "memory_limit", None),
+                memory_safety_fraction=getattr(args, "memory_safety_fraction", 0.1),
+                temp_dir=getattr(args, "temp_dir", None),
+                summary_cache=getattr(args, "summary_cache", "auto"),
+                summary_cache_dir=getattr(args, "summary_cache_dir", "results/.cache/summaries"),
+                work_partition=getattr(args, "work_partition", "auto"),
+                max_file_readers=getattr(args, "max_file_readers", 2),
             )
         else:
             grid_result = _build_density_grid_scipy_chunked_parallel(
@@ -330,8 +378,16 @@ def _build_single_density_grid(args: argparse.Namespace, particle_type: str, bac
                 getattr(args, "chunk_size", 1_000_000),
                 args.threads,
                 radius_bin_batch_size=getattr(args, "radius_bin_batch_size", 1),
+                mas=getattr(args, "mas", "CIC"),
                 progress=progress,
                 progress_interval=getattr(args, "progress_interval", 25),
+                memory_limit=getattr(args, "memory_limit", None),
+                memory_safety_fraction=getattr(args, "memory_safety_fraction", 0.1),
+                temp_dir=getattr(args, "temp_dir", None),
+                summary_cache=getattr(args, "summary_cache", "auto"),
+                summary_cache_dir=getattr(args, "summary_cache_dir", "results/.cache/summaries"),
+                work_partition=getattr(args, "work_partition", "auto"),
+                max_file_readers=getattr(args, "max_file_readers", 2),
             )
         load_timings = {"load_data": grid_result.timings.get("chunk_summary", 0.0)}
     else:
@@ -353,7 +409,13 @@ def _build_single_density_grid(args: argparse.Namespace, particle_type: str, bac
                 threads=args.threads,
             )
         else:
-            grid_result = _build_density_grid_scipy(particles, args.grid_size, args.radius_bins, backend)
+            grid_result = _build_density_grid_scipy(
+                particles,
+                args.grid_size,
+                args.radius_bins,
+                backend,
+                mas=getattr(args, "mas", "CIC"),
+            )
 
     spec = {
         "particle_type": particle_type,
@@ -541,6 +603,11 @@ def run_compute(args: argparse.Namespace) -> Path:
         "grid_size": args.grid_size,
         "radius_bins": args.radius_bins,
         "radius_bin_batch_size": getattr(args, "radius_bin_batch_size", 1),
+        "memory_limit": getattr(args, "memory_limit", None),
+        "memory_safety_fraction": getattr(args, "memory_safety_fraction", 0.1),
+        "summary_cache": getattr(args, "summary_cache", "auto"),
+        "work_partition": getattr(args, "work_partition", "auto"),
+        "max_file_readers": getattr(args, "max_file_readers", 2),
         "threshold_min": args.threshold_min,
         "threshold_max": args.threshold_max,
         "threshold_count": args.threshold_count,

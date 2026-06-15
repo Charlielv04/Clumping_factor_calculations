@@ -22,6 +22,22 @@ def test_compute_help():
     assert "--radius-bin-batch-size" in help_text
     assert "--progress-interval" in help_text
     assert "--threads" in help_text
+    assert "--memory-limit" in help_text
+    assert "--memory-safety-fraction" in help_text
+    assert "--summary-cache" in help_text
+    assert "--work-partition" in help_text
+    assert "--max-file-readers" in help_text
+    assert "TSC" in help_text
+
+
+def test_compute_parser_accepts_tsc_for_pylians():
+    args = build_compute_parser().parse_args(["--particle-type", "gas", "--backend", "pylians", "--mas", "TSC"])
+    assert args.mas == "TSC"
+
+
+def test_compute_parser_accepts_tsc_for_scipy():
+    args = build_compute_parser().parse_args(["--particle-type", "gas", "--backend", "sphere", "--mas", "TSC"])
+    assert args.mas == "TSC"
 
 
 def test_plot_help_includes_quantity():

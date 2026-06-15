@@ -20,14 +20,27 @@ SNAPSHOT="${SNAPSHOT:-98}"
 RADIUS_BINS="${RADIUS_BINS:-10}"
 RADIUS_BIN_BATCH_SIZE="${RADIUS_BIN_BATCH_SIZE:-1}"
 RADIUS_MODE="${RADIUS_MODE:-sphere}"
+MAS="${MAS:-CIC}"
+MAS="${MAS^^}"
 THREADS="${THREADS:-1}"
 NCPUS="${NCPUS:-${THREADS}}"
 RESOURCE_SIZE="${RESOURCE_SIZE:-unknown}"
 LOAD_MODE="${LOAD_MODE:-auto}"
 CHUNK_SIZE="${CHUNK_SIZE:-1000000}"
 MAX_FULL_LOAD_GB="${MAX_FULL_LOAD_GB:-16}"
+MEMORY_LIMIT="${MEMORY_LIMIT:-}"
+MEMORY_SAFETY_FRACTION="${MEMORY_SAFETY_FRACTION:-0.1}"
+SUMMARY_CACHE="${SUMMARY_CACHE:-auto}"
+SUMMARY_CACHE_DIR="${SUMMARY_CACHE_DIR:-results/.cache/summaries}"
+WORK_PARTITION="${WORK_PARTITION:-auto}"
+MAX_FILE_READERS="${MAX_FILE_READERS:-2}"
+RUN_LABEL="${RUN_LABEL:-}"
 PROGRESS_INTERVAL="${PROGRESS_INTERVAL:-25}"
 VERBOSE="${VERBOSE:-1}"
+if [[ "${MAS}" != "CIC" && "${MAS}" != "TSC" ]]; then
+  echo "MAS must be CIC or TSC, got: ${MAS}" >&2
+  exit 1
+fi
 if [[ -z "${SIMULATION_NAME}" ]]; then
   base_trimmed="${BASE_PATH%/}"
   SIMULATION_NAME="$(basename "${base_trimmed}")"
@@ -37,9 +50,18 @@ if [[ -z "${SIMULATION_NAME}" ]]; then
 fi
 mkdir -p "results/${SIMULATION_NAME}"
 OUTPUT_STEM="results/${SIMULATION_NAME}/${PARTICLE}_${BACKEND}_grid${GRID}_threads${THREADS}_batch${RADIUS_BIN_BATCH_SIZE}"
+if [[ -n "${RUN_LABEL}" ]]; then
+  OUTPUT_STEM="${OUTPUT_STEM}_run${RUN_LABEL}"
+fi
+if [[ "${MAS}" != "CIC" ]]; then
+  OUTPUT_STEM="${OUTPUT_STEM}_mas${MAS,,}"
+fi
 EXTRA_ARGS=()
 if [[ "${VERBOSE}" == "1" ]]; then
   EXTRA_ARGS+=(--verbose)
+fi
+if [[ -n "${MEMORY_LIMIT}" ]]; then
+  EXTRA_ARGS+=(--memory-limit "${MEMORY_LIMIT}" --memory-safety-fraction "${MEMORY_SAFETY_FRACTION}")
 fi
 
 if [[ -n "${TARGET_PARTICLE_TYPE:-}" ]]; then
@@ -75,11 +97,15 @@ echo "Backend: ${BACKEND}"
 echo "Simulation: ${SIMULATION_NAME}"
 echo "Grid size: ${GRID}"
 echo "Radius mode: ${RADIUS_MODE}"
+echo "Mass assignment: ${MAS}"
 echo "Load mode: ${LOAD_MODE}"
 echo "Resource size: ${RESOURCE_SIZE}"
 echo "Allocated CPUs requested: ${NCPUS}"
 echo "Threads: ${THREADS}"
 echo "Radius-bin batch size: ${RADIUS_BIN_BATCH_SIZE}"
+echo "Grid memory limit: ${MEMORY_LIMIT:-unlimited}"
+echo "Summary cache: ${SUMMARY_CACHE}"
+echo "Work partition: ${WORK_PARTITION}"
 echo "Progress interval: ${PROGRESS_INTERVAL}"
 echo "Output: ${OUTPUT}"
 
@@ -97,7 +123,12 @@ clumping-compute \
   --grid-size "${GRID}" \
   --radius-bins "${RADIUS_BINS}" \
   --radius-bin-batch-size "${RADIUS_BIN_BATCH_SIZE}" \
+  --mas "${MAS}" \
   --threads "${THREADS}" \
+  --summary-cache "${SUMMARY_CACHE}" \
+  --summary-cache-dir "${SUMMARY_CACHE_DIR}" \
+  --work-partition "${WORK_PARTITION}" \
+  --max-file-readers "${MAX_FILE_READERS}" \
   "${EXTRA_ARGS[@]}" \
   --output "${OUTPUT}"
 
