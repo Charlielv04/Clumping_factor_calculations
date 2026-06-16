@@ -11,7 +11,7 @@ cd "${PROJECT_DIR:-$PBS_O_WORKDIR}"
 mkdir -p results logs
 
 : "${PARTICLE:?PARTICLE must be set to gas or dm}"
-: "${BACKEND:?BACKEND must be set to sphere, cube, or pylians}"
+: "${BACKEND:?BACKEND must be set}"
 : "${GRID:?GRID must be set to a positive grid size}"
 
 BASE_PATH="${BASE_PATH:-../tng100-3/output}"
@@ -37,6 +37,8 @@ MAX_FILE_READERS="${MAX_FILE_READERS:-2}"
 RUN_LABEL="${RUN_LABEL:-}"
 PROGRESS_INTERVAL="${PROGRESS_INTERVAL:-25}"
 VERBOSE="${VERBOSE:-1}"
+SIGMA_BAR_ION_CM2="${SIGMA_BAR_ION_CM2:-}"
+SIGMA_BAR_ION_SOURCE="${SIGMA_BAR_ION_SOURCE:-}"
 if [[ "${MAS}" != "CIC" && "${MAS}" != "TSC" ]]; then
   echo "MAS must be CIC or TSC, got: ${MAS}" >&2
   exit 1
@@ -49,7 +51,8 @@ if [[ -z "${SIMULATION_NAME}" ]]; then
   fi
 fi
 mkdir -p "results/${SIMULATION_NAME}"
-OUTPUT_STEM="results/${SIMULATION_NAME}/${PARTICLE}_${BACKEND}_grid${GRID}_threads${THREADS}_batch${RADIUS_BIN_BATCH_SIZE}"
+SNAPSHOT_PADDED="$(printf '%03d' "${SNAPSHOT}")"
+OUTPUT_STEM="results/${SIMULATION_NAME}/${PARTICLE}_${BACKEND}_snapshot${SNAPSHOT_PADDED}_grid${GRID}_threads${THREADS}_batch${RADIUS_BIN_BATCH_SIZE}"
 if [[ -n "${RUN_LABEL}" ]]; then
   OUTPUT_STEM="${OUTPUT_STEM}_run${RUN_LABEL}"
 fi
@@ -62,6 +65,11 @@ if [[ "${VERBOSE}" == "1" ]]; then
 fi
 if [[ -n "${MEMORY_LIMIT}" ]]; then
   EXTRA_ARGS+=(--memory-limit "${MEMORY_LIMIT}" --memory-safety-fraction "${MEMORY_SAFETY_FRACTION}")
+fi
+if [[ "${BACKEND}" == "raw-transmission" ]]; then
+  : "${SIGMA_BAR_ION_CM2:?SIGMA_BAR_ION_CM2 is required for raw-transmission}"
+  : "${SIGMA_BAR_ION_SOURCE:?SIGMA_BAR_ION_SOURCE is required for raw-transmission}"
+  EXTRA_ARGS+=(--sigma-bar-ion-cm2 "${SIGMA_BAR_ION_CM2}" --sigma-bar-ion-source "${SIGMA_BAR_ION_SOURCE}")
 fi
 
 if [[ -n "${TARGET_PARTICLE_TYPE:-}" ]]; then

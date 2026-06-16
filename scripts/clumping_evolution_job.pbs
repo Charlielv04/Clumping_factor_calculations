@@ -1,0 +1,20 @@
+#!/bin/bash
+
+set -euo pipefail
+
+: "${SNAPSHOTS_CSV:?SNAPSHOTS_CSV must contain colon-separated snapshot numbers}"
+array_index="${PBS_ARRAY_INDEX:-${PBS_ARRAYID:-}}"
+if [[ -z "${array_index}" ]]; then
+  echo "PBS array index is not available." >&2
+  exit 1
+fi
+
+IFS=':' read -r -a snapshots <<< "${SNAPSHOTS_CSV}"
+if (( array_index < 0 || array_index >= ${#snapshots[@]} )); then
+  echo "PBS array index ${array_index} is outside the snapshot list." >&2
+  exit 1
+fi
+
+export SNAPSHOT="${snapshots[${array_index}]}"
+cd "${PROJECT_DIR:-$PBS_O_WORKDIR}"
+source scripts/clumping_job.pbs

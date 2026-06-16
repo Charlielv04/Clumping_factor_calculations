@@ -75,6 +75,16 @@ For Thesan-1 snapshot 81, set `BASE_PATH=../Thesan-1/output SNAPSHOT=81 SIMULATI
 
 Submit larger grids only after checking queue limits with `qstat -Q` or `qstat -Qf`.
 
+For redshift evolution, submit one bounded array task per snapshot. Each task keeps the existing same-node worker pool, while `MAX_CONCURRENT` limits simultaneous snapshot reads:
+
+```bash
+SNAPSHOTS="40 50 60 70 80" \
+BASE_PATH=../Thesan-2/output SIMULATION_NAME=Thesan-2 \
+PARTICLE=gas BACKEND=sphere GRID=256 \
+NCPUS=8 THREADS=8 MAX_CONCURRENT=8 MEM=32gb \
+bash scripts/submit_evolution_jobs.sh
+```
+
 ```bash
 GRIDS=512 MEM_512=8gb WALLTIME_512=08:00:00 NCPUS=2 \
 bash scripts/submit_clumping_jobs.sh

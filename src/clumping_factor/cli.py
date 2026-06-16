@@ -4,6 +4,8 @@ import argparse
 from pathlib import Path
 from time import perf_counter
 
+import numpy as np
+
 
 def build_compute_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Compute clumping factor curves and save JSON summaries.")
@@ -14,7 +16,11 @@ def build_compute_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--snapshot", type=int, default=98)
     parser.add_argument("--particle-type", choices=["gas", "dm"], required=True)
-    parser.add_argument("--backend", choices=["sphere", "cube", "pylians", "raw", "raw-volume"], required=True)
+    parser.add_argument(
+        "--backend",
+        choices=["sphere", "cube", "pylians", "raw", "raw-volume", "raw-transmission"],
+        required=True,
+    )
     parser.add_argument(
         "--target-particle-type",
         choices=["gas", "dm", "both"],
@@ -96,6 +102,15 @@ def build_compute_parser() -> argparse.ArgumentParser:
     parser.add_argument("--threshold-min", type=float, default=-1.0)
     parser.add_argument("--threshold-max", type=float, default=25.0)
     parser.add_argument("--threshold-count", type=int, default=200)
+    parser.add_argument(
+        "--sigma-bar-ion-cm2",
+        type=float,
+        help="Effective HI photoionization cross-section in cm^2; required by --backend raw-transmission.",
+    )
+    parser.add_argument(
+        "--sigma-bar-ion-source",
+        help="Human-readable provenance for --sigma-bar-ion-cm2; required by --backend raw-transmission.",
+    )
     parser.add_argument("--output")
     parser.add_argument("--output-dir", default="results")
     parser.add_argument(
@@ -137,6 +152,26 @@ def build_plot_parser() -> argparse.ArgumentParser:
         "--alternate-linestyles",
         action="store_true",
         help="Cycle through solid, dashed, dotted, and dash-dot line styles so overlapping curves are easier to see.",
+    )
+    return parser
+
+
+def build_evolution_plot_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Plot clumping factor as a function of redshift.")
+    parser.add_argument("results", nargs="+", help="Per-snapshot JSON result files to combine.")
+    parser.add_argument("--output", required=True, help="PNG/PDF/etc. output path.")
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        action="append",
+        dest="thresholds",
+        help="Overdensity threshold to plot. Repeat for multiple curves. Defaults to 20.",
+    )
+    parser.add_argument("--title")
+    parser.add_argument(
+        "--no-invert-redshift-axis",
+        action="store_true",
+        help="Keep redshift increasing from left to right instead of showing cosmic time left to right.",
     )
     return parser
 
@@ -237,6 +272,18 @@ def _estimate_full_load_bytes(*args, **kwargs):
     return estimate_full_load_bytes(*args, **kwargs)
 
 
+def _snapshot_cosmology(base_path: str, snapshot: int) -> dict[str, float | int | None]:
+    try:
+        metadata = _read_snapshot_metadata(base_path, snapshot)
+    except FileNotFoundError:
+        return {"snapshot": snapshot, "scale_factor": None, "redshift": None}
+    return {
+        "snapshot": snapshot,
+        "scale_factor": metadata.scale_factor,
+        "redshift": metadata.redshift,
+    }
+
+
 def _raw_gas_clumping_sweep(*args, **kwargs):
     from .raw_gas import raw_gas_clumping_sweep
 
@@ -255,10 +302,28 @@ def _raw_gas_clumping_sweep_chunked(*args, **kwargs):
     return raw_gas_clumping_sweep_chunked(*args, **kwargs)
 
 
+def _iter_raw_transmission_chunks(*args, **kwargs):
+    from .loaders import iter_raw_transmission_chunks
+
+    return iter_raw_transmission_chunks(*args, **kwargs)
+
+
+def _inspect_raw_transmission_fields(*args, **kwargs):
+    from .loaders import inspect_raw_transmission_fields
+
+    return inspect_raw_transmission_fields(*args, **kwargs)
+
+
+def _compute_raw_transmission_chunked(*args, **kwargs):
+    from .raw_transmission import compute_raw_transmission_chunked
+
+    return compute_raw_transmission_chunked(*args, **kwargs)
+
+
 def _validate_compute_args(args: argparse.Namespace) -> None:
-    if args.threshold_count < 1:
+    if args.backend != "raw-transmission" and args.threshold_count < 1:
         raise ValueError("--threshold-count must be at least 1.")
-    if args.threshold_min >= args.threshold_max:
+    if args.backend != "raw-transmission" and args.threshold_min >= args.threshold_max:
         raise ValueError("--threshold-min must be less than --threshold-max.")
     if args.threads < 1:
         raise ValueError("--threads must be at least 1.")
@@ -279,11 +344,11 @@ def _validate_compute_args(args: argparse.Namespace) -> None:
             raise ValueError("--grid-size must be at least 1.")
         if args.radius_bins < 1:
             raise ValueError("--radius-bins must be at least 1.")
-    if args.backend in {"raw", "raw-volume"} and args.particle_type != "gas":
-        raise ValueError("--backend raw and --backend raw-volume are only valid with --particle-type gas.")
+    if args.backend in {"raw", "raw-volume", "raw-transmission"} and args.particle_type != "gas":
+        raise ValueError("raw backends are only valid with --particle-type gas.")
     if getattr(args, "mas", "CIC") != "CIC" and args.backend in {"raw", "raw-volume"}:
         raise ValueError("--mas TSC is only valid for gridded backends.")
-    if args.backend in {"raw", "raw-volume"} and (
+    if args.backend in {"raw", "raw-volume", "raw-transmission"} and (
         getattr(args, "target_particle_type", None)
         or getattr(args, "target_backend", None)
         or getattr(args, "mask_particle_type", None)
@@ -291,7 +356,13 @@ def _validate_compute_args(args: argparse.Namespace) -> None:
         or getattr(args, "target_radius_mode", None)
         or getattr(args, "mask_radius_mode", None)
     ):
-        raise ValueError("raw and raw-volume runs do not support separate mask/target fields.")
+        raise ValueError("raw backends do not support separate mask/target fields.")
+    if args.backend == "raw-transmission":
+        sigma = getattr(args, "sigma_bar_ion_cm2", None)
+        if sigma is None or not np.isfinite(sigma) or sigma <= 0:
+            raise ValueError("--backend raw-transmission requires a positive --sigma-bar-ion-cm2.")
+        if not str(getattr(args, "sigma_bar_ion_source", "") or "").strip():
+            raise ValueError("--backend raw-transmission requires --sigma-bar-ion-source.")
 
 
 def _estimate_particle_load_gb(args: argparse.Namespace, particle_type: str) -> float:
@@ -469,6 +540,83 @@ def run_compute(args: argparse.Namespace) -> Path:
     total_t0 = perf_counter()
     _validate_compute_args(args)
     simulation_name = _resolve_simulation_name(args.base_path, getattr(args, "simulation_name", None))
+    cosmology = _snapshot_cosmology(args.base_path, args.snapshot)
+
+    if args.backend == "raw-transmission":
+        metadata = _read_snapshot_metadata(args.base_path, args.snapshot)
+        if metadata.scale_factor is None:
+            raise ValueError("raw-transmission requires snapshot Time or Redshift metadata.")
+        if metadata.hubble_param is None:
+            raise ValueError("raw-transmission requires the snapshot HubbleParam header attribute.")
+        field_metadata = _inspect_raw_transmission_fields(args.base_path, args.snapshot)
+        selected_load_mode, estimated_gb = _select_load_mode(args, "gas")
+        stream_chunk_size = (
+            int(metadata.particle_counts[0]) if selected_load_mode == "full" else getattr(args, "chunk_size", 1_000_000)
+        )
+        stream_chunk_size = max(1, stream_chunk_size)
+        chunk_factory = lambda: _iter_raw_transmission_chunks(
+            args.base_path,
+            args.snapshot,
+            stream_chunk_size,
+        )
+        clumping_factor, transmission_timings, transmission_diagnostics = _compute_raw_transmission_chunked(
+            chunk_factory,
+            metadata.lbox,
+            metadata.scale_factor,
+            metadata.hubble_param,
+            args.grid_size,
+            getattr(args, "mas", "CIC"),
+            args.sigma_bar_ion_cm2,
+            stream_chunk_size,
+            progress=_progress_callback(args),
+            progress_interval=getattr(args, "progress_interval", 25),
+            memory_limit=getattr(args, "memory_limit", None),
+            memory_safety_fraction=getattr(args, "memory_safety_fraction", 0.1),
+        )
+        transmission_diagnostics["load_mode"] = selected_load_mode
+        timings = {**transmission_timings, "total": perf_counter() - total_t0}
+        parameters = {
+            "base_path": args.base_path,
+            "simulation_name": simulation_name,
+            "snapshot": args.snapshot,
+            "grid_size": args.grid_size,
+            "mas": getattr(args, "mas", "CIC"),
+            "load_mode": selected_load_mode,
+            "chunk_size": stream_chunk_size if selected_load_mode == "chunked" else None,
+            "estimated_full_load_gb": estimated_gb,
+            "sigma_bar_ion_cm2": args.sigma_bar_ion_cm2,
+            "sigma_bar_ion_source": args.sigma_bar_ion_source,
+        }
+        document = {
+            "schema_version": 2,
+            "simulation": {
+                "name": simulation_name,
+                "base_path": args.base_path,
+                **cosmology,
+            },
+            "particle_type": "gas",
+            "statistic": "transmission_weighted_raw_gas_density",
+            "parameters": parameters,
+            "backend": {
+                "backend": "raw-transmission",
+                "method": "native gas-cell volume moments with grid-derived exp(-tau_eff)",
+                "load_mode": selected_load_mode,
+            },
+            "clumping_factor": None if not np.isfinite(clumping_factor) else float(clumping_factor),
+            "formula": "<rho**2 * exp(-tau_eff)>_V / <rho * exp(-tau_eff)>_V**2",
+            "field_metadata": field_metadata,
+            "diagnostics": {"clumping": transmission_diagnostics},
+            "timings": timings,
+        }
+        output_path = Path(args.output) if args.output else _default_output_path(
+            args.output_dir,
+            args.particle_type,
+            args.backend,
+            args.snapshot,
+            args.grid_size,
+            simulation_name,
+        )
+        return _write_json_result(document, output_path)
 
     if args.backend in {"raw", "raw-volume"}:
         thresholds = np.linspace(args.threshold_min, args.threshold_max, args.threshold_count)
@@ -533,7 +681,7 @@ def run_compute(args: argparse.Namespace) -> Path:
             "simulation": {
                 "name": simulation_name,
                 "base_path": args.base_path,
-                "snapshot": args.snapshot,
+                **cosmology,
             },
             "particle_type": "gas",
             "parameters": parameters,
@@ -603,6 +751,8 @@ def run_compute(args: argparse.Namespace) -> Path:
         "grid_size": args.grid_size,
         "radius_bins": args.radius_bins,
         "radius_bin_batch_size": getattr(args, "radius_bin_batch_size", 1),
+        "mas": getattr(args, "mas", "CIC"),
+        "filter_type": getattr(args, "filter_type", "Top-Hat"),
         "memory_limit": getattr(args, "memory_limit", None),
         "memory_safety_fraction": getattr(args, "memory_safety_fraction", 0.1),
         "summary_cache": getattr(args, "summary_cache", "auto"),
@@ -627,7 +777,7 @@ def run_compute(args: argparse.Namespace) -> Path:
         "simulation": {
             "name": simulation_name,
             "base_path": args.base_path,
-            "snapshot": args.snapshot,
+            **cosmology,
         },
         "particle_type": target_particle_type,
         "parameters": parameters,
@@ -675,6 +825,21 @@ def plot_main(argv: list[str] | None = None) -> None:
         alternate_linestyles=args.alternate_linestyles,
     )
     print(f"Wrote plot: {output_path}")
+
+
+def evolution_plot_main(argv: list[str] | None = None) -> None:
+    from .plotting import plot_evolution_files
+
+    parser = build_evolution_plot_parser()
+    args = parser.parse_args(argv)
+    output_path = plot_evolution_files(
+        args.results,
+        args.output,
+        thresholds=args.thresholds or [20.0],
+        title=args.title,
+        invert_redshift_axis=not args.no_invert_redshift_axis,
+    )
+    print(f"Wrote evolution plot: {output_path}")
 
 
 if __name__ == "__main__":

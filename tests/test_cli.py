@@ -3,7 +3,7 @@ from argparse import Namespace
 
 import numpy as np
 
-from clumping_factor.cli import build_compute_parser, plot_main, run_compute
+from clumping_factor.cli import build_compute_parser, evolution_plot_main, plot_main, run_compute
 from clumping_factor.models import GridResult, ParticleData
 from clumping_factor.results import default_output_path, resolve_simulation_name
 
@@ -15,6 +15,8 @@ def test_compute_help():
     assert "--backend" in help_text
     assert "raw" in help_text
     assert "raw-volume" in help_text
+    assert "raw-transmission" in help_text
+    assert "--sigma-bar-ion-cm2" in help_text
     assert "--radius-mode" in help_text
     assert "--simulation-name" in help_text
     assert "--load-mode" in help_text
@@ -40,12 +42,56 @@ def test_compute_parser_accepts_tsc_for_scipy():
     assert args.mas == "TSC"
 
 
+def test_raw_transmission_requires_sigma_and_provenance(tmp_path):
+    args = build_compute_parser().parse_args(["--particle-type", "gas", "--backend", "raw-transmission"])
+    args.output = str(tmp_path / "result.json")
+    try:
+        run_compute(args)
+    except ValueError as exc:
+        assert "sigma-bar-ion-cm2" in str(exc)
+    else:
+        raise AssertionError("raw-transmission should require sigma")
+
+    args.sigma_bar_ion_cm2 = 1e-18
+    try:
+        run_compute(args)
+    except ValueError as exc:
+        assert "sigma-bar-ion-source" in str(exc)
+    else:
+        raise AssertionError("raw-transmission should require sigma provenance")
+
+
+def test_raw_transmission_rejects_dm():
+    args = build_compute_parser().parse_args(
+        [
+            "--particle-type", "dm",
+            "--backend", "raw-transmission",
+            "--sigma-bar-ion-cm2", "1e-18",
+            "--sigma-bar-ion-source", "test",
+        ]
+    )
+    try:
+        run_compute(args)
+    except ValueError as exc:
+        assert "gas" in str(exc)
+    else:
+        raise AssertionError("raw-transmission should reject dark matter")
+
+
 def test_plot_help_includes_quantity():
     from clumping_factor.cli import build_plot_parser
 
     help_text = build_plot_parser().format_help()
     assert "--quantity" in help_text
     assert "cell-count" in help_text
+
+
+def test_evolution_plot_help_includes_threshold():
+    from clumping_factor.cli import build_evolution_plot_parser
+
+    help_text = build_evolution_plot_parser().format_help()
+    assert "--threshold" in help_text
+    assert "redshift" in help_text
 
 
 def test_simulation_name_inferred_from_base_path():
@@ -300,3 +346,93 @@ def test_plot_command_rejects_all_nan_result(tmp_path):
         assert "No finite" in str(exc)
     else:
         raise AssertionError("plot_main should reject all-NaN plot inputs")
+
+
+def test_threshold_plot_rejects_scalar_transmission_result(tmp_path):
+    result_json = tmp_path / "scalar.json"
+    result_json.write_text(
+        json.dumps(
+            {
+                "particle_type": "gas",
+                "backend": {"backend": "raw-transmission"},
+                "clumping_factor": 2.0,
+            }
+        )
+    )
+    try:
+        plot_main([str(result_json), "--output", str(tmp_path / "bad.png")])
+    except ValueError as exc:
+        assert "scalar" in str(exc)
+    else:
+        raise AssertionError("threshold plotting should reject scalar transmission results")
+
+
+def _write_evolution_result(path, redshift, factors, grid_size=256):
+    path.write_text(
+        json.dumps(
+            {
+                "simulation": {"name": "sim", "snapshot": int(redshift * 10), "redshift": redshift},
+                "particle_type": "gas",
+                "parameters": {
+                    "grid_size": grid_size,
+                    "radius_bins": 10,
+                    "target": {"particle_type": "gas", "backend": "sphere", "radius_mode": "sphere"},
+                    "mask": {"particle_type": "gas", "backend": "sphere", "radius_mode": "sphere"},
+                },
+                "backend": {"backend": "sphere"},
+                "thresholds": [0.0, 10.0, 20.0],
+                "clumping_factors": factors,
+            }
+        )
+    )
+
+
+def test_evolution_plot_combines_snapshots_and_interpolates(tmp_path):
+    high_z = tmp_path / "high.json"
+    low_z = tmp_path / "low.json"
+    _write_evolution_result(high_z, 8.0, [1.0, 2.0, 3.0])
+    _write_evolution_result(low_z, 4.0, [2.0, 4.0, 6.0])
+    output = tmp_path / "evolution.png"
+
+    evolution_plot_main(
+        [str(high_z), str(low_z), "--threshold", "5", "--threshold", "20", "--output", str(output)]
+    )
+
+    assert output.exists()
+    assert output.stat().st_size > 0
+
+
+def test_evolution_plot_rejects_mixed_grid_configuration(tmp_path):
+    first = tmp_path / "first.json"
+    second = tmp_path / "second.json"
+    _write_evolution_result(first, 8.0, [1.0, 2.0, 3.0], grid_size=256)
+    _write_evolution_result(second, 4.0, [2.0, 4.0, 6.0], grid_size=512)
+
+    try:
+        evolution_plot_main([str(first), str(second), "--output", str(tmp_path / "bad.png")])
+    except ValueError as exc:
+        assert "configuration" in str(exc)
+    else:
+        raise AssertionError("evolution plotting should reject mixed configurations")
+
+
+def test_evolution_plot_accepts_scalar_transmission_results(monkeypatch, tmp_path):
+    first = tmp_path / "first_scalar.json"
+    second = tmp_path / "second_scalar.json"
+    for path, redshift, factor in [(first, 8.0, 2.0), (second, 6.0, 3.0)]:
+        path.write_text(
+            json.dumps(
+                {
+                    "simulation": {"name": "sim", "redshift": redshift},
+                    "particle_type": "gas",
+                    "parameters": {"grid_size": 256, "mas": "CIC"},
+                    "backend": {"backend": "raw-transmission", "method": "test"},
+                    "clumping_factor": factor,
+                }
+            )
+        )
+
+    monkeypatch.setattr("matplotlib.figure.Figure.savefig", lambda self, path, **kwargs: path.write_bytes(b"plot"))
+    output = tmp_path / "scalar_evolution.png"
+    evolution_plot_main([str(first), str(second), "--output", str(output)])
+    assert output.read_bytes() == b"plot"

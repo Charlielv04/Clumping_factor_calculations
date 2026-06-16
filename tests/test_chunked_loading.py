@@ -18,7 +18,7 @@ from clumping_factor.models import ParticleData
 from clumping_factor.raw_gas import raw_gas_clumping_sweep, raw_gas_clumping_sweep_chunked
 
 
-def write_snapshot_file(path, lbox, counts_this_file, counts_total, gas=None, dm=None, file_count=1):
+def write_snapshot_file(path, lbox, counts_this_file, counts_total, gas=None, dm=None, file_count=1, scale_factor=0.5):
     with h5py.File(path, "w") as handle:
         header = handle.create_group("Header")
         header.attrs["BoxSize"] = lbox
@@ -26,6 +26,8 @@ def write_snapshot_file(path, lbox, counts_this_file, counts_total, gas=None, dm
         header.attrs["NumPart_ThisFile"] = counts_this_file
         header.attrs["NumPart_Total"] = counts_total
         header.attrs["NumFilesPerSnapshot"] = file_count
+        header.attrs["Time"] = scale_factor
+        header.attrs["Redshift"] = 1.0 / scale_factor - 1.0
         if gas is not None:
             group = handle.create_group("PartType0")
             group.create_dataset("Coordinates", data=gas["Coordinates"])
@@ -78,6 +80,8 @@ def test_iter_particle_chunks_reads_split_snapshot(tmp_path):
     metadata = read_snapshot_metadata(base_path, 0)
     assert metadata.lbox == 1.0
     assert metadata.particle_counts[0] == 4
+    assert metadata.scale_factor == 0.5
+    assert metadata.redshift == 1.0
 
     chunks = list(iter_particle_chunks(base_path, 0, "gas", "cube", chunk_size=1))
     assert len(chunks) == 4

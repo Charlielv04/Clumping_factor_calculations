@@ -45,6 +45,12 @@ python -m pip install "Cython<3"
 python -m pip install --no-build-isolation Pylians
 ```
 
+Pylians is intentionally not installed by `environment.yml`: its native extensions
+assume Unix linker and OpenMP flags and do not build with MSVC on Windows. The
+Windows environment can still analyze result JSON files and use the `sphere` and
+`cube` backends. Install Pylians separately on the Linux compute cluster when the
+`pylians` backend is needed.
+
 ## Compute
 
 ```bash
@@ -68,6 +74,25 @@ Backends:
 - `pylians`: optional Pylians mass assignment and smoothing
 - `raw`: raw gas-cell density calculation matching the first legacy gas script; only valid with `--particle-type gas`
 - `raw-volume`: raw gas-cell density calculation weighted by each gas cell volume; only valid with `--particle-type gas`
+- `raw-transmission`: native gas-cell, volume-weighted density clumping with a grid-derived `exp(-tau_eff)` weight; only valid with `--particle-type gas`
+
+`raw-transmission` reads `HI_Fraction`, `HII_Fraction`, and hydrogen abundance from `GFM_Metals[:,0]`. It verifies `HI_Fraction + HII_Fraction ~= 1`, builds an auxiliary volume-weighted neutral-hydrogen grid, and returns one scalar rather than an overdensity-threshold sweep:
+
+```bash
+clumping-compute \
+  --base-path ../Thesan-1/output \
+  --simulation-name Thesan-1 \
+  --snapshot 81 \
+  --particle-type gas \
+  --backend raw-transmission \
+  --grid-size 512 \
+  --mas CIC \
+  --load-mode chunked \
+  --sigma-bar-ion-cm2 <AREPO-RT-group-average> \
+  --sigma-bar-ion-source "THESAN AREPO-RT first ionizing group"
+```
+
+The cross-section has no implicit default. For PBS submissions, provide the same values through `SIGMA_BAR_ION_CM2` and `SIGMA_BAR_ION_SOURCE`.
 
 For gridded gas calculations, `--radius-mode sphere` treats each gas cell volume as a sphere and `--radius-mode cube` uses the cube root of the cell volume. The default is `sphere`.
 
@@ -208,3 +233,26 @@ clumping-plot \
   --quantity cell-count \
   --output results/tng100-3/gas_backend_igm_cell_counts.png
 ```
+
+## Redshift Evolution
+
+New result files include the snapshot scale factor and redshift from the HDF5 header. Submit one bounded PBS array task per snapshot while retaining same-node parallelism inside each task:
+
+```bash
+SNAPSHOTS="40 50 60 70 80" \
+BASE_PATH=../Thesan-2/output SIMULATION_NAME=Thesan-2 \
+PARTICLE=gas BACKEND=sphere GRID=256 \
+NCPUS=8 THREADS=8 MAX_CONCURRENT=8 MEM=32gb \
+bash scripts/submit_evolution_jobs.sh
+```
+
+Each output filename includes its snapshot number. After the jobs finish, combine them at one or more fixed overdensity thresholds:
+
+```bash
+clumping-evolution-plot \
+  results/Thesan-2/gas_sphere_snapshot*_grid256_threads8_batch2.json \
+  --threshold 10 --threshold 20 \
+  --output results/Thesan-2/gas_sphere_clumping_vs_redshift_grid256.png
+```
+
+The evolution plot command verifies that all inputs use the same particle, mask, backend, grid, and threshold configuration before interpolating the requested threshold values.

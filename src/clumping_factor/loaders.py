@@ -25,6 +25,9 @@ class SnapshotMetadata:
     particle_counts: np.ndarray
     file_count: int
     header_path: Path
+    scale_factor: float | None = None
+    redshift: float | None = None
+    hubble_param: float | None = None
 
 
 def _load_illustris_python():
@@ -113,6 +116,16 @@ def read_snapshot_metadata(base_path: str | Path, snapshot: int) -> SnapshotMeta
         high_words = np.asarray(header.get("NumPart_Total_HighWord", np.zeros_like(counts)), dtype=np.uint64)
         particle_counts = counts + high_words * np.uint64(2**32)
         file_count = int(header.get("NumFilesPerSnapshot", len(snapshot_file_paths(base_path, snapshot))))
+        scale_factor_raw = header.get("Time")
+        redshift_raw = header.get("Redshift")
+        hubble_param_raw = header.get("HubbleParam")
+
+    scale_factor = float(scale_factor_raw) if scale_factor_raw is not None else None
+    redshift = float(redshift_raw) if redshift_raw is not None else None
+    if redshift is None and scale_factor is not None and scale_factor > 0:
+        redshift = 1.0 / scale_factor - 1.0
+    if scale_factor is None and redshift is not None and redshift > -1:
+        scale_factor = 1.0 / (1.0 + redshift)
 
     return SnapshotMetadata(
         base_path=base_path,
@@ -122,7 +135,111 @@ def read_snapshot_metadata(base_path: str | Path, snapshot: int) -> SnapshotMeta
         particle_counts=particle_counts.astype(np.uint64),
         file_count=file_count,
         header_path=header_path,
+        scale_factor=scale_factor,
+        redshift=redshift,
+        hubble_param=float(hubble_param_raw) if hubble_param_raw is not None else None,
     )
+
+
+def inspect_raw_transmission_fields(base_path: str | Path, snapshot: int) -> dict[str, str]:
+    """Validate and describe the gas chemistry fields used by raw-transmission."""
+    import h5py
+
+    required = {"Coordinates", "Density", "Masses", "HI_Fraction", "HII_Fraction", "GFM_Metals"}
+    for path in snapshot_file_paths(base_path, snapshot):
+        with h5py.File(path, "r") as snapfile:
+            if "PartType0" not in snapfile or snapfile["PartType0"]["Coordinates"].shape[0] == 0:
+                continue
+            group = snapfile["PartType0"]
+            missing = sorted(required.difference(group.keys()))
+            if missing:
+                raise ValueError(
+                    "raw-transmission requires gas datasets " + ", ".join(missing) + "."
+                )
+            if group["GFM_Metals"].ndim != 2 or group["GFM_Metals"].shape[1] < 1:
+                raise ValueError("GFM_Metals must be a two-dimensional array with hydrogen in column 0.")
+            sample_size = min(10000, int(group["HI_Fraction"].shape[0]))
+            hi = np.asarray(group["HI_Fraction"][:sample_size], dtype=np.float64)
+            hii = np.asarray(group["HII_Fraction"][:sample_size], dtype=np.float64)
+            finite = np.isfinite(hi) & np.isfinite(hii)
+            if not np.any(finite):
+                raise ValueError("HI_Fraction and HII_Fraction contain no finite sample values.")
+            if np.any(hi[finite] < -1e-5) or np.any(hii[finite] < -1e-5):
+                raise ValueError("HI_Fraction and HII_Fraction must be non-negative ion-stage fractions.")
+            closure = hi[finite] + hii[finite]
+            if not np.allclose(closure, 1.0, rtol=1e-3, atol=1e-4):
+                raise ValueError(
+                    "Cannot confirm the HI_Fraction convention: HI_Fraction + HII_Fraction is not approximately 1."
+                )
+            return {
+                "hi_field": "HI_Fraction",
+                "hii_field": "HII_Fraction",
+                "hydrogen_abundance_field": "GFM_Metals[:,0]",
+                "hi_fraction_convention": "neutral hydrogen ion-stage fraction; verified by HI + HII ~= 1",
+            }
+    raise ValueError("Snapshot contains no non-empty PartType0 gas group.")
+
+
+def iter_raw_transmission_chunks(
+    base_path: str | Path,
+    snapshot: int,
+    chunk_size: int,
+) -> Iterator[dict]:
+    """Stream native gas cells and the chemistry fields needed by raw-transmission."""
+    import h5py
+
+    if chunk_size < 1:
+        raise ValueError("chunk_size must be at least 1.")
+    inspect_raw_transmission_fields(base_path, snapshot)
+    metadata = read_snapshot_metadata(base_path, snapshot)
+
+    for file_index, path in enumerate(snapshot_file_paths(base_path, snapshot)):
+        with h5py.File(path, "r") as snapfile:
+            if "PartType0" not in snapfile:
+                continue
+            group = snapfile["PartType0"]
+            count = int(group["Coordinates"].shape[0])
+            for start in range(0, count, chunk_size):
+                stop = min(start + chunk_size, count)
+                coords_raw = np.asarray(group["Coordinates"][start:stop])
+                density_raw = np.asarray(group["Density"][start:stop])
+                masses_raw = np.asarray(group["Masses"][start:stop])
+                hi_raw = np.asarray(group["HI_Fraction"][start:stop])
+                hii_raw = np.asarray(group["HII_Fraction"][start:stop])
+                hydrogen_raw = np.asarray(group["GFM_Metals"][start:stop, 0])
+                valid = (
+                    np.all(np.isfinite(coords_raw), axis=1)
+                    & np.isfinite(density_raw)
+                    & np.isfinite(masses_raw)
+                    & np.isfinite(hi_raw)
+                    & np.isfinite(hii_raw)
+                    & np.isfinite(hydrogen_raw)
+                    & (density_raw > 0)
+                    & (masses_raw > 0)
+                    & (hi_raw >= 0)
+                    & (hii_raw >= 0)
+                    & (hydrogen_raw > 0)
+                    & (hydrogen_raw <= 1)
+                    & np.isclose(hi_raw + hii_raw, 1.0, rtol=1e-3, atol=1e-4)
+                )
+                coords = np.ascontiguousarray(coords_raw[valid], dtype=np.float64)
+                density = np.ascontiguousarray(density_raw[valid], dtype=np.float64)
+                masses = np.ascontiguousarray(masses_raw[valid], dtype=np.float64)
+                yield {
+                    "coords": coords,
+                    "density": density,
+                    "masses": masses,
+                    "cell_volume": masses / density,
+                    "hi_fraction": np.ascontiguousarray(hi_raw[valid], dtype=np.float64),
+                    "hydrogen_mass_fraction": np.ascontiguousarray(hydrogen_raw[valid], dtype=np.float64),
+                    "lbox": metadata.lbox,
+                    "input_count": int(stop - start),
+                    "valid_count": int(np.count_nonzero(valid)),
+                    "dropped_count": int((stop - start) - np.count_nonzero(valid)),
+                    "file_index": file_index,
+                    "start": start,
+                    "stop": stop,
+                }
 
 
 def estimate_full_load_bytes(metadata: SnapshotMetadata, particle_type: str) -> int:
