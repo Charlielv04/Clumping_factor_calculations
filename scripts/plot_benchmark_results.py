@@ -15,7 +15,8 @@ import matplotlib.pyplot as plt
 
 
 FILENAME_RE = re.compile(
-    r"gas_(?P<backend>[^_]+)_grid(?P<grid>\d+)_threads(?P<threads>\d+)"
+    r"(?P<particle>gas|dm)_(?P<backend>[^_]+)(?:_snapshot(?P<snapshot>\d+))?"
+    r"_grid(?P<grid>\d+)_threads(?P<threads>\d+)"
     r"(?:_batch(?P<batch>\d+))?(?:_run(?P<run>\d+))?\.json$"
 )
 
@@ -89,6 +90,8 @@ def parse_result(path: Path) -> dict[str, Any] | None:
     return {
         "path": str(path),
         "simulation": simulation,
+        "particle": groups["particle"],
+        "snapshot": int(groups["snapshot"]) if groups["snapshot"] is not None else parameters.get("snapshot"),
         "backend": str(backend_value),
         "grid": int(groups["grid"]),
         "threads": int(groups["threads"]),
@@ -148,10 +151,10 @@ def write_csv(rows: list[dict[str, Any]], path: Path) -> None:
         writer.writerows({key: row[key] for key in columns} for row in rows)
 
 
-def grouped(rows: list[dict[str, Any]]) -> dict[tuple[str, str, int], list[dict[str, Any]]]:
-    result: dict[tuple[str, str, int], list[dict[str, Any]]] = {}
+def grouped(rows: list[dict[str, Any]]) -> dict[tuple[str, str, str, int], list[dict[str, Any]]]:
+    result: dict[tuple[str, str, str, int], list[dict[str, Any]]] = {}
     for row in rows:
-        result.setdefault((row["simulation"], row["backend"], row["grid"]), []).append(row)
+        result.setdefault((row["simulation"], row["particle"], row["backend"], row["grid"]), []).append(row)
     for values in result.values():
         values.sort(key=lambda row: (row["workers"], row["run"]))
     return result
@@ -161,8 +164,8 @@ def plot_performance(rows: list[dict[str, Any]], output: Path) -> None:
     figure, axes = plt.subplots(2, 2, figsize=(13, 9), constrained_layout=True)
     colors = {"sphere": "#2878b5", "cube": "#e87500", "pylians": "#2b9348"}
 
-    for (simulation, backend, grid), values in grouped(rows).items():
-        label = f"{simulation} | {backend} | {grid}³"
+    for (simulation, particle, backend, grid), values in grouped(rows).items():
+        label = f"{simulation} | {particle} | {backend} | {grid}^3"
         color = colors.get(backend)
         workers = [row["workers"] for row in values]
         totals = [row["total_seconds"] / 60 for row in values]
@@ -205,9 +208,9 @@ def plot_grid_scaling(rows: list[dict[str, Any]], output: Path) -> bool:
     if len({row["grid"] for row in grid_rows}) < 2:
         return False
     figure, axes = plt.subplots(1, 2, figsize=(12, 5), constrained_layout=True)
-    for (simulation, backend, workers), values in _group_grid_rows(grid_rows).items():
+    for (simulation, particle, backend, workers), values in _group_grid_rows(grid_rows).items():
         values.sort(key=lambda row: row["grid"])
-        label = f"{simulation} | {backend} | {workers} workers"
+        label = f"{simulation} | {particle} | {backend} | {workers} workers"
         grids = [row["grid"] for row in values]
         axes[0].plot(grids, [row["total_seconds"] / 60 for row in values], "o-", label=label)
         memory = [(row["grid"], row["memory_gib"]) for row in values if finite(row["memory_gib"])]
@@ -225,10 +228,10 @@ def plot_grid_scaling(rows: list[dict[str, Any]], output: Path) -> bool:
     return True
 
 
-def _group_grid_rows(rows: list[dict[str, Any]]) -> dict[tuple[str, str, int], list[dict[str, Any]]]:
-    result: dict[tuple[str, str, int], list[dict[str, Any]]] = {}
+def _group_grid_rows(rows: list[dict[str, Any]]) -> dict[tuple[str, str, str, int], list[dict[str, Any]]]:
+    result: dict[tuple[str, str, str, int], list[dict[str, Any]]] = {}
     for row in rows:
-        result.setdefault((row["simulation"], row["backend"], row["workers"]), []).append(row)
+        result.setdefault((row["simulation"], row["particle"], row["backend"], row["workers"]), []).append(row)
     return result
 
 
@@ -240,7 +243,7 @@ def plot_clumping(rows: list[dict[str, Any]], output: Path) -> None:
         factors = row["clumping_factors"]
         if not thresholds or len(thresholds) != len(factors):
             continue
-        label = f"{row['simulation']} | {row['backend']} | {row['grid']}³ | {row['workers']}w"
+        label = f"{row['simulation']} | {row['particle']} | {row['backend']} | {row['grid']}^3 | {row['workers']}w"
         axis.plot(thresholds, factors, label=label, alpha=0.8)
         plotted += 1
     if not plotted:
