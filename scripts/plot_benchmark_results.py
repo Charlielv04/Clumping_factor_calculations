@@ -24,6 +24,17 @@ PALETTE = [
     "#f9c74f",
     "#577590",
 ]
+GRID_COLORS = {
+    64: "#577590",
+    128: "#2878b5",
+    256: "#e87500",
+    384: "#8e5ea2",
+    512: "#2b9348",
+    640: "#d53e4f",
+    768: "#4d908e",
+    896: "#f9c74f",
+    1024: "#984ea3",
+}
 GRID_MARKERS = {
     64: "v",
     128: "o",
@@ -36,6 +47,7 @@ GRID_MARKERS = {
     1024: "h",
 }
 GRID_LINESTYLES = ["-", "--", "-.", ":"]
+SIMULATION_LINESTYLES = ["-", "--", "-.", ":"]
 WORKER_MARKERS = {
     1: "o",
     2: "s",
@@ -179,9 +191,22 @@ def color_map(keys: Iterable[tuple[Any, ...]]) -> dict[tuple[Any, ...], str]:
     return {key: PALETTE[index % len(PALETTE)] for index, key in enumerate(sorted(set(keys)))}
 
 
-def grid_style(grid: int) -> tuple[str, str]:
+def grid_color_map(grids: Iterable[int]) -> dict[int, str]:
+    fallback_grids = [grid for grid in sorted(set(grids)) if grid not in GRID_COLORS]
+    fallback = {grid: PALETTE[index % len(PALETTE)] for index, grid in enumerate(fallback_grids)}
+    return {grid: GRID_COLORS.get(grid, fallback.get(grid, "#333333")) for grid in sorted(set(grids))}
+
+
+def simulation_linestyle_map(simulations: Iterable[str]) -> dict[str, str]:
+    return {
+        simulation: SIMULATION_LINESTYLES[index % len(SIMULATION_LINESTYLES)]
+        for index, simulation in enumerate(sorted(set(simulations)))
+    }
+
+
+def grid_style(grid: int, simulation: str, simulation_styles: dict[str, str]) -> tuple[str, str]:
     marker = GRID_MARKERS.get(grid, "o")
-    linestyle = GRID_LINESTYLES[sorted(GRID_MARKERS).index(grid) % len(GRID_LINESTYLES)] if grid in GRID_MARKERS else "-"
+    linestyle = simulation_styles.get(simulation, "-")
     return marker, linestyle
 
 
@@ -205,12 +230,13 @@ def grouped(rows: list[dict[str, Any]]) -> dict[tuple[str, str, str, int], list[
 def plot_performance(rows: list[dict[str, Any]], output: Path) -> None:
     figure, axes = plt.subplots(2, 2, figsize=(13, 9), constrained_layout=True)
     groups = grouped(rows)
-    colors = color_map((simulation, particle, backend) for simulation, particle, backend, _ in groups)
+    colors = grid_color_map(row["grid"] for row in rows)
+    simulation_styles = simulation_linestyle_map(row["simulation"] for row in rows)
 
     for (simulation, particle, backend, grid), values in groups.items():
         label = f"{simulation} | {particle} | {backend} | {grid}^3"
-        color = colors[(simulation, particle, backend)]
-        marker, linestyle = grid_style(grid)
+        color = colors[grid]
+        marker, linestyle = grid_style(grid, simulation, simulation_styles)
         workers = [row["workers"] for row in values]
         totals = [row["total_seconds"] / 60 for row in values]
         builds = [row["build_seconds"] / 60 for row in values]
@@ -261,23 +287,41 @@ def plot_grid_scaling(rows: list[dict[str, Any]], output: Path) -> bool:
         return False
     figure, axes = plt.subplots(1, 2, figsize=(12, 5), constrained_layout=True)
     groups = _group_grid_rows(grid_rows)
-    colors = color_map((simulation, particle, backend) for simulation, particle, backend, _ in groups)
+    colors = grid_color_map(row["grid"] for row in grid_rows)
+    simulation_styles = simulation_linestyle_map(row["simulation"] for row in grid_rows)
     for (simulation, particle, backend, workers), values in groups.items():
         values.sort(key=lambda row: row["grid"])
         label = f"{simulation} | {particle} | {backend} | {workers} workers"
-        color = colors[(simulation, particle, backend)]
         marker = WORKER_MARKERS.get(workers, "o")
         grids = [row["grid"] for row in values]
-        axes[0].plot(grids, [row["total_seconds"] / 60 for row in values], marker=marker, linestyle="-", color=color, label=label)
+        axes[0].plot(
+            grids,
+            [row["total_seconds"] / 60 for row in values],
+            marker=marker,
+            linestyle=simulation_styles.get(simulation, "-"),
+            color="#333333",
+            label=label,
+        )
         memory = [(row["grid"], row["memory_gib"]) for row in values if finite(row["memory_gib"])]
         if memory:
+            memory_grids = [item[0] for item in memory]
             axes[1].plot(
-                [item[0] for item in memory],
+                memory_grids,
                 [item[1] for item in memory],
                 marker=marker,
-                linestyle="-",
-                color=color,
+                linestyle=simulation_styles.get(simulation, "-"),
+                color="#333333",
                 label=label,
+            )
+            for grid, memory_gib in memory:
+                axes[1].scatter([grid], [memory_gib], color=colors[grid], marker=marker, zorder=3)
+        for row in values:
+            axes[0].scatter(
+                [row["grid"]],
+                [row["total_seconds"] / 60],
+                color=colors[row["grid"]],
+                marker=marker,
+                zorder=3,
             )
     axes[0].set(title="Wall time by grid size", ylabel="Minutes")
     axes[1].set(title="Estimated peak/worker-grid memory", ylabel="GiB")
