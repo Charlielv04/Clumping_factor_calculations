@@ -14,6 +14,38 @@ from typing import Any, Iterable
 import matplotlib.pyplot as plt
 
 
+PALETTE = [
+    "#2878b5",
+    "#e87500",
+    "#2b9348",
+    "#8e5ea2",
+    "#d53e4f",
+    "#4d908e",
+    "#f9c74f",
+    "#577590",
+]
+GRID_MARKERS = {
+    64: "v",
+    128: "o",
+    256: "s",
+    384: "P",
+    512: "^",
+    640: "D",
+    768: "X",
+    896: "*",
+    1024: "h",
+}
+GRID_LINESTYLES = ["-", "--", "-.", ":"]
+WORKER_MARKERS = {
+    1: "o",
+    2: "s",
+    4: "^",
+    8: "D",
+    16: "P",
+    20: "X",
+    32: "*",
+}
+
 FILENAME_RE = re.compile(
     r"(?P<particle>gas|dm)_(?P<backend>[^_]+)(?:_snapshot(?P<snapshot>\d+))?"
     r"_grid(?P<grid>\d+)_threads(?P<threads>\d+)"
@@ -143,6 +175,16 @@ def finite(value: Any) -> bool:
     return isinstance(value, (int, float)) and math.isfinite(float(value))
 
 
+def color_map(keys: Iterable[tuple[Any, ...]]) -> dict[tuple[Any, ...], str]:
+    return {key: PALETTE[index % len(PALETTE)] for index, key in enumerate(sorted(set(keys)))}
+
+
+def grid_style(grid: int) -> tuple[str, str]:
+    marker = GRID_MARKERS.get(grid, "o")
+    linestyle = GRID_LINESTYLES[sorted(GRID_MARKERS).index(grid) % len(GRID_LINESTYLES)] if grid in GRID_MARKERS else "-"
+    return marker, linestyle
+
+
 def write_csv(rows: list[dict[str, Any]], path: Path) -> None:
     columns = [key for key in rows[0] if key not in {"thresholds", "clumping_factors"}]
     with path.open("w", newline="", encoding="utf-8") as handle:
@@ -162,23 +204,33 @@ def grouped(rows: list[dict[str, Any]]) -> dict[tuple[str, str, str, int], list[
 
 def plot_performance(rows: list[dict[str, Any]], output: Path) -> None:
     figure, axes = plt.subplots(2, 2, figsize=(13, 9), constrained_layout=True)
-    colors = {"sphere": "#2878b5", "cube": "#e87500", "pylians": "#2b9348"}
+    groups = grouped(rows)
+    colors = color_map((simulation, particle, backend) for simulation, particle, backend, _ in groups)
 
-    for (simulation, particle, backend, grid), values in grouped(rows).items():
+    for (simulation, particle, backend, grid), values in groups.items():
         label = f"{simulation} | {particle} | {backend} | {grid}^3"
-        color = colors.get(backend)
+        color = colors[(simulation, particle, backend)]
+        marker, linestyle = grid_style(grid)
         workers = [row["workers"] for row in values]
         totals = [row["total_seconds"] / 60 for row in values]
         builds = [row["build_seconds"] / 60 for row in values]
         io = [row["io_worker_seconds"] / 60 for row in values]
-        axes[0, 0].plot(workers, totals, "o-", label=label, color=color, alpha=0.85)
-        axes[0, 1].plot(workers, builds, "o-", label=label, color=color, alpha=0.85)
+        axes[0, 0].plot(workers, totals, marker=marker, linestyle=linestyle, label=label, color=color, alpha=0.9)
+        axes[0, 1].plot(workers, builds, marker=marker, linestyle=linestyle, label=label, color=color, alpha=0.9)
 
         valid = [(row["workers"], row["total_seconds"]) for row in values if finite(row["total_seconds"])]
         if valid:
             baseline_workers, baseline_time = min(valid)
             speedups = [baseline_time / value for _, value in valid]
-            axes[1, 0].plot([item[0] for item in valid], speedups, "o-", label=label, color=color, alpha=0.85)
+            axes[1, 0].plot(
+                [item[0] for item in valid],
+                speedups,
+                marker=marker,
+                linestyle=linestyle,
+                label=label,
+                color=color,
+                alpha=0.9,
+            )
             ideal_workers = [item[0] for item in valid]
             axes[1, 0].plot(
                 ideal_workers,
@@ -188,7 +240,7 @@ def plot_performance(rows: list[dict[str, Any]], output: Path) -> None:
                 alpha=0.25,
             )
         if any(finite(value) for value in io):
-            axes[1, 1].plot(workers, io, "o-", label=label, color=color, alpha=0.85)
+            axes[1, 1].plot(workers, io, marker=marker, linestyle=linestyle, label=label, color=color, alpha=0.9)
 
     axes[0, 0].set(title="End-to-end wall time", ylabel="Minutes")
     axes[0, 1].set(title="Grid-build wall time", ylabel="Minutes")
@@ -198,7 +250,7 @@ def plot_performance(rows: list[dict[str, Any]], output: Path) -> None:
         axis.set_xlabel("Effective workers")
         axis.grid(True, alpha=0.25)
     axes[0, 0].legend(fontsize=8, ncol=2)
-    figure.suptitle("Thesan chunked-grid performance", fontsize=16)
+    figure.suptitle("Thesan chunked-grid performance by grid size", fontsize=16)
     figure.savefig(output, dpi=180)
     plt.close(figure)
 
@@ -208,14 +260,25 @@ def plot_grid_scaling(rows: list[dict[str, Any]], output: Path) -> bool:
     if len({row["grid"] for row in grid_rows}) < 2:
         return False
     figure, axes = plt.subplots(1, 2, figsize=(12, 5), constrained_layout=True)
-    for (simulation, particle, backend, workers), values in _group_grid_rows(grid_rows).items():
+    groups = _group_grid_rows(grid_rows)
+    colors = color_map((simulation, particle, backend) for simulation, particle, backend, _ in groups)
+    for (simulation, particle, backend, workers), values in groups.items():
         values.sort(key=lambda row: row["grid"])
         label = f"{simulation} | {particle} | {backend} | {workers} workers"
+        color = colors[(simulation, particle, backend)]
+        marker = WORKER_MARKERS.get(workers, "o")
         grids = [row["grid"] for row in values]
-        axes[0].plot(grids, [row["total_seconds"] / 60 for row in values], "o-", label=label)
+        axes[0].plot(grids, [row["total_seconds"] / 60 for row in values], marker=marker, linestyle="-", color=color, label=label)
         memory = [(row["grid"], row["memory_gib"]) for row in values if finite(row["memory_gib"])]
         if memory:
-            axes[1].plot([item[0] for item in memory], [item[1] for item in memory], "o-", label=label)
+            axes[1].plot(
+                [item[0] for item in memory],
+                [item[1] for item in memory],
+                marker=marker,
+                linestyle="-",
+                color=color,
+                label=label,
+            )
     axes[0].set(title="Wall time by grid size", ylabel="Minutes")
     axes[1].set(title="Estimated peak/worker-grid memory", ylabel="GiB")
     for axis in axes:
@@ -272,6 +335,10 @@ def main() -> None:
     plot_performance(rows, args.output_dir / "performance_dashboard.png")
     plot_grid_scaling(rows, args.output_dir / "grid_scaling.png")
     plot_clumping(rows, args.output_dir / "clumping_consistency.png")
+    for grid in sorted({row["grid"] for row in rows}):
+        grid_rows = [row for row in rows if row["grid"] == grid]
+        plot_performance(grid_rows, args.output_dir / f"performance_dashboard_grid{grid}.png")
+        plot_clumping(grid_rows, args.output_dir / f"clumping_consistency_grid{grid}.png")
     print(f"Analyzed {len(rows)} result files in {args.output_dir}")
 
 
