@@ -192,9 +192,10 @@ def color_map(keys: Iterable[tuple[Any, ...]]) -> dict[tuple[Any, ...], str]:
 
 
 def grid_color_map(grids: Iterable[int]) -> dict[int, str]:
-    fallback_grids = [grid for grid in sorted(set(grids)) if grid not in GRID_COLORS]
+    unique_grids = sorted(set(grids))
+    fallback_grids = [grid for grid in unique_grids if grid not in GRID_COLORS]
     fallback = {grid: PALETTE[index % len(PALETTE)] for index, grid in enumerate(fallback_grids)}
-    return {grid: GRID_COLORS.get(grid, fallback.get(grid, "#333333")) for grid in sorted(set(grids))}
+    return {grid: GRID_COLORS.get(grid, fallback.get(grid, "#333333")) for grid in unique_grids}
 
 
 def simulation_linestyle_map(simulations: Iterable[str]) -> dict[str, str]:

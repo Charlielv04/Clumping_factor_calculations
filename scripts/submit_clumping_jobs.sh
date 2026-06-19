@@ -81,6 +81,8 @@ submit_one() {
   local run_label="$4"
   local dependency="$5"
   local mem walltime name selected_queue resource_size
+  local mem_var="MEM_${grid}"
+  local walltime_var="WALLTIME_${grid}"
   local submission_output
   local -a qsub_args
 
@@ -118,8 +120,12 @@ submit_one() {
       walltime="${WALLTIME_1024}"
       ;;
     *)
-      echo "Unsupported grid size: ${grid}. Supported defaults are 128-step grids from 128 to 1024." >&2
-      exit 1
+      mem="${!mem_var:-}"
+      walltime="${!walltime_var:-}"
+      if [[ -z "${mem}" || -z "${walltime}" ]]; then
+        echo "Unsupported grid size: ${grid}. Set MEM_${grid} and WALLTIME_${grid} to submit custom grids." >&2
+        exit 1
+      fi
       ;;
   esac
 
