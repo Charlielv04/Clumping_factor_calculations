@@ -14,7 +14,21 @@ from scipy.ndimage import convolve, uniform_filter
 from .models import GridResult, ParticleData
 from .preprocess import make_radius_groups
 
-MAX_GRID_CELLS = 1024**3
+DEFAULT_MAX_GRID_CELLS = 1024**3
+MAX_GRID_CELLS_ENV = "CLUMPING_MAX_GRID_CELLS"
+
+
+def _max_grid_cells() -> int:
+    raw_value = os.environ.get(MAX_GRID_CELLS_ENV)
+    if raw_value is None:
+        return DEFAULT_MAX_GRID_CELLS
+    try:
+        max_cells = int(raw_value)
+    except ValueError as exc:
+        raise ValueError(f"{MAX_GRID_CELLS_ENV} must be an integer number of grid cells.") from exc
+    if max_cells < 1:
+        raise ValueError(f"{MAX_GRID_CELLS_ENV} must be positive.")
+    return max_cells
 
 
 def spherical_tophat_kernel(radius_physical: float, cell_size: float) -> np.ndarray:
@@ -100,8 +114,12 @@ def _validate_grid_request(grid_size: int, dtype: np.dtype) -> dict[str, Any]:
     if grid_size < 1:
         raise ValueError("grid_size must be at least 1.")
     cells = int(grid_size) ** 3
-    if cells > MAX_GRID_CELLS:
-        raise ValueError(f"grid_size={grid_size} requires {cells} cells; the supported maximum is {MAX_GRID_CELLS}.")
+    max_grid_cells = _max_grid_cells()
+    if cells > max_grid_cells:
+        raise ValueError(
+            f"grid_size={grid_size} requires {cells} cells; the supported maximum is {max_grid_cells}. "
+            f"Set {MAX_GRID_CELLS_ENV} to a larger value to opt in to larger grids."
+        )
     bytes_per_grid = cells * np.dtype(dtype).itemsize
     return {
         "grid_cells": cells,
