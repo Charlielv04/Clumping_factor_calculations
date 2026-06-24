@@ -57,18 +57,106 @@ def _selected_cell_count_arrays(document: dict, result_path: str | Path) -> tupl
     return thresholds, counts
 
 
-def _plot_label(document: dict, result_path: str | Path, seen_labels: set[str]) -> str:
+def _finite_redshift(document: dict) -> float | None:
+    redshift = document.get("simulation", {}).get("redshift")
+    if isinstance(redshift, (int, float)) and np.isfinite(redshift):
+        return float(redshift)
+    return None
+
+
+def _snapshot_label(document: dict, result_path: str | Path) -> str:
+    snapshot = document.get("simulation", {}).get("snapshot")
+    if snapshot is None:
+        snapshot = document.get("parameters", {}).get("snapshot")
+    if isinstance(snapshot, (int, np.integer)):
+        return f"snapshot {int(snapshot):03d}"
+    parent = Path(result_path).parent.name
+    if parent.startswith("snapshot"):
+        return parent.replace("_", " ")
+    return Path(result_path).stem
+
+
+def _redshift_label(document: dict, result_path: str | Path) -> str:
+    redshift = _finite_redshift(document)
+    if redshift is not None:
+        return f"z = {redshift:.2f}"
+    return _snapshot_label(document, result_path)
+
+
+def _method_signature(document: dict) -> tuple:
+    parameters = document.get("parameters", {})
+    backend = document.get("backend", {}).get("backend", "unknown")
+    return (
+        document.get("simulation", {}).get("name") or parameters.get("simulation_name"),
+        document.get("particle_type", "unknown"),
+        backend,
+        parameters.get("grid_size"),
+    )
+
+
+def _method_label(document: dict, *, include_simulation: bool = False) -> str:
     simulation_name = document.get("simulation", {}).get("name") or document.get("parameters", {}).get("simulation_name")
     backend = document.get("backend", {}).get("backend", "unknown")
     particle_type = document.get("particle_type", "unknown")
     grid_size = document.get("parameters", {}).get("grid_size")
-    label = f"{particle_type} {backend}" if grid_size is None else f"{particle_type} {backend} {grid_size}"
-    if simulation_name:
+    label = f"{particle_type} {backend}" if grid_size is None else f"{particle_type} {backend}, grid {grid_size}"
+    if include_simulation and simulation_name:
         label = f"{simulation_name} {label}"
+    return label
+
+
+def _plot_label(
+    document: dict,
+    result_path: str | Path,
+    seen_labels: set[str],
+    label_mode: str,
+    *,
+    include_simulation: bool = False,
+) -> str:
+    if label_mode == "redshift":
+        label = _redshift_label(document, result_path)
+    elif label_mode == "method":
+        label = _method_label(document, include_simulation=include_simulation)
+    else:
+        label = f"{_method_label(document, include_simulation=include_simulation)}; {_redshift_label(document, result_path)}"
     if label in seen_labels:
-        label = f"{label} ({Path(result_path).stem})"
+        label = f"{label} ({_snapshot_label(document, result_path)})"
     seen_labels.add(label)
     return label
+
+
+def _auto_plot_context(documents: list[tuple[str | Path, dict]], quantity: str) -> tuple[str, str | None, str | None]:
+    signatures = {_method_signature(document) for _, document in documents}
+    simulation_names = {
+        document.get("simulation", {}).get("name") or document.get("parameters", {}).get("simulation_name")
+        for _, document in documents
+    }
+    simulation_names.discard(None)
+    redshift_labels = {_redshift_label(document, path) for path, document in documents}
+
+    if len(signatures) == 1 and len(redshift_labels) > 1:
+        label_mode = "redshift"
+        legend_title = "Redshift"
+    elif len(signatures) > 1 and len(redshift_labels) <= 1:
+        label_mode = "method"
+        legend_title = "Method"
+    else:
+        label_mode = "method-redshift"
+        legend_title = "Method; redshift"
+
+    if len(signatures) != 1:
+        title = "Selected cell count vs overdensity" if quantity == "cell-count" else "Clumping factor vs overdensity"
+        if len(simulation_names) == 1:
+            title = f"{next(iter(simulation_names))}: {title}"
+        return label_mode, legend_title, title
+
+    _, first_document = documents[0]
+    simulation_name, particle_type, backend, grid_size = _method_signature(first_document)
+    quantity_title = "Selected IGM cells" if quantity == "cell-count" else "Clumping factor"
+    grid_text = "no grid" if grid_size is None else f"grid {grid_size}"
+    pieces = [piece for piece in (simulation_name, particle_type, backend, grid_text) if piece]
+    title = f"{' '.join(map(str, pieces))}: {quantity_title} vs overdensity"
+    return label_mode, legend_title, title
 
 
 def plot_result_files(
@@ -89,12 +177,21 @@ def plot_result_files(
     if not np.isfinite(x_min):
         raise ValueError("x_min must be finite.")
 
+    documents = [(result_path, read_json_result(result_path)) for result_path in result_paths]
+    label_mode, legend_title, auto_title = _auto_plot_context(documents, quantity)
+    include_simulation = len(
+        {
+            document.get("simulation", {}).get("name") or document.get("parameters", {}).get("simulation_name")
+            for _, document in documents
+        }
+        - {None}
+    ) > 1
+
     fig, ax = plt.subplots(figsize=(8, 5))
     linestyles = ["-", "--", ":", "-."]
     seen_labels: set[str] = set()
     plotted = 0
-    for index, result_path in enumerate(result_paths):
-        document = read_json_result(result_path)
+    for index, (result_path, document) in enumerate(documents):
         if quantity == "cell-count":
             thresholds, values = _selected_cell_count_arrays(document, result_path)
         else:
@@ -112,7 +209,13 @@ def plot_result_files(
                 values[density_fractions < min_selected_density_fraction] = np.nan
         if not np.any(np.isfinite(values)):
             continue
-        label = _plot_label(document, result_path, seen_labels)
+        label = _plot_label(
+            document,
+            result_path,
+            seen_labels,
+            label_mode,
+            include_simulation=include_simulation,
+        )
         linestyle = linestyles[index % len(linestyles)] if alternate_linestyles else "-"
         ax.plot(thresholds, values, label=label, linestyle=linestyle)
         plotted += 1
@@ -124,10 +227,9 @@ def plot_result_files(
     ax.set_xlabel("Overdensity threshold")
     ax.set_ylabel("Number of cells in IGM mask" if quantity == "cell-count" else "Clumping factor")
     ax.set_xlim(left=x_min)
-    if title:
-        ax.set_title(title)
+    ax.set_title(title or auto_title)
     ax.grid(True)
-    ax.legend()
+    ax.legend(title=legend_title)
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)

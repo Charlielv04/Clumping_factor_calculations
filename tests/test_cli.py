@@ -5,6 +5,7 @@ import numpy as np
 
 from clumping_factor.cli import build_compute_parser, evolution_plot_main, plot_main, run_compute
 from clumping_factor.models import GridResult, ParticleData
+from clumping_factor.plotting import _auto_plot_context, _plot_label
 from clumping_factor.results import canonical_thesan_result_path, default_output_path, resolve_simulation_name
 
 
@@ -390,6 +391,45 @@ def _write_evolution_result(path, redshift, factors, grid_size=256):
             }
         )
     )
+
+
+def test_threshold_plot_labels_same_method_by_redshift(tmp_path):
+    first = tmp_path / "snapshot040_grid256" / "threads8_batch2_run001.json"
+    second = tmp_path / "snapshot080_grid256" / "threads8_batch2_run001.json"
+    first.parent.mkdir()
+    second.parent.mkdir()
+    _write_evolution_result(first, 10.0, [1.0, 2.0, 3.0])
+    _write_evolution_result(second, 6.0, [1.5, 2.5, 3.5])
+    documents = [(first, json.loads(first.read_text())), (second, json.loads(second.read_text()))]
+
+    label_mode, legend_title, title = _auto_plot_context(documents, "clumping-factor")
+    seen = set()
+    labels = [_plot_label(document, path, seen, label_mode) for path, document in documents]
+
+    assert label_mode == "redshift"
+    assert legend_title == "Redshift"
+    assert labels == ["z = 10.00", "z = 6.00"]
+    assert "sim gas sphere grid 256" in title
+    assert "threads" not in " ".join(labels)
+
+
+def test_threshold_plot_labels_cross_method_by_method(tmp_path):
+    sphere = tmp_path / "sphere.json"
+    pylians = tmp_path / "pylians.json"
+    _write_evolution_result(sphere, 6.0, [1.0, 2.0, 3.0])
+    _write_evolution_result(pylians, 6.0, [1.5, 2.5, 3.5])
+    pylians_doc = json.loads(pylians.read_text())
+    pylians_doc["backend"] = {"backend": "pylians"}
+    pylians.write_text(json.dumps(pylians_doc))
+    documents = [(sphere, json.loads(sphere.read_text())), (pylians, json.loads(pylians.read_text()))]
+
+    label_mode, legend_title, _ = _auto_plot_context(documents, "clumping-factor")
+    seen = set()
+    labels = [_plot_label(document, path, seen, label_mode) for path, document in documents]
+
+    assert label_mode == "method"
+    assert legend_title == "Method"
+    assert labels == ["gas sphere, grid 256", "gas pylians, grid 256"]
 
 
 def test_evolution_plot_combines_snapshots_and_interpolates(tmp_path):
