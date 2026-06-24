@@ -63,6 +63,10 @@ FILENAME_RE = re.compile(
     r"_grid(?P<grid>\d+)_threads(?P<threads>\d+)"
     r"(?:_batch(?P<batch>\d+))?(?:_run(?P<run>\d+))?\.json$"
 )
+CANONICAL_FILENAME_RE = re.compile(r"threads(?P<threads>\d+)_batch(?P<batch>\d+)_run(?P<run>\d+)\.json$")
+CANONICAL_PARENT_RE = re.compile(r"snapshot(?P<snapshot>\d+)_grid(?P<grid>\d+)$")
+THESAN_SIM_RE = re.compile(r"(Thesan-[12])")
+TNG_SIM_RE = re.compile(r"(tng\d+-\d+)", re.IGNORECASE)
 
 
 def nested_values(value: Any, key: str) -> Iterable[Any]:
@@ -95,10 +99,20 @@ def timing(document: dict[str, Any], *keys: str, default: float = math.nan) -> f
 
 def parse_result(path: Path) -> dict[str, Any] | None:
     match = FILENAME_RE.match(path.name)
+    canonical_match = None
     if not match:
+        canonical_match = CANONICAL_FILENAME_RE.match(path.name)
+    if not match and not canonical_match:
         return None
     document = json.loads(path.read_text(encoding="utf-8"))
-    groups = match.groupdict()
+    groups = match.groupdict() if match else canonical_match.groupdict()
+    if canonical_match:
+        parent_match = CANONICAL_PARENT_RE.match(path.parent.name)
+        if parent_match:
+            groups.update(parent_match.groupdict())
+        if len(path.parts) >= 5:
+            groups.setdefault("backend", path.parent.parent.name)
+            groups.setdefault("particle", path.parent.parent.parent.name)
     parameters = document.get("parameters", {})
     summary_cache = first_nested(document, "summary_cache", default={})
     if not isinstance(summary_cache, dict):
@@ -130,10 +144,12 @@ def parse_result(path: Path) -> dict[str, Any] | None:
     else:
         memory_gib = math.nan
 
-    simulation = parameters.get("simulation_name") or path.parent.name
+    source_campaign = parameters.get("source_campaign") or parameters.get("simulation_name") or path.parent.name
+    simulation = _physical_simulation_name(path, document, source_campaign)
     return {
         "path": str(path),
         "simulation": simulation,
+        "source_campaign": source_campaign,
         "particle": groups["particle"],
         "snapshot": int(groups["snapshot"]) if groups["snapshot"] is not None else parameters.get("snapshot"),
         "backend": str(backend_value),
@@ -167,6 +183,26 @@ def parse_result(path: Path) -> dict[str, Any] | None:
         "thresholds": document.get("thresholds", []),
         "clumping_factors": document.get("clumping_factors", []),
     }
+
+
+def _physical_simulation_name(path: Path, document: dict[str, Any], fallback: str) -> str:
+    candidates = [
+        document.get("simulation", {}).get("name"),
+        document.get("simulation", {}).get("base_path"),
+        document.get("parameters", {}).get("base_path"),
+        fallback,
+        *[part for part in path.parts if "Thesan-" in part or "tng" in part.lower()],
+    ]
+    for candidate in candidates:
+        if not candidate:
+            continue
+        match = THESAN_SIM_RE.search(str(candidate))
+        if match:
+            return match.group(1)
+        match = TNG_SIM_RE.search(str(candidate))
+        if match:
+            return match.group(1).lower()
+    return str(fallback)
 
 
 def collect(inputs: list[str]) -> list[dict[str, Any]]:
@@ -368,23 +404,60 @@ def plot_clumping(rows: list[dict[str, Any]], output: Path) -> None:
     plt.close(figure)
 
 
+def _canonical_plot_roots(rows: list[dict[str, Any]], analysis_root: Path) -> dict[str, Path]:
+    simulations = sorted({row["simulation"] for row in rows})
+    particles = sorted({row["particle"] for row in rows})
+    backends = sorted({row["backend"] for row in rows})
+    snapshots = sorted({int(row["snapshot"]) for row in rows if row["snapshot"] is not None})
+    simulation = simulations[0] if len(simulations) == 1 else "combined"
+    particle = particles[0] if len(particles) == 1 else "combined"
+    backend = backends[0] if len(backends) == 1 else "combined"
+    snapshot = f"snapshot{snapshots[0]:03d}" if len(snapshots) == 1 else "combined-snapshots"
+    family = "thesan" if all(THESAN_SIM_RE.search(simulation) for simulation in simulations) else "tng" if all(TNG_SIM_RE.search(simulation) for simulation in simulations) else "combined"
+    suffix = Path(family) / simulation / snapshot / particle / backend
+    return {
+        "performance": analysis_root / "performance" / suffix,
+        "clumping": analysis_root / "clumping" / suffix,
+    }
+
+
+def write_analysis_outputs(rows: list[dict[str, Any]], output_dir: Path | None, analysis_root: Path) -> Path:
+    if output_dir is not None:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        write_csv(rows, output_dir / "benchmark_summary.csv")
+        plot_performance(rows, output_dir / "performance_dashboard.png")
+        plot_grid_scaling(rows, output_dir / "grid_scaling.png")
+        plot_clumping(rows, output_dir / "clumping_consistency.png")
+        for grid in sorted({row["grid"] for row in rows}):
+            grid_rows = [row for row in rows if row["grid"] == grid]
+            plot_performance(grid_rows, output_dir / f"performance_dashboard_grid{grid}.png")
+            plot_clumping(grid_rows, output_dir / f"clumping_consistency_grid{grid}.png")
+        return output_dir
+
+    roots = _canonical_plot_roots(rows, analysis_root)
+    for root in roots.values():
+        root.mkdir(parents=True, exist_ok=True)
+    write_csv(rows, roots["performance"] / "benchmark_summary.csv")
+    plot_performance(rows, roots["performance"] / "performance_dashboard.png")
+    plot_grid_scaling(rows, roots["performance"] / "grid_scaling.png")
+    plot_clumping(rows, roots["clumping"] / "clumping_consistency.png")
+    for grid in sorted({row["grid"] for row in rows}):
+        grid_rows = [row for row in rows if row["grid"] == grid]
+        plot_performance(grid_rows, roots["performance"] / f"performance_grid{grid}.png")
+        plot_clumping(grid_rows, roots["clumping"] / f"clumping_grid{grid}.png")
+    return analysis_root
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("inputs", nargs="+", help="Result JSON files or directories containing them.")
-    parser.add_argument("--output-dir", type=Path, default=Path("results/analysis"))
+    parser.add_argument("--output-dir", type=Path, help="Legacy output directory. Omit for canonical analysis layout.")
+    parser.add_argument("--analysis-root", type=Path, default=Path("results/analysis"))
     args = parser.parse_args()
 
     rows = collect(args.inputs)
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    write_csv(rows, args.output_dir / "benchmark_summary.csv")
-    plot_performance(rows, args.output_dir / "performance_dashboard.png")
-    plot_grid_scaling(rows, args.output_dir / "grid_scaling.png")
-    plot_clumping(rows, args.output_dir / "clumping_consistency.png")
-    for grid in sorted({row["grid"] for row in rows}):
-        grid_rows = [row for row in rows if row["grid"] == grid]
-        plot_performance(grid_rows, args.output_dir / f"performance_dashboard_grid{grid}.png")
-        plot_clumping(grid_rows, args.output_dir / f"clumping_consistency_grid{grid}.png")
-    print(f"Analyzed {len(rows)} result files in {args.output_dir}")
+    output_root = write_analysis_outputs(rows, args.output_dir, args.analysis_root)
+    print(f"Analyzed {len(rows)} result files in {output_root}")
 
 
 if __name__ == "__main__":

@@ -1,7 +1,61 @@
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
+
+
+SIMULATION_RE = re.compile(r"(Thesan-[12]|tng\d+-\d+)", re.IGNORECASE)
+SNAPSHOT_RE = re.compile(r"(?:snapshot|snap|rays_?)(?P<snapshot>\d{2,3})", re.IGNORECASE)
+
+
+def _line_slug(line: str) -> str:
+    return re.sub(r"[^A-Za-z0-9]+", "", line).lower() or "line"
+
+
+def _infer_simulation(*candidates: object) -> str:
+    for candidate in candidates:
+        if not candidate:
+            continue
+        match = SIMULATION_RE.search(str(candidate))
+        if match:
+            value = match.group(1)
+            return value if value.startswith("Thesan-") else value.lower()
+    return "unknown"
+
+
+def _infer_family(simulation: str) -> str:
+    if simulation.startswith("Thesan-"):
+        return "thesan"
+    if simulation.startswith("tng"):
+        return "tng"
+    return "unknown"
+
+
+def _infer_snapshot(path: Path, fallback: int | None = None) -> int | None:
+    for candidate in (path.name, str(path.parent)):
+        match = SNAPSHOT_RE.search(candidate)
+        if match:
+            return int(match.group("snapshot"))
+    return fallback
+
+
+def canonical_forest_output_path(
+    output_root: str | Path,
+    simulation: str,
+    snapshot: int | None,
+    line: str,
+    los_file: Path,
+) -> Path:
+    snapshot_part = f"snapshot{int(snapshot):03d}" if snapshot is not None else "unknown-snapshot"
+    return (
+        Path(output_root)
+        / _infer_family(simulation)
+        / simulation
+        / snapshot_part
+        / _line_slug(line)
+        / f"{los_file.stem}_{_line_slug(line)}.hdf5"
+    )
 
 
 def build_forest_parser() -> argparse.ArgumentParser:
@@ -14,8 +68,9 @@ def build_forest_parser() -> argparse.ArgumentParser:
     parser.add_argument("--resolution-kms", type=float, default=1.0)
     parser.add_argument("--static", action="store_true", help="Ignore peculiar velocities, matching the legacy script's production loop.")
     parser.add_argument("--only-rays", nargs="*", type=int, help="Optional ray ids to process.")
+    parser.add_argument("--simulation-name", help="Simulation name for canonical outputs, e.g. Thesan-2. Inferred from LOS paths when possible.")
     parser.add_argument("--output", help="Output HDF5 path for --los-file mode.")
-    parser.add_argument("--output-dir", default="results/forest", help="Output directory for --los-dir batch mode.")
+    parser.add_argument("--output-dir", default="results/forest", help="Canonical output root for forest spectra.")
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--verbose", action="store_true")
     return parser
@@ -48,7 +103,12 @@ def run_forest(args: argparse.Namespace) -> list[Path]:
         raise ValueError("--resolution-kms must be positive.")
     if args.los_file:
         los_file = Path(args.los_file)
-        output = Path(args.output) if args.output else Path(args.output_dir) / f"{los_file.stem}_{args.line.replace(' ', '').lower()}_forest.hdf5"
+        simulation = args.simulation_name or _infer_simulation(los_file)
+        output = (
+            Path(args.output)
+            if args.output
+            else canonical_forest_output_path(args.output_dir, simulation, _infer_snapshot(los_file), args.line, los_file)
+        )
         return [
             compute_and_write_los_spectra(
                 los_file,
@@ -68,7 +128,8 @@ def run_forest(args: argparse.Namespace) -> list[Path]:
     written: list[Path] = []
     for snapshot in args.snapshots:
         los_file = _find_los_file(los_dir, snapshot)
-        output = output_dir / f"{los_file.stem}_{args.line.replace(' ', '').lower()}_forest.hdf5"
+        simulation = args.simulation_name or _infer_simulation(los_file, los_dir)
+        output = canonical_forest_output_path(output_dir, simulation, snapshot, args.line, los_file)
         written.append(
             compute_and_write_los_spectra(
                 los_file,

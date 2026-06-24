@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import h5py
 import numpy as np
 
-from clumping_factor.forest.cli import build_forest_parser, run_forest
+from clumping_factor.forest.cli import build_forest_parser, canonical_forest_output_path, run_forest
 from clumping_factor.forest.constants import (
     ELECTRON_CHARGE_ESU,
     ELECTRON_MASS_G,
@@ -128,6 +128,39 @@ def test_cli_writes_spectra_hdf5(tmp_path):
         assert "0" in handle["velocity_kms"]
         assert handle["metadata"].attrs["line"] == "Ly a"
         assert handle["flux"]["0"].shape == handle["tau"]["0"].shape
+
+
+def test_canonical_forest_output_path_groups_by_simulation_snapshot_and_line():
+    output = canonical_forest_output_path(
+        "results/forest",
+        "Thesan-2",
+        80,
+        "Ly a",
+        Path("rays_080.hdf5"),
+    )
+
+    assert output.as_posix() == "results/forest/thesan/Thesan-2/snapshot080/lya/rays_080_lya.hdf5"
+
+
+def test_cli_defaults_to_canonical_forest_output(tmp_path, monkeypatch):
+    los_file = _write_los(tmp_path / "Thesan-2" / "rays_054.hdf5")
+    output_root = tmp_path / "results" / "forest"
+    args = build_forest_parser().parse_args(
+        [
+            "--los-file",
+            str(los_file),
+            "--output-dir",
+            str(output_root),
+            "--resolution-kms",
+            "25",
+        ]
+    )
+
+    written = run_forest(args)
+
+    expected = output_root / "thesan" / "Thesan-2" / "snapshot054" / "lya" / "rays_054_lya.hdf5"
+    assert written == [expected]
+    assert expected.exists()
 
 
 def test_legacy_regression_against_compute_tau_functions(tmp_path):

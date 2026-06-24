@@ -86,6 +86,29 @@ def default_output_path(
     return output_dir / f"{particle_type}_{backend}_snapshot{snapshot:03d}_grid{grid_size}.json"
 
 
+def canonical_thesan_result_path(
+    output_dir: str | Path,
+    simulation_name: str,
+    particle_type: str,
+    backend: str,
+    snapshot: int,
+    grid_size: int,
+    threads: int,
+    batch_size: int,
+    run: int | str = 1,
+) -> Path:
+    run_number = int(run)
+    return (
+        Path(output_dir)
+        / "thesan"
+        / sanitize_simulation_name(simulation_name)
+        / particle_type
+        / backend
+        / f"snapshot{snapshot:03d}_grid{grid_size}"
+        / f"threads{int(threads)}_batch{int(batch_size)}_run{run_number:03d}.json"
+    )
+
+
 def write_json_result(document: dict[str, Any], output_path: str | Path) -> Path:
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)

@@ -1,0 +1,146 @@
+\documentclass[
+    aps,
+    prd,
+    preprint,
+    onecolumn,
+    nofootinbib,
+    groupedaddress
+]{revtex4-2}
+
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{siunitx}
+
+\graphicspath{{../}}
+
+\begin{document}
+
+\title{Curricular Internship Report: Clumping Factor Calculations in Cosmological Simulations}
+\author{Carlos Lopez Villanueva}
+\affiliation{Curricular Internship Report}
+\date{June 2026}
+
+\begin{abstract}
+This report summarizes the first month of a four-month curricular internship focused on clumping factor calculations in cosmological simulations. The scientific objective of the internship is to measure the clumping factors predicted by simulations with different dark matter models and compare those predictions with observational or experimental constraints, potentially restricting the allowed parameter space of the models. The first part of the work developed the scientific background needed to understand dark matter, cosmological simulations, reionization, the intergalactic medium, and clumping-factor definitions. The later part implemented and tested a reproducible computational pipeline for gas and dark-matter clumping factors, scaled the calculation to larger simulation outputs, and began an extension toward Lyman-alpha forest observables.
+\end{abstract}
+
+\maketitle
+
+\section{Introduction}
+
+The scientific objective of the internship is to understand and implement clumping factor calculations for cosmological simulation data. Over the full four-month project, the goal is to compute the clumping factors predicted by simulations with different dark matter models and compare those predictions with observational or experimental constraints. If the predicted clumping factors differ in a measurable way between models, this comparison could help restrict the allowed model parameters.
+
+In the context of reionization, the clumping factor measures how inhomogeneous matter is relative to a uniform distribution. Since recombination rates scale approximately with density squared, small-scale density structure can strongly affect the ionization state of the intergalactic medium (IGM). A reliable clumping factor calculation therefore needs both physical care, because gas and dark matter trace structure differently, and computational care, because modern simulations are large enough that naive full-snapshot processing can become impractical.
+
+The work described here had two connected goals. The first was scientific: to build the background needed to understand what is being measured, why different dark matter models may change the relevant density structure, how cosmological simulations store particle and gas data, and how clumping factors enter reionization calculations. The second was practical: to develop the initial implementation into a reproducible analysis workflow with command-line tools, tests, cluster submission scripts, benchmark outputs, and documentation.
+
+\section{Scientific Background}
+
+The first two weeks and part of the third week were primarily devoted to background research. This stage covered the physical role of dark matter in structure formation, how cosmological simulations represent matter fields, the basic history and physics of cosmic reionization, and the reason clumping factors appear in recombination-rate estimates. A central lesson from this phase was that a clumping factor is not just a software diagnostic: it depends on the matter component being measured, the density field used to define the IGM, the smoothing or gridding method, and the averaging convention.
+
+Modern cosmological simulations evolve matter from early-Universe initial conditions into the nonlinear structures observed at later times. They are especially useful because they connect assumptions about cosmology and dark matter to the distribution of galaxies, halos, gas, and the IGM \cite{vogelsberger2019}. In this project, the relevant point is that changing the dark matter model can modify small-scale structure formation. Those changes can alter the abundance of small halos, the density field around collapsed structures, and the distribution of gas that participates in recombination and absorption.
+
+In practice, the simulation fields are not continuous. Dark matter is represented by simulation particles, each of which stands for a large mass element rather than an individual physical particle. To estimate a density field from these particles, their masses must be assigned to a mesh or smoothed over a characteristic scale, typically related to the grid spacing or the local interparticle distance. The gas is represented differently in moving-mesh simulations: it is defined on cells of a tessellation, so each gas element has a volume, density, position, and thermodynamic state. This difference matters for clumping calculations, because the dark matter calculation begins from discrete massive tracers, while the gas calculation begins from finite-volume cells whose native volumes are already part of the simulation output.
+
+A commonly used density clumping factor has the form
+\begin{equation}
+    C = \frac{\langle \rho^2 \rangle}{\langle \rho \rangle^2}.
+\end{equation}
+If the density field is uniform, \(C=1\). If the field contains dense structures, \(C>1\). For reionization, this is important because dense regions recombine more efficiently and therefore increase the number of ionizing photons required to keep the Universe ionized. Observational work has also connected the clumping factor to quantities such as the ionizing mean free path and photoionization rate near the end of reionization \cite{davies2024}. This connection is important for the long-term goal of comparing simulation predictions with observational constraints.
+
+However, the clumping factor is not uniquely defined. It depends on the averaging volume, the gas included in the IGM, and whether the calculation uses a hard overdensity threshold or a more physically motivated selection. Recent work on recombination clumping factors shows that changing the IGM definition can significantly change the inferred value of \(C\) \cite{oku2025}. This motivates treating the definition of the clumping factor as part of the scientific model, not only as an implementation detail.
+
+The Lyman-alpha forest is also relevant to this project because it gives observational access to the neutral hydrogen distribution through absorption along lines of sight to distant sources. Instead of directly observing the full three-dimensional density field, one observes transmitted flux and absorption statistics. We plan to use Lyman-alpha forest calculations as a bridge between simulation fields and observations: the goal is to determine whether an observationally inferred clumping factor can be defined from Lyman-alpha quantities and how that quantity relates to the more standard density-based clumping factor computed directly from the simulations. Modeling the Lyman-alpha forest requires care because the absorption depends not only on density, but also on gas temperature, ionization state, velocities, and the relation between baryons and the underlying matter distribution \cite{sinigaglia2021}.
+
+\section{Initial Implementation}
+
+The first coding stage consisted of standalone scripts for gas and dark-matter clumping-factor calculations. These scripts separated gas and dark-matter calculations and explored direct gas calculations, dark-matter calculations, spherical and cubic smoothing strategies, and Pylians-based grid calculations for comparison with custom implementations.
+
+This initial implementation was important because it produced the first working results and clarified the computational structure of the problem. It also showed which parts of the workflow had to become more systematic: the same physical definition had to be applied consistently across gas and dark matter, results had to be saved in a comparable format, and the same calculation had to be repeatable across different simulations, resolutions, and numerical methods.
+
+\section{Development of a Reproducible Computational Pipeline}
+
+After the initial implementation, the work was organized into the \texttt{clumping\_factor} Python package, with command-line entry points for computing and plotting results. This separated the expensive scientific calculation from later plotting and made result files the stable interface between compute jobs and local analysis.
+
+The implementation writes JSON summaries and supports several numerical methods:
+\begin{itemize}
+    \item \texttt{sphere}, using spherical top-hat smoothing;
+    \item \texttt{cube}, using cubic smoothing;
+    \item \texttt{pylians}, using Pylians mass assignment and smoothing where available;
+    \item a volume-weighted native gas-cell method, which uses the simulation cell volumes directly instead of first depositing the gas onto a uniform grid;
+    \item an optical-length-weighted IGM method under development, which uses neutral hydrogen information to weight gas by its effective optical length rather than applying only a hard overdensity threshold.
+\end{itemize}
+The core density clumping calculation can be summarized as
+\begin{equation}
+    C_\rho(\Delta_{\mathrm{th}}) =
+    \frac{\langle \rho_{\mathrm{target}}^2 \rangle_{\mathrm{selected}}}
+    {\langle \rho_{\mathrm{target}} \rangle_{\mathrm{selected}}^2},
+\end{equation}
+where selected cells are chosen using an overdensity threshold. The package also supports cases where the field used to define the mask differs from the field used to measure the target clumping factor. This is useful, for example, when selecting IGM cells from one matter field and measuring gas clumping inside that selected region.
+
+The validation work was designed to make the calculation reliable enough for comparisons between dark matter models. Instead of only checking that a script ran to completion, the tests verify that command-line options are interpreted consistently, grids are constructed as expected, chunked loading agrees with the intended data flow, native gas-cell calculations preserve the correct volume-weighted averaging convention, and plotting operates on the saved result files. This gives confidence that later differences between simulations are more likely to reflect physics than accidental differences in how a run was configured.
+
+\section{Performance and Scalability}
+
+After this initial pipeline was established, the next stage of work focused on making the calculation practical for large simulation outputs. This was necessary because the final scientific comparison between dark matter models cannot rely only on small test cases: the same method has to run on realistic simulation volumes, grid resolutions, and multiple snapshots.
+
+The chunked workflow avoids loading full snapshots into memory when this would be unsafe. For gridded calculations, snapshot data are streamed in chunks and deposited onto density grids. Same-node parallelism then partitions snapshot files or file ranges across workers. Each worker builds private grid accumulators, writes temporary grid outputs, and the parent process reduces those outputs into final grids. This design reduces memory pressure and makes it possible to run calculations within explicit memory limits.
+
+Parallelization also provided a substantial performance improvement. In the benchmark runs performed during this month, the parallel version obtained speedups of up to approximately a factor of four compared with the serial calculation. This improvement is important because it makes repeated comparisons across numerical methods, resolutions, and simulations feasible within the time available for the project.
+
+\section{Results and Analysis}
+
+The second half of the month focused on checking whether the method behaves consistently when the simulation, particle type, grid resolution, and numerical density-construction method are changed. The purpose of these comparisons was not only to produce final physical results, but to test whether the computational pipeline is stable enough to support the later comparison between different dark matter models.
+
+The main consistency checks compared gas and dark-matter clumping factors computed with different smoothing and gridding methods, different grid sizes, and different simulation outputs. These tests help separate physical trends from numerical artifacts. If changing the implementation method or the resolution produces uncontrolled changes in the clumping factor, then it would be difficult to interpret differences between dark matter models. Conversely, agreement across methods and resolutions gives confidence that later model comparisons can be interpreted physically.
+
+Figure~\ref{fig:thesan-clumping} shows an example clumping-consistency diagnostic. The goal of this type of figure is to verify that the calculated clumping factors remain comparable when the same physical calculation is performed under different numerical choices.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\linewidth]{results/analysis/thesan-1-vs-2-scaling/clumping_consistency.png}
+    \caption{Example clumping-consistency diagnostic. The figure is used to check whether different numerical choices preserve the same physical clumping-factor behavior.}
+    \label{fig:thesan-clumping}
+\end{figure}
+
+Additional analysis focused on the stability of the dark-matter calculation across grid sizes and parallel configurations. This work is useful for separating physical differences from numerical and computational effects. Figure~\ref{fig:dm-grid-scaling} shows a grid-scaling diagnostic from these runs.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.88\linewidth]{results/analysis/dm-pylians-grid-thread-scaling/grid_scaling.png}
+    \caption{Dark-matter grid-scaling diagnostic. This type of comparison helps identify how resolution and parallel configuration affect both performance and numerical behavior.}
+    \label{fig:dm-grid-scaling}
+\end{figure}
+
+\section{Conclusion}
+
+The first month of the internship produced both scientific understanding and a practical computational workflow. The early research phase established why clumping factors matter for reionization and why the definition of the density field, smoothing method, and IGM selection all affect the result. The initial scripts then provided the first working implementation. The later development transformed that prototype into a tested package with command-line tools, chunked and parallel execution, benchmark diagnostics, result analysis, and documentation.
+
+The project is now positioned to use this pipeline for the central goal of the internship: comparing clumping factors predicted by simulations with different dark matter models. The next step is to apply the calculation systematically to those simulations and to continue developing the Lyman-alpha forest direction as an observational bridge. In particular, the optical-length-weighted IGM calculation should help relate the standard density-based clumping factor to a quantity that can be inferred from absorption. This progression reflects the main arc of the first month: learning the science, implementing the calculation, making it reproducible, scaling it to larger simulations, and preparing the method for the physical comparison that will occupy the rest of the internship.
+
+\begin{thebibliography}{9}
+
+\bibitem{vogelsberger2019}
+M. Vogelsberger, F. Marinacci, P. Torrey, and E. Puchwein,
+``Cosmological Simulations of Galaxy Formation,''
+arXiv:1909.07976.
+
+\bibitem{davies2024}
+F. B. Davies, S. E. I. Bosman, and S. R. Furlanetto,
+``The Predicament of Absorption-dominated Reionization II: Observational Estimate of the Clumping Factor at the End of Reionization,''
+arXiv:2406.18186.
+
+\bibitem{oku2025}
+Y. Oku and R. Cen,
+``Recombination Clumping Factor of Physically Defined Intergalactic Medium at the Epoch of Reionization,''
+arXiv:2511.09364.
+
+\bibitem{sinigaglia2021}
+F. Sinigaglia et al.,
+``Mapping Lyman-alpha Forest Three-Dimensional Large Scale Structure in Real and Redshift Space,''
+arXiv:2107.07917.
+
+\end{thebibliography}
+
+\end{document}

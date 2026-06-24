@@ -16,6 +16,8 @@ mkdir -p results logs
 
 BASE_PATH="${BASE_PATH:-../tng100-3/output}"
 SIMULATION_NAME="${SIMULATION_NAME:-}"
+RESULTS_LAYOUT="${RESULTS_LAYOUT:-auto}"
+SOURCE_CAMPAIGN="${SOURCE_CAMPAIGN:-${SIMULATION_NAME}}"
 SNAPSHOT="${SNAPSHOT:-98}"
 RADIUS_BINS="${RADIUS_BINS:-10}"
 RADIUS_BIN_BATCH_SIZE="${RADIUS_BIN_BATCH_SIZE:-1}"
@@ -50,11 +52,46 @@ if [[ -z "${SIMULATION_NAME}" ]]; then
     SIMULATION_NAME="$(basename "$(dirname "${base_trimmed}")")"
   fi
 fi
-mkdir -p "results/${SIMULATION_NAME}"
+if [[ -z "${SOURCE_CAMPAIGN}" ]]; then
+  SOURCE_CAMPAIGN="${SIMULATION_NAME}"
+fi
+base_trimmed="${BASE_PATH%/}"
+PHYSICAL_SIMULATION_NAME="$(basename "${base_trimmed}")"
+if [[ "${PHYSICAL_SIMULATION_NAME}" == "output" ]]; then
+  PHYSICAL_SIMULATION_NAME="$(basename "$(dirname "${base_trimmed}")")"
+fi
+if [[ "${SIMULATION_NAME}" =~ ^Thesan-[12]$ ]]; then
+  PHYSICAL_SIMULATION_NAME="${SIMULATION_NAME}"
+fi
 SNAPSHOT_PADDED="$(printf '%03d' "${SNAPSHOT}")"
-OUTPUT_STEM="results/${SIMULATION_NAME}/${PARTICLE}_${BACKEND}_snapshot${SNAPSHOT_PADDED}_grid${GRID}_threads${THREADS}_batch${RADIUS_BIN_BATCH_SIZE}"
+RUN_PADDED="$(printf '%03d' "${RUN_LABEL:-1}")"
+USE_CANONICAL_LAYOUT=0
+CANONICAL_FAMILY=""
+if [[ "${RESULTS_LAYOUT}" == "canonical" ]]; then
+  USE_CANONICAL_LAYOUT=1
+elif [[ "${RESULTS_LAYOUT}" == "auto" && ( "${PHYSICAL_SIMULATION_NAME}" =~ ^Thesan-[12]$ || "${PHYSICAL_SIMULATION_NAME}" =~ ^tng[0-9]+-[0-9]+$ ) ]]; then
+  USE_CANONICAL_LAYOUT=1
+fi
+if [[ "${PHYSICAL_SIMULATION_NAME}" =~ ^Thesan-[12]$ ]]; then
+  CANONICAL_FAMILY="thesan"
+elif [[ "${PHYSICAL_SIMULATION_NAME}" =~ ^tng[0-9]+-[0-9]+$ ]]; then
+  CANONICAL_FAMILY="tng"
+fi
+if (( USE_CANONICAL_LAYOUT == 1 )) && [[ -z "${CANONICAL_FAMILY}" ]]; then
+  echo "Canonical layout is only defined for Thesan and TNG simulations; got ${PHYSICAL_SIMULATION_NAME}." >&2
+  exit 1
+fi
+if (( USE_CANONICAL_LAYOUT == 1 )); then
+  mkdir -p "results/${CANONICAL_FAMILY}/${PHYSICAL_SIMULATION_NAME}/${PARTICLE}/${BACKEND}/snapshot${SNAPSHOT_PADDED}_grid${GRID}"
+  OUTPUT_STEM="results/${CANONICAL_FAMILY}/${PHYSICAL_SIMULATION_NAME}/${PARTICLE}/${BACKEND}/snapshot${SNAPSHOT_PADDED}_grid${GRID}/threads${THREADS}_batch${RADIUS_BIN_BATCH_SIZE}_run${RUN_PADDED}"
+else
+  mkdir -p "results/${SIMULATION_NAME}"
+  OUTPUT_STEM="results/${SIMULATION_NAME}/${PARTICLE}_${BACKEND}_snapshot${SNAPSHOT_PADDED}_grid${GRID}_threads${THREADS}_batch${RADIUS_BIN_BATCH_SIZE}"
+fi
 if [[ -n "${RUN_LABEL}" ]]; then
-  OUTPUT_STEM="${OUTPUT_STEM}_run${RUN_LABEL}"
+  if (( USE_CANONICAL_LAYOUT == 0 )); then
+    OUTPUT_STEM="${OUTPUT_STEM}_run${RUN_LABEL}"
+  fi
 fi
 if [[ "${MAS}" != "CIC" ]]; then
   OUTPUT_STEM="${OUTPUT_STEM}_mas${MAS,,}"
@@ -102,7 +139,9 @@ echo "Started: $(date)"
 echo "Host: $(hostname)"
 echo "Particle type: ${PARTICLE}"
 echo "Backend: ${BACKEND}"
-echo "Simulation: ${SIMULATION_NAME}"
+echo "Simulation: ${PHYSICAL_SIMULATION_NAME}"
+echo "Source campaign: ${SOURCE_CAMPAIGN}"
+echo "Results layout: ${RESULTS_LAYOUT}"
 echo "Grid size: ${GRID}"
 echo "Radius mode: ${RADIUS_MODE}"
 echo "Mass assignment: ${MAS}"
@@ -119,7 +158,7 @@ echo "Output: ${OUTPUT}"
 
 clumping-compute \
   --base-path "${BASE_PATH}" \
-  --simulation-name "${SIMULATION_NAME}" \
+  --simulation-name "${PHYSICAL_SIMULATION_NAME}" \
   --snapshot "${SNAPSHOT}" \
   --particle-type "${PARTICLE}" \
   --backend "${BACKEND}" \
@@ -137,6 +176,9 @@ clumping-compute \
   --summary-cache-dir "${SUMMARY_CACHE_DIR}" \
   --work-partition "${WORK_PARTITION}" \
   --max-file-readers "${MAX_FILE_READERS}" \
+  --source-campaign "${SOURCE_CAMPAIGN}" \
+  --run-label "${RUN_LABEL:-1}" \
+  --resource-size "${RESOURCE_SIZE}" \
   "${EXTRA_ARGS[@]}" \
   --output "${OUTPUT}"
 

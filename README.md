@@ -111,7 +111,7 @@ clumping-compute \
 
 For PBS submissions, set `MAS=TSC`. Non-default mass assignment is included in job names and output filenames.
 
-Outputs are saved under `results/<simulation>/` unless `--output` is supplied. The simulation name is inferred from `--base-path` by default, or can be set explicitly with `--simulation-name`.
+For Thesan and TNG production runs, PBS helpers write to the canonical `results/thesan/...` or `results/tng/...` trees by default. Direct `clumping-compute` calls keep the legacy default path unless `--output` is supplied, so use an explicit canonical `--output` path for ad hoc production runs.
 
 For large snapshots, `--load-mode auto` estimates whether a full particle load is safe and switches to chunked HDF5 reads when needed. Use `--load-mode chunked` to force streaming, `--chunk-size` to control particle/cell reads per chunk, and `--max-full-load-gb` to tune the automatic cutoff. Add `--verbose` for progress logs; `--progress-interval 10` reports every 10 chunks instead of the default 25.
 
@@ -170,7 +170,7 @@ clumping-compute \
 Verify that an output was produced by the current pipeline:
 
 ```bash
-python scripts/validate_chunked_result.py results/Thesan-2-scaling-new/*.json
+python scripts/validate_chunked_result.py results/thesan/Thesan-2/gas/sphere/snapshot080_grid256/*.json
 ```
 
 ## Separate IGM Mask And Target Fields
@@ -191,7 +191,7 @@ clumping-compute \
   --mask-particle-type both \
   --mask-backend sphere \
   --grid-size 256 \
-  --output results/tng100-3/gas_clumping_masked_by_total_sphere_256.json
+  --output results/tng/tng100-3/gas/sphere-masked-total/snapshot098_grid256/threads1_batch1_run001.json
 ```
 
 Example: select IGM cells from the DM field, then measure gas clumping:
@@ -208,30 +208,34 @@ clumping-compute \
   --mask-particle-type dm \
   --mask-backend sphere \
   --grid-size 256 \
-  --output results/tng100-3/gas_clumping_masked_by_dm_sphere_256.json
+  --output results/tng/tng100-3/gas/sphere-masked-dm/snapshot098_grid256/threads1_batch1_run001.json
 ```
 
 ## Plot
 
 ```bash
-clumping-plot results/tng100-3/gas_sphere_snapshot098_grid256.json --output results/tng100-3/gas_sphere.png
+clumping-plot \
+  results/tng/tng100-3/gas/sphere/snapshot098_grid256/threads1_batch1_run001.json \
+  --output results/analysis/clumping/tng/tng100-3/snapshot098/gas/sphere/gas_sphere.png
 ```
 
 Multiple JSON files can be plotted together:
 
 ```bash
-clumping-plot results/*/*.json --output results/comparison.png
+clumping-plot \
+  results/tng/tng100-3/gas/*/snapshot098_grid256/*.json \
+  --output results/analysis/clumping/tng/tng100-3/snapshot098/gas/combined/comparison_grid256.png
 ```
 
 Plot the number of cells included in the IGM mask as a function of overdensity threshold:
 
 ```bash
 clumping-plot \
-  results/tng100-3/gas_sphere_256.json \
-  results/tng100-3/gas_cube_256.json \
-  results/tng100-3/gas_pylians_256.json \
+  results/tng/tng100-3/gas/sphere/snapshot098_grid256/threads1_batch1_run001.json \
+  results/tng/tng100-3/gas/cube/snapshot098_grid256/threads1_batch1_run001.json \
+  results/tng/tng100-3/gas/pylians/snapshot098_grid256/threads1_batch1_run001.json \
   --quantity cell-count \
-  --output results/tng100-3/gas_backend_igm_cell_counts.png
+  --output results/analysis/cell-count/tng/tng100-3/snapshot098/gas/combined/gas_backend_igm_cell_counts.png
 ```
 
 ## Redshift Evolution
@@ -250,9 +254,131 @@ Each output filename includes its snapshot number. After the jobs finish, combin
 
 ```bash
 clumping-evolution-plot \
-  results/Thesan-2/gas_sphere_snapshot*_grid256_threads8_batch2.json \
+  results/thesan/Thesan-2/gas/sphere/snapshot*_grid256/threads8_batch2_run001.json \
   --threshold 10 --threshold 20 \
-  --output results/Thesan-2/gas_sphere_clumping_vs_redshift_grid256.png
+  --output results/analysis/clumping/thesan/Thesan-2/combined-snapshots/gas/sphere/gas_sphere_clumping_vs_redshift_grid256.png
 ```
 
 The evolution plot command verifies that all inputs use the same particle, mask, backend, grid, and threshold configuration before interpolating the requested threshold values.
+
+## Results Organization
+
+The `results/` tree is organized by data product first, then by simulation family. Do not add campaign names to canonical paths; campaign/source folder names belong in manifests and metadata.
+
+```text
+results/
+  thesan/
+  tng/
+  forest/
+  analysis/
+```
+
+Clumping JSON outputs use:
+
+```text
+results/<family>/<simulation>/<particle>/<backend>/snapshot<SNAPSHOT>_grid<GRID>/threads<THREADS>_batch<BATCH>_run<RUN>.json
+```
+
+Examples:
+
+```text
+results/thesan/Thesan-1/dm/pylians/snapshot081_grid512/threads16_batch10_run001.json
+results/tng/tng100-3/gas/cube/snapshot098_grid256/threads4_batch10_run002.json
+results/tng/tng100-3/gas/raw-volume/snapshot098_nogrid/threads1_batch1_run001.json
+```
+
+Forest spectra outputs use:
+
+```text
+results/forest/<family>/<simulation>/snapshot<SNAPSHOT>/<line>/<los-stem>_<line>.hdf5
+```
+
+Example:
+
+```text
+results/forest/thesan/Thesan-2/snapshot080/lya/rays_080_lya.hdf5
+```
+
+Analysis products use:
+
+```text
+results/analysis/<plot-type>/<family>/<simulation>/<snapshot>/<particle>/<backend>/<file>
+```
+
+`<plot-type>` is one of:
+
+- `performance`
+- `clumping`
+- `cell-count`
+- `misc`
+
+Examples:
+
+```text
+results/analysis/performance/thesan/Thesan-1/snapshot081/dm/pylians/performance_grid512.png
+results/analysis/clumping/tng/tng100-3/snapshot098/gas/raw/gas_raw_vs_grid_256.png
+results/analysis/cell-count/thesan/Thesan-2/combined-snapshots/dm/pylians/Thesan-2_dm_pylians_grid512_cell_counts.png
+```
+
+Manifests and migration reports live under:
+
+```text
+results/analysis/manifests/
+```
+
+The current organizer scripts write:
+
+```text
+results/analysis/manifests/thesan_results_manifest.csv
+results/analysis/manifests/thesan_duplicate_report.csv
+results/analysis/manifests/thesan_move_plan.csv
+results/analysis/manifests/tng_results_manifest.csv
+results/analysis/manifests/tng_duplicate_report.csv
+results/analysis/manifests/tng_move_plan.csv
+```
+
+PBS logs stay outside `results/`:
+
+```text
+logs/<source-campaign>/
+```
+
+Cache files are generated data and are not part of the canonical scientific result tree:
+
+```text
+results/.cache/summaries/
+```
+
+Future PBS clumping runs default to canonical layout for Thesan and TNG when `RESULTS_LAYOUT=auto`. Use `RESULTS_LAYOUT=legacy` only for compatibility checks. Direct command-line runs should either pass an explicit canonical `--output` path or be followed by the organizer.
+
+Forest runs default to the canonical `results/forest/...` layout unless `--output` is supplied:
+
+```bash
+clumping-forest \
+  --los-dir ../Thesan-2/los \
+  --simulation-name Thesan-2 \
+  --snapshots 54 80 \
+  --output-dir results/forest
+```
+
+Existing legacy clumping folders can be audited without moving files:
+
+```bash
+python scripts/organize_thesan_results.py
+python scripts/organize_tng_results.py
+```
+
+To copy files into the canonical layout after reviewing the move plan:
+
+```bash
+python scripts/organize_thesan_results.py --apply
+python scripts/organize_tng_results.py --apply
+```
+
+Use `--move` with `--apply` only when you intentionally want to relocate originals. If a canonical destination exists and is byte-identical, the source is removed during move mode. If a JSON destination exists with different content, the organizer refuses to overwrite it; for plot collisions it preserves the extra file with a source/hash suffix.
+
+Current repository organization notes:
+
+- `Legacy files/` contains old standalone scripts kept for reference. A cleaner future step would be renaming it to `legacy/` and adding a short README that states these scripts are not production entry points.
+- Historical comparison plots are stored under `results/analysis/misc/tng/tng100-3/snapshot098/<particle>/combined/`.
+- `reports/` contains manuscript/report artifacts and `tools/` contains local binary tooling. They are separate from scientific run outputs and should not be mixed into `results/`.

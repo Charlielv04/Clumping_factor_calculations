@@ -5,7 +5,7 @@ import numpy as np
 
 from clumping_factor.cli import build_compute_parser, evolution_plot_main, plot_main, run_compute
 from clumping_factor.models import GridResult, ParticleData
-from clumping_factor.results import default_output_path, resolve_simulation_name
+from clumping_factor.results import canonical_thesan_result_path, default_output_path, resolve_simulation_name
 
 
 def test_compute_help():
@@ -103,6 +103,11 @@ def test_simulation_name_inferred_from_base_path():
 def test_default_output_path_uses_simulation_subdirectory():
     output = default_output_path("results", "gas", "sphere", 81, 256, "Thesan-1")
     assert output.as_posix() == "results/Thesan-1/gas_sphere_snapshot081_grid256.json"
+
+
+def test_canonical_thesan_result_path():
+    output = canonical_thesan_result_path("results", "Thesan-1", "dm", "pylians", 81, 512, 16, 10, 1)
+    assert output.as_posix() == "results/thesan/Thesan-1/dm/pylians/snapshot081_grid512/threads16_batch10_run001.json"
 
 
 def test_run_compute_writes_json_with_mock_loader_and_grid(monkeypatch, tmp_path):

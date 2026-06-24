@@ -121,6 +121,9 @@ def build_compute_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--filter-type", default="Top-Hat", help="Pylians smoothing filter.")
     parser.add_argument("--threads", type=int, default=1, help="Local worker count for chunked grid builds.")
+    parser.add_argument("--source-campaign", help="Optional legacy campaign/study name recorded in result metadata.")
+    parser.add_argument("--run-label", help="Optional run/repetition label recorded in result metadata.")
+    parser.add_argument("--resource-size", help="Optional scheduler resource class recorded in result metadata.")
     parser.add_argument("--verbose", action="store_true")
     return parser
 
@@ -586,6 +589,10 @@ def run_compute(args: argparse.Namespace) -> Path:
             "estimated_full_load_gb": estimated_gb,
             "sigma_bar_ion_cm2": args.sigma_bar_ion_cm2,
             "sigma_bar_ion_source": args.sigma_bar_ion_source,
+            "threads": getattr(args, "threads", 1),
+            "source_campaign": getattr(args, "source_campaign", None),
+            "run_label": getattr(args, "run_label", None),
+            "resource_size": getattr(args, "resource_size", None),
         }
         document = {
             "schema_version": 2,
@@ -675,6 +682,10 @@ def run_compute(args: argparse.Namespace) -> Path:
             "load_mode": selected_load_mode,
             "chunk_size": getattr(args, "chunk_size", 1_000_000) if selected_load_mode == "chunked" else None,
             "estimated_full_load_gb": estimated_gb,
+            "threads": getattr(args, "threads", 1),
+            "source_campaign": getattr(args, "source_campaign", None),
+            "run_label": getattr(args, "run_label", None),
+            "resource_size": getattr(args, "resource_size", None),
         }
         document = {
             "schema_version": 1,
@@ -758,6 +769,10 @@ def run_compute(args: argparse.Namespace) -> Path:
         "summary_cache": getattr(args, "summary_cache", "auto"),
         "work_partition": getattr(args, "work_partition", "auto"),
         "max_file_readers": getattr(args, "max_file_readers", 2),
+        "threads": getattr(args, "threads", 1),
+        "source_campaign": getattr(args, "source_campaign", None),
+        "run_label": getattr(args, "run_label", None),
+        "resource_size": getattr(args, "resource_size", None),
         "threshold_min": args.threshold_min,
         "threshold_max": args.threshold_max,
         "threshold_count": args.threshold_count,
