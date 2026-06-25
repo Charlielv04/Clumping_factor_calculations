@@ -1,0 +1,92 @@
+#!/bin/bash
+
+set -euo pipefail
+
+: "${SNAPSHOTS_CSV:?SNAPSHOTS_CSV must contain colon-separated snapshot numbers}"
+array_index="${PBS_ARRAY_INDEX:-${PBS_ARRAYID:-}}"
+if [[ -z "${array_index}" ]]; then
+  echo "PBS array index is not available." >&2
+  exit 1
+fi
+
+IFS=':' read -r -a snapshots <<< "${SNAPSHOTS_CSV}"
+if (( array_index < 0 || array_index >= ${#snapshots[@]} )); then
+  echo "PBS array index ${array_index} is outside the snapshot list." >&2
+  exit 1
+fi
+
+set +u
+source ~/.bashrc
+set -u
+conda activate "${CONDA_ENV:-clumping-factor}"
+
+cd "${PROJECT_DIR:-$PBS_O_WORKDIR}"
+mkdir -p results logs
+
+SNAPSHOT="${snapshots[${array_index}]}"
+SNAPSHOT_PADDED="$(printf '%03d' "${SNAPSHOT}")"
+BASE_PATH="${BASE_PATH:?BASE_PATH must point to the simulation output directory}"
+MFP_FILE="${MFP_FILE:?MFP_FILE must point to a THESAN mfp table}"
+SIMULATION_NAME="${SIMULATION_NAME:-}"
+OUTPUT_DIR="${OUTPUT_DIR:-results/${SIMULATION_NAME:-alternative_clumping}/alternative_clumping}"
+CHUNK_SIZE="${CHUNK_SIZE:-1000000}"
+PHOTON_GROUPS_CSV="${PHOTON_GROUPS_CSV:-0:1:2}"
+HYDROGEN_MASS_FRACTION="${HYDROGEN_MASS_FRACTION:-0.76}"
+ALPHA_HII_CM3_S="${ALPHA_HII_CM3_S:-2.59e-13}"
+CHI_E="${CHI_E:-1.08}"
+CHI_E_SOURCE="${CHI_E_SOURCE:-constant}"
+N_H_SOURCE="${N_H_SOURCE:-simulation-volume-mean}"
+FULLY_IONIZED="${FULLY_IONIZED:-0}"
+PROGRESS_INTERVAL="${PROGRESS_INTERVAL:-5}"
+VERBOSE="${VERBOSE:-1}"
+
+if [[ -z "${SIMULATION_NAME}" ]]; then
+  base_trimmed="${BASE_PATH%/}"
+  SIMULATION_NAME="$(basename "${base_trimmed}")"
+  if [[ "${SIMULATION_NAME}" == "output" ]]; then
+    SIMULATION_NAME="$(basename "$(dirname "${base_trimmed}")")"
+  fi
+fi
+
+mkdir -p "${OUTPUT_DIR}"
+OUTPUT="${OUTPUT_DIR}/snapshot${SNAPSHOT_PADDED}_eq13.json"
+
+EXTRA_ARGS=()
+if [[ "${VERBOSE}" == "1" ]]; then
+  EXTRA_ARGS+=(--verbose --progress-interval "${PROGRESS_INTERVAL}")
+fi
+if [[ "${FULLY_IONIZED}" == "1" ]]; then
+  EXTRA_ARGS+=(--fully-ionized)
+fi
+
+IFS=':' read -r -a photon_group_array <<< "${PHOTON_GROUPS_CSV}"
+
+echo "Started: $(date)"
+echo "Host: $(hostname)"
+echo "Simulation: ${SIMULATION_NAME}"
+echo "Snapshot: ${SNAPSHOT}"
+echo "Base path: ${BASE_PATH}"
+echo "MFP file: ${MFP_FILE}"
+echo "Output: ${OUTPUT}"
+echo "Chunk size: ${CHUNK_SIZE}"
+echo "Photon groups: ${PHOTON_GROUPS_CSV//:/ }"
+echo "chi_e source: ${CHI_E_SOURCE}"
+echo "n_H source: ${N_H_SOURCE}"
+echo "Progress interval: ${PROGRESS_INTERVAL}"
+
+clumping-factor-alternative \
+  --base-path "${BASE_PATH}" \
+  --snapshot "${SNAPSHOT}" \
+  --mfp-file "${MFP_FILE}" \
+  --simulation-name "${SIMULATION_NAME}" \
+  --output "${OUTPUT}" \
+  --chunk-size "${CHUNK_SIZE}" \
+  --photon-groups "${photon_group_array[@]}" \
+  --hydrogen-mass-fraction "${HYDROGEN_MASS_FRACTION}" \
+  --alpha-hii-cm3-s "${ALPHA_HII_CM3_S}" \
+  --chi-e "${CHI_E}" \
+  --chi-e-source "${CHI_E_SOURCE}" \
+  --n-h-source "${N_H_SOURCE}" \
+  "${EXTRA_ARGS[@]}"
+
+echo "Finished: $(date)"

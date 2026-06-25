@@ -85,6 +85,18 @@ NCPUS=8 THREADS=8 MAX_CONCURRENT=8 MEM=32gb \
 bash scripts/submit_evolution_jobs.sh
 ```
 
+Submit tiny one-thread Davies et al. Eq. 13 alternative-clumping jobs across the THESAN reionization snapshots. Each PBS array task reads one snapshot, streams `PhotonDensity`, and writes one JSON result:
+
+```bash
+BASE_PATH=/lustre/work/carlos.lopez/Thesan-2/output \
+SIMULATION_NAME=Thesan-2 \
+MFP_FILE=/lustre/work/carlos.lopez/Thesan-1/mfp_Thesan1.dat \
+MAX_CONCURRENT=8 MEM=8gb WALLTIME=02:00:00 \
+bash scripts/submit_alternative_clumping_evolution_jobs.sh
+```
+
+By default this submits snapshots `54 55 ... 80` on the `tiny` queue with `NCPUS=1 THREADS=1`, writes to `results/<simulation>/alternative_clumping/`, uses photon groups `0 1 2`, and enables verbose progress every 5 chunks. Override `SNAPSHOTS`, `OUTPUT_DIR`, `CHUNK_SIZE`, `PHOTON_GROUPS`, `CHI_E_SOURCE`, `N_H_SOURCE`, or `FULLY_IONIZED=1` when needed.
+
 ```bash
 GRIDS=512 MEM_512=8gb WALLTIME_512=08:00:00 NCPUS=2 \
 bash scripts/submit_clumping_jobs.sh
