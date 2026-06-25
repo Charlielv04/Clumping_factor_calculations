@@ -15,6 +15,8 @@ from .results import read_json_result
 
 _RUN_FILENAME_RE = re.compile(r"threads(?P<threads>\d+)_batch(?P<batch>\d+)_run(?P<run>\d+)\.json$")
 _SNAPSHOT_GRID_RE = re.compile(r"snapshot(?P<snapshot>\d+)_grid(?P<grid>\d+)$")
+_THESAN_SIM_RE = re.compile(r"(Thesan-[12])")
+_TNG_SIM_RE = re.compile(r"(tng\d+-\d+)", re.IGNORECASE)
 
 
 def _result_arrays(document: dict, result_path: str | Path) -> tuple[np.ndarray, np.ndarray]:
@@ -386,7 +388,7 @@ def _campaign_row(path: Path) -> dict | None:
     return {
         "path": path,
         "document": document,
-        "simulation": document.get("simulation", {}).get("name") or parameters.get("simulation_name") or "simulation",
+        "simulation": _campaign_simulation_name(path, document),
         "particle": str(particle),
         "backend": str(backend),
         "grid": int(grid),
@@ -394,6 +396,29 @@ def _campaign_row(path: Path) -> dict | None:
         "redshift": float(redshift),
         "total_seconds": float(total_seconds) if isinstance(total_seconds, (int, float)) and math.isfinite(total_seconds) else math.nan,
     }
+
+
+def _campaign_simulation_name(path: Path, document: dict) -> str:
+    parameters = document.get("parameters", {})
+    simulation = document.get("simulation", {})
+    candidates = [
+        simulation.get("base_path"),
+        parameters.get("base_path"),
+        simulation.get("name"),
+        parameters.get("simulation_name"),
+        *path.parts,
+    ]
+    for candidate in candidates:
+        if not candidate:
+            continue
+        text = str(candidate)
+        thesan_match = _THESAN_SIM_RE.search(text)
+        if thesan_match:
+            return thesan_match.group(1)
+        tng_match = _TNG_SIM_RE.search(text)
+        if tng_match:
+            return tng_match.group(1).lower()
+    return str(simulation.get("name") or parameters.get("simulation_name") or "simulation")
 
 
 def _campaign_rows(result_inputs: list[str | Path]) -> list[dict]:

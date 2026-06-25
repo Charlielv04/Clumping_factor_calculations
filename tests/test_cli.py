@@ -1,11 +1,12 @@
 import json
 from argparse import Namespace
+from pathlib import Path
 
 import numpy as np
 
 from clumping_factor.cli import build_campaign_plot_parser, build_compute_parser, evolution_plot_main, plot_main, run_compute
 from clumping_factor.models import GridResult, ParticleData
-from clumping_factor.plotting import _auto_plot_context, _plot_label
+from clumping_factor.plotting import _auto_plot_context, _campaign_simulation_name, _plot_label
 from clumping_factor.results import canonical_thesan_result_path, default_output_path, resolve_simulation_name
 
 
@@ -41,6 +42,22 @@ def test_campaign_plot_help():
     assert "--particle" in help_text
     assert "--baseline-batch" in help_text
     assert "--analysis-root" in help_text
+
+
+def test_campaign_simulation_name_prefers_physical_thesan_name():
+    document = {
+        "simulation": {
+            "name": "Thesan-2-grid-campaign",
+            "base_path": "/lustre/work/carlos.lopez/Thesan-2/output",
+        },
+        "parameters": {"simulation_name": "Thesan-2-grid-campaign"},
+    }
+    path = Path(
+        "results/thesan/Thesan-2/gas/pylians/"
+        "snapshot080_grid256/threads8_batch2_run001.json"
+    )
+
+    assert _campaign_simulation_name(path, document) == "Thesan-2"
 
 
 def test_compute_parser_accepts_tsc_for_pylians():
