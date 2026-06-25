@@ -45,16 +45,24 @@ def read_mfp_table(path: str | Path) -> tuple[np.ndarray, np.ndarray]:
 
 def interpolate_mfp(redshift: float, table_path: str | Path) -> tuple[float, dict]:
     table_z, table_mfp = read_mfp_table(table_path)
-    if redshift < table_z[0] or redshift > table_z[-1]:
-        raise ValueError(
-            f"Snapshot redshift {redshift:.6g} is outside the mfp table range "
-            f"[{table_z[0]:.6g}, {table_z[-1]:.6g}]."
-        )
-    mfp = float(np.interp(redshift, table_z, table_mfp))
+    if redshift < table_z[0]:
+        mfp = float(table_mfp[0])
+        mode = "nearest-low-redshift-edge"
+        source_redshift = float(table_z[0])
+    elif redshift > table_z[-1]:
+        mfp = float(table_mfp[-1])
+        mode = "nearest-high-redshift-edge"
+        source_redshift = float(table_z[-1])
+    else:
+        mfp = float(np.interp(redshift, table_z, table_mfp))
+        mode = "linear in redshift"
+        source_redshift = float(redshift)
     return mfp, {
         "mfp_table": str(table_path),
         "mfp_units": "proper Mpc / h",
-        "mfp_interpolation": "linear in redshift",
+        "mfp_interpolation": mode,
+        "mfp_source_redshift": source_redshift,
+        "mfp_requested_redshift": float(redshift),
         "mfp_table_redshift_min": float(table_z[0]),
         "mfp_table_redshift_max": float(table_z[-1]),
     }

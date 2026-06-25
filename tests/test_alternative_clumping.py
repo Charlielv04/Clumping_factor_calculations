@@ -63,6 +63,12 @@ def test_mfp_interpolation(tmp_path):
     mfp, metadata = interpolate_mfp(4.0, mfp_file)
     assert np.isclose(mfp, 6.0)
     assert metadata["mfp_units"] == "proper Mpc / h"
+    low_mfp, low_metadata = interpolate_mfp(2.5, mfp_file)
+    assert np.isclose(low_mfp, 5.0)
+    assert low_metadata["mfp_interpolation"] == "nearest-low-redshift-edge"
+    high_mfp, high_metadata = interpolate_mfp(5.5, mfp_file)
+    assert np.isclose(high_mfp, 7.0)
+    assert high_metadata["mfp_interpolation"] == "nearest-high-redshift-edge"
 
 
 def test_alternative_clumping_scales_with_photon_density(tmp_path):
