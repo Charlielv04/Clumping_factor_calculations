@@ -469,10 +469,41 @@ def _group_rows(rows: list[dict], *keys: str) -> dict[tuple, list[dict]]:
     return grouped
 
 
+def _baseline_rows_by_available_batch(rows: list[dict], requested_batches: dict[int, int]) -> tuple[list[dict], dict[tuple[str, int], int]]:
+    selected: list[dict] = []
+    selected_batches: dict[tuple[str, int], int] = {}
+    for (particle, grid), values in sorted(_group_rows(rows, "particle", "grid").items()):
+        available_batches = sorted({row["batch"] for row in values})
+        if not available_batches:
+            continue
+        requested = requested_batches.get(grid)
+        batch = requested if requested in available_batches else available_batches[0]
+        selected_batches[(particle, grid)] = batch
+        selected.extend(row for row in values if row["batch"] == batch)
+    return selected, selected_batches
+
+
 def _save_campaign_figure(fig, output_path: Path) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=250, bbox_inches="tight")
     plt.close(fig)
+    return output_path
+
+
+def _write_campaign_manifest(
+    rows: list[dict],
+    output_path: Path,
+    resolved_baseline_batches: dict[tuple[str, int], int],
+) -> Path:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    lines = ["particle,backend,grid,batch,result_count,redshift_min,redshift_max,baseline_for_grid_comparison"]
+    for (particle, backend, grid, batch), values in sorted(_group_rows(rows, "particle", "backend", "grid", "batch").items()):
+        redshifts = [row["redshift"] for row in values]
+        baseline = "yes" if resolved_baseline_batches.get((particle, grid)) == batch else "no"
+        lines.append(
+            f"{particle},{backend},{grid},{batch},{len(values)},{min(redshifts):.8g},{max(redshifts):.8g},{baseline}"
+        )
+    output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return output_path
 
 
@@ -650,12 +681,23 @@ def plot_campaign_files(
     else:
         plt.close(fig)
 
-    # Grid-size convergence and runtime scaling using one baseline batch per grid.
-    baseline_rows = [
-        row
-        for row in rows
-        if row["batch"] == baseline_batch_by_grid.get(row["grid"])
-    ]
+    # Grid-size convergence and runtime scaling using one baseline batch per particle/grid.
+    baseline_rows, resolved_baseline_batches = _baseline_rows_by_available_batch(rows, baseline_batch_by_grid)
+    written.append(
+        _write_campaign_manifest(
+            rows,
+            _campaign_output_path(
+                rows,
+                output_dir=output_dir,
+                analysis_root=analysis_root,
+                plot_type="performance",
+                particle="combined",
+                backend=backend,
+                filename=f"{backend}_campaign_manifest.csv",
+            ),
+            resolved_baseline_batches,
+        )
+    )
     for particle in sorted({row["particle"] for row in baseline_rows}):
         particle_rows = [row for row in baseline_rows if row["particle"] == particle]
         by_grid = _group_rows(particle_rows, "grid")
@@ -667,7 +709,7 @@ def plot_campaign_files(
             clumping = [_clumping_at_threshold(row["document"], row["path"], threshold) for row in values]
             if not any(math.isfinite(value) for value in clumping):
                 continue
-            batch = baseline_batch_by_grid.get(grid)
+            batch = resolved_baseline_batches.get((particle, grid), baseline_batch_by_grid.get(grid))
             ax.plot([row["redshift"] for row in values], clumping, marker="o", label=f"grid {grid}, batch {batch}")
             plotted = True
         if plotted:

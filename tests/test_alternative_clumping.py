@@ -105,6 +105,34 @@ def test_alternative_clumping_cli_writes_json(tmp_path):
     assert document["quantities"]["clumping_factor_eq13"] > 0
 
 
+def test_alternative_clumping_verbose_reports_progress(tmp_path, capsys):
+    base_path = _write_snapshot(tmp_path / "snapshot")
+    mfp_file = _write_mfp(tmp_path / "mfp.dat")
+    output = tmp_path / "eq13.json"
+    args = build_alternative_clumping_parser().parse_args(
+        [
+            "--base-path",
+            str(base_path),
+            "--snapshot",
+            "80",
+            "--mfp-file",
+            str(mfp_file),
+            "--output",
+            str(output),
+            "--chunk-size",
+            "1",
+            "--progress-interval",
+            "1",
+            "--verbose",
+        ]
+    )
+    run_alternative_clumping(args)
+    stdout = capsys.readouterr().out
+    assert "streaming" in stdout
+    assert "processed" in stdout
+    assert "ETA" in stdout
+
+
 def test_eq13_result_matches_recorded_inputs(tmp_path):
     result = compute_alternative_clumping(
         _write_snapshot(tmp_path / "snapshot"),

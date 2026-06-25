@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
-from typing import Sequence
+from typing import Callable, Sequence
 
 import numpy as np
 
@@ -103,6 +103,8 @@ def compute_alternative_clumping(
     n_h_source: str = "simulation-volume-mean",
     fully_ionized: bool = False,
     simulation_name: str | None = None,
+    progress: Callable[[str], None] | None = None,
+    progress_interval: int = 10,
 ) -> AlternativeClumpingResult:
     import h5py
 
@@ -119,8 +121,12 @@ def compute_alternative_clumping(
         raise ValueError("n_h_source must be 'simulation-volume-mean' or 'cosmic-mean'.")
     if chi_e_source not in {"constant", "electron-abundance"}:
         raise ValueError("chi_e_source must be 'constant' or 'electron-abundance'.")
+    if progress_interval < 1:
+        raise ValueError("progress_interval must be at least 1.")
 
     total_t0 = perf_counter()
+    if progress:
+        progress(f"inspecting snapshot {snapshot}")
     metadata = read_snapshot_metadata(base_path, snapshot)
     if metadata.scale_factor is None or metadata.redshift is None or metadata.hubble_param is None:
         raise ValueError("Alternative clumping requires snapshot Time/Redshift/HubbleParam metadata.")
@@ -152,9 +158,27 @@ def compute_alternative_clumping(
     if chi_e_source == "electron-abundance":
         required.add("ElectronAbundance")
 
-    for path in snapshot_file_paths(base_path, snapshot):
+    file_paths = snapshot_file_paths(base_path, snapshot)
+    file_counts: list[int] = []
+    for path in file_paths:
+        with h5py.File(path, "r") as handle:
+            if "PartType0" in handle:
+                file_counts.append(int(handle["PartType0"]["Density"].shape[0]))
+            else:
+                file_counts.append(0)
+    expected_count = int(sum(file_counts))
+    if progress:
+        progress(
+            f"streaming {expected_count:,} gas cells from {len(file_paths)} snapshot files "
+            f"with chunk_size={chunk_size:,}"
+        )
+
+    for file_index, path in enumerate(file_paths):
+        file_t0 = perf_counter()
         with h5py.File(path, "r") as handle:
             if "PartType0" not in handle:
+                if progress:
+                    progress(f"file {file_index + 1}/{len(file_paths)} has no gas group; skipping {path.name}")
                 continue
             gas = handle["PartType0"]
             missing = sorted(required.difference(gas.keys()))
@@ -163,6 +187,8 @@ def compute_alternative_clumping(
             if gas["PhotonDensity"].ndim != 2 or gas["PhotonDensity"].shape[1] <= max(photon_groups):
                 raise ValueError("PhotonDensity must be a two-dimensional array with at least three photon groups.")
             count = int(gas["Density"].shape[0])
+            if progress:
+                progress(f"file {file_index + 1}/{len(file_paths)} {path.name}: {count:,} gas cells")
             for start in range(0, count, chunk_size):
                 stop = min(start + chunk_size, count)
                 chunks += 1
@@ -215,9 +241,28 @@ def compute_alternative_clumping(
                 xhii_volume_sum += float(np.sum((1.0 - xhi[valid]) * volume_code, dtype=np.float64))
                 if chi_e_source == "electron-abundance":
                     electron_abundance_volume_sum += float(np.sum(electron_abundance[valid] * volume_code, dtype=np.float64))
+                if progress and (chunks % progress_interval == 0 or input_count >= expected_count):
+                    elapsed = perf_counter() - total_t0
+                    rate = input_count / elapsed if elapsed > 0 else 0.0
+                    remaining = max(expected_count - input_count, 0)
+                    eta = remaining / rate if rate > 0 else np.nan
+                    eta_text = "unknown" if not np.isfinite(eta) else f"{eta / 60.0:.1f} min"
+                    progress(
+                        f"processed {input_count:,}/{expected_count:,} cells "
+                        f"({100.0 * input_count / expected_count:.1f}%), "
+                        f"valid {valid_count:,}, rate {rate:,.0f} cells/s, ETA {eta_text}"
+                    )
+        if progress:
+            progress(
+                f"finished file {file_index + 1}/{len(file_paths)} in "
+                f"{perf_counter() - file_t0:.1f}s; cumulative valid cells {valid_count:,}"
+            )
 
     if total_volume <= 0 or valid_count == 0:
         raise ValueError("No valid gas cells were found for alternative clumping.")
+
+    if progress:
+        progress("computing Eq. 13 quantities and interpolating mean free path")
 
     n_gamma_cm3 = photon_volume_sum / total_volume
     n_h_simulation_cm3 = n_h_volume_sum / total_volume
@@ -295,6 +340,7 @@ def compute_alternative_clumping(
             "clumping_factor_eq13": c_eq13,
         },
         "diagnostics": {
+            "expected_gas_cell_count": expected_count,
             "input_count": input_count,
             "valid_count": valid_count,
             "dropped_count": dropped_count,

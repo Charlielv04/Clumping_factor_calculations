@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from time import perf_counter
 
 
 def build_alternative_clumping_parser() -> argparse.ArgumentParser:
@@ -19,11 +20,19 @@ def build_alternative_clumping_parser() -> argparse.ArgumentParser:
     parser.add_argument("--chi-e-source", choices=["constant", "electron-abundance"], default="constant")
     parser.add_argument("--n-h-source", choices=["simulation-volume-mean", "cosmic-mean"], default="simulation-volume-mean")
     parser.add_argument("--fully-ionized", action="store_true", help="Set (1 - x_HI)^2 to 1 in Eq. 13.")
+    parser.add_argument("--verbose", action="store_true", help="Print progress, processing rate, and ETA.")
+    parser.add_argument("--progress-interval", type=int, default=10, help="When --verbose is set, report every N chunks.")
     return parser
 
 
 def run_alternative_clumping(args: argparse.Namespace) -> Path:
     from .alternative_clumping import compute_alternative_clumping, write_alternative_clumping_result
+
+    start = perf_counter()
+
+    def progress(message: str) -> None:
+        elapsed = perf_counter() - start
+        print(f"[{elapsed:8.1f}s] {message}", flush=True)
 
     result = compute_alternative_clumping(
         base_path=args.base_path,
@@ -38,6 +47,8 @@ def run_alternative_clumping(args: argparse.Namespace) -> Path:
         n_h_source=args.n_h_source,
         fully_ionized=args.fully_ionized,
         simulation_name=args.simulation_name,
+        progress=progress if args.verbose else None,
+        progress_interval=args.progress_interval,
     )
     return write_alternative_clumping_result(result, args.output)
 
