@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import math
 from pathlib import Path
+import re
 
 import matplotlib
 
@@ -9,6 +11,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from .results import read_json_result
+
+
+_RUN_FILENAME_RE = re.compile(r"threads(?P<threads>\d+)_batch(?P<batch>\d+)_run(?P<run>\d+)\.json$")
+_SNAPSHOT_GRID_RE = re.compile(r"snapshot(?P<snapshot>\d+)_grid(?P<grid>\d+)$")
 
 
 def _result_arrays(document: dict, result_path: str | Path) -> tuple[np.ndarray, np.ndarray]:
@@ -331,3 +337,378 @@ def plot_evolution_files(
     fig.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
     return output_path
+
+
+def _expand_result_inputs(result_inputs: list[str | Path]) -> list[Path]:
+    paths: list[Path] = []
+    for item in result_inputs:
+        path = Path(item)
+        if path.is_dir():
+            paths.extend(sorted(path.rglob("*.json")))
+        elif path.is_file():
+            paths.append(path)
+    if not paths:
+        raise ValueError("No JSON result files matched the supplied inputs.")
+    return paths
+
+
+def _path_batch(path: Path) -> int | None:
+    match = _RUN_FILENAME_RE.match(path.name)
+    return int(match.group("batch")) if match else None
+
+
+def _path_grid(path: Path) -> int | None:
+    match = _SNAPSHOT_GRID_RE.match(path.parent.name)
+    return int(match.group("grid")) if match else None
+
+
+def _campaign_row(path: Path) -> dict | None:
+    document = read_json_result(path)
+    parameters = document.get("parameters", {})
+    backend = document.get("backend", {}).get("backend")
+    particle = document.get("particle_type")
+    redshift = _finite_redshift(document)
+    grid = parameters.get("grid_size")
+    if grid is None:
+        grid = _path_grid(path)
+    batch = parameters.get("radius_bin_batch_size")
+    if batch is None:
+        batch = _path_batch(path)
+    total_seconds = document.get("timings", {}).get("total")
+    if not (
+        backend
+        and particle
+        and redshift is not None
+        and isinstance(grid, (int, np.integer))
+        and isinstance(batch, (int, np.integer))
+    ):
+        return None
+    return {
+        "path": path,
+        "document": document,
+        "simulation": document.get("simulation", {}).get("name") or parameters.get("simulation_name") or "simulation",
+        "particle": str(particle),
+        "backend": str(backend),
+        "grid": int(grid),
+        "batch": int(batch),
+        "redshift": float(redshift),
+        "total_seconds": float(total_seconds) if isinstance(total_seconds, (int, float)) and math.isfinite(total_seconds) else math.nan,
+    }
+
+
+def _campaign_rows(result_inputs: list[str | Path]) -> list[dict]:
+    rows = [_campaign_row(path) for path in _expand_result_inputs(result_inputs)]
+    rows = [row for row in rows if row is not None]
+    if not rows:
+        raise ValueError("No plottable campaign result files were found.")
+    rows.sort(key=lambda row: (row["particle"], row["backend"], row["grid"], row["batch"], -row["redshift"]))
+    return rows
+
+
+def _clumping_at_threshold(document: dict, path: Path, threshold: float) -> float:
+    thresholds, factors = _result_arrays(document, path)
+    finite = np.isfinite(thresholds) & np.isfinite(factors)
+    if np.count_nonzero(finite) < 2:
+        return math.nan
+    finite_thresholds = thresholds[finite]
+    finite_factors = factors[finite]
+    if threshold < finite_thresholds[0] or threshold > finite_thresholds[-1]:
+        return math.nan
+    return float(np.interp(threshold, finite_thresholds, finite_factors))
+
+
+def _select_campaign_rows(
+    rows: list[dict],
+    *,
+    backend: str,
+    particles: set[str],
+    grids: set[int],
+    batches: set[int],
+) -> list[dict]:
+    return [
+        row
+        for row in rows
+        if row["backend"] == backend
+        and row["particle"] in particles
+        and row["grid"] in grids
+        and row["batch"] in batches
+    ]
+
+
+def _group_rows(rows: list[dict], *keys: str) -> dict[tuple, list[dict]]:
+    grouped: dict[tuple, list[dict]] = {}
+    for row in rows:
+        grouped.setdefault(tuple(row[key] for key in keys), []).append(row)
+    for values in grouped.values():
+        values.sort(key=lambda row: row["redshift"], reverse=True)
+    return grouped
+
+
+def _save_campaign_figure(fig, output_path: Path) -> Path:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=250, bbox_inches="tight")
+    plt.close(fig)
+    return output_path
+
+
+def _campaign_family(simulations: set[str]) -> str:
+    lowered = {simulation.lower() for simulation in simulations}
+    if lowered and all(simulation.startswith("thesan-") for simulation in lowered):
+        return "thesan"
+    if lowered and all(simulation.startswith("tng") for simulation in lowered):
+        return "tng"
+    return "combined"
+
+
+def _campaign_output_path(
+    rows: list[dict],
+    *,
+    output_dir: str | Path | None,
+    analysis_root: str | Path,
+    plot_type: str,
+    particle: str,
+    backend: str,
+    filename: str,
+) -> Path:
+    if output_dir is not None:
+        return Path(output_dir) / filename
+    simulations = {row["simulation"] for row in rows}
+    simulation = next(iter(simulations)) if len(simulations) == 1 else "combined"
+    family = _campaign_family(simulations)
+    return Path(analysis_root) / plot_type / family / simulation / "combined-snapshots" / particle / backend / filename
+
+
+def plot_campaign_files(
+    result_inputs: list[str | Path],
+    output_dir: str | Path | None = None,
+    *,
+    analysis_root: str | Path = "results/analysis",
+    backend: str = "pylians",
+    threshold: float = 20.0,
+    batches: list[int] | None = None,
+    grids: list[int] | None = None,
+    particles: list[str] | None = None,
+    baseline_batch_by_grid: dict[int, int] | None = None,
+) -> list[Path]:
+    rows = _campaign_rows(result_inputs)
+    selected_batches = set(batches or [2, 4, 6, 8, 10])
+    selected_grids = set(grids or [256, 512, 1024])
+    selected_particles = set(particles or ["gas", "dm"])
+    baseline_defaults = {256: min(selected_batches), 512: 1, 1024: 1}
+    if baseline_batch_by_grid:
+        baseline_defaults.update(baseline_batch_by_grid)
+    baseline_batch_by_grid = baseline_defaults
+    rows = _select_campaign_rows(
+        rows,
+        backend=backend,
+        particles=selected_particles,
+        grids=selected_grids,
+        batches=selected_batches.union(baseline_batch_by_grid.values()),
+    )
+    if not rows:
+        raise ValueError("No campaign result files matched the requested backend, particles, grids, and batches.")
+
+    simulation_names = sorted({row["simulation"] for row in rows})
+    simulation_title = simulation_names[0] if len(simulation_names) == 1 else "Combined simulations"
+    written: list[Path] = []
+
+    # Batch performance and numerical consistency for each particle/grid pair.
+    for particle in sorted({row["particle"] for row in rows}):
+        for grid in sorted({row["grid"] for row in rows if row["particle"] == particle}):
+            grid_rows = [
+                row
+                for row in rows
+                if row["particle"] == particle and row["grid"] == grid and row["batch"] in selected_batches
+            ]
+            if not grid_rows:
+                continue
+            by_batch = _group_rows(grid_rows, "batch")
+
+            fig, ax = plt.subplots(figsize=(8, 5))
+            plotted = False
+            for (batch,), values in sorted(by_batch.items()):
+                times = [row["total_seconds"] / 60 for row in values]
+                if not any(math.isfinite(value) for value in times):
+                    continue
+                ax.plot([row["redshift"] for row in values], times, marker="o", label=f"batch {batch}")
+                plotted = True
+            if plotted:
+                ax.set_xlabel("Redshift")
+                ax.set_ylabel("Runtime [min]")
+                ax.set_title(f"{simulation_title} {particle} {backend} grid {grid}: runtime vs redshift")
+                ax.invert_xaxis()
+                ax.grid(True, alpha=0.3)
+                ax.legend(title="Batch size")
+                written.append(
+                    _save_campaign_figure(
+                        fig,
+                        _campaign_output_path(
+                            rows,
+                            output_dir=output_dir,
+                            analysis_root=analysis_root,
+                            plot_type="performance",
+                            particle=particle,
+                            backend=backend,
+                            filename=f"{particle}_{backend}_grid{grid}_runtime_vs_redshift_by_batch.png",
+                        ),
+                    )
+                )
+            else:
+                plt.close(fig)
+
+            fig, ax = plt.subplots(figsize=(8, 5))
+            plotted = False
+            for (batch,), values in sorted(by_batch.items()):
+                clumping = [_clumping_at_threshold(row["document"], row["path"], threshold) for row in values]
+                if not any(math.isfinite(value) for value in clumping):
+                    continue
+                ax.plot([row["redshift"] for row in values], clumping, marker="o", label=f"batch {batch}")
+                plotted = True
+            if plotted:
+                ax.set_xlabel("Redshift")
+                ax.set_ylabel(rf"Clumping factor at $\Delta_{{max}}={threshold:g}$")
+                ax.set_title(f"{simulation_title} {particle} {backend} grid {grid}: batch consistency")
+                ax.invert_xaxis()
+                ax.grid(True, alpha=0.3)
+                ax.legend(title="Batch size")
+                written.append(
+                    _save_campaign_figure(
+                        fig,
+                        _campaign_output_path(
+                            rows,
+                            output_dir=output_dir,
+                            analysis_root=analysis_root,
+                            plot_type="clumping",
+                            particle=particle,
+                            backend=backend,
+                            filename=f"{particle}_{backend}_grid{grid}_clumping_delta{threshold:g}_by_batch.png",
+                        ),
+                    )
+                )
+            else:
+                plt.close(fig)
+
+    # Median runtime versus batch size, grouped by particle and grid.
+    fig, ax = plt.subplots(figsize=(8, 5))
+    plotted = False
+    for (particle, grid), values in sorted(_group_rows(rows, "particle", "grid").items()):
+        medians = []
+        batch_values = []
+        for batch in sorted(selected_batches):
+            times = [row["total_seconds"] / 60 for row in values if row["batch"] == batch and math.isfinite(row["total_seconds"])]
+            if times:
+                batch_values.append(batch)
+                medians.append(float(np.median(times)))
+        if medians:
+            ax.plot(batch_values, medians, marker="o", label=f"{particle}, grid {grid}")
+            plotted = True
+    if plotted:
+        ax.set_xlabel("Radius-bin batch size")
+        ax.set_ylabel("Median runtime [min]")
+        ax.set_title(f"{simulation_title} {backend}: median runtime vs batch size")
+        ax.grid(True, alpha=0.3)
+        ax.legend(title="Dataset")
+        written.append(
+            _save_campaign_figure(
+                fig,
+                _campaign_output_path(
+                    rows,
+                    output_dir=output_dir,
+                    analysis_root=analysis_root,
+                    plot_type="performance",
+                    particle="combined",
+                    backend=backend,
+                    filename=f"{backend}_median_runtime_vs_batch.png",
+                ),
+            )
+        )
+    else:
+        plt.close(fig)
+
+    # Grid-size convergence and runtime scaling using one baseline batch per grid.
+    baseline_rows = [
+        row
+        for row in rows
+        if row["batch"] == baseline_batch_by_grid.get(row["grid"])
+    ]
+    for particle in sorted({row["particle"] for row in baseline_rows}):
+        particle_rows = [row for row in baseline_rows if row["particle"] == particle]
+        by_grid = _group_rows(particle_rows, "grid")
+        if len(by_grid) < 2:
+            continue
+        fig, ax = plt.subplots(figsize=(8, 5))
+        plotted = False
+        for (grid,), values in sorted(by_grid.items()):
+            clumping = [_clumping_at_threshold(row["document"], row["path"], threshold) for row in values]
+            if not any(math.isfinite(value) for value in clumping):
+                continue
+            batch = baseline_batch_by_grid.get(grid)
+            ax.plot([row["redshift"] for row in values], clumping, marker="o", label=f"grid {grid}, batch {batch}")
+            plotted = True
+        if plotted:
+            ax.set_xlabel("Redshift")
+            ax.set_ylabel(rf"Clumping factor at $\Delta_{{max}}={threshold:g}$")
+            ax.set_title(f"{simulation_title} {particle} {backend}: grid convergence")
+            ax.invert_xaxis()
+            ax.grid(True, alpha=0.3)
+            ax.legend(title="Grid")
+            written.append(
+                _save_campaign_figure(
+                    fig,
+                    _campaign_output_path(
+                        rows,
+                        output_dir=output_dir,
+                        analysis_root=analysis_root,
+                        plot_type="clumping",
+                        particle=particle,
+                        backend=backend,
+                        filename=f"{particle}_{backend}_clumping_delta{threshold:g}_vs_redshift_by_grid.png",
+                    ),
+                )
+            )
+        else:
+            plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    plotted = False
+    for particle in sorted({row["particle"] for row in baseline_rows}):
+        medians = []
+        grid_values = []
+        for grid in sorted(selected_grids):
+            times = [
+                row["total_seconds"] / 60
+                for row in baseline_rows
+                if row["particle"] == particle and row["grid"] == grid and math.isfinite(row["total_seconds"])
+            ]
+            if times:
+                grid_values.append(grid)
+                medians.append(float(np.median(times)))
+        if medians:
+            ax.plot(grid_values, medians, marker="o", label=particle)
+            plotted = True
+    if plotted:
+        ax.set_xlabel("Grid size")
+        ax.set_ylabel("Median runtime [min]")
+        ax.set_title(f"{simulation_title} {backend}: median runtime vs grid size")
+        ax.grid(True, alpha=0.3)
+        ax.legend(title="Particle")
+        written.append(
+            _save_campaign_figure(
+                fig,
+                _campaign_output_path(
+                    rows,
+                    output_dir=output_dir,
+                    analysis_root=analysis_root,
+                    plot_type="performance",
+                    particle="combined",
+                    backend=backend,
+                    filename=f"{backend}_median_runtime_vs_grid_size.png",
+                ),
+            )
+        )
+    else:
+        plt.close(fig)
+
+    if not written:
+        raise ValueError("Campaign inputs were readable, but no finite values were available to plot.")
+    return written

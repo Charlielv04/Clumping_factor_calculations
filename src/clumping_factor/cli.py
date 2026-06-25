@@ -179,6 +179,56 @@ def build_evolution_plot_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def build_campaign_plot_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Plot batch-size and grid-size campaign diagnostics from result JSON files.")
+    parser.add_argument("results", nargs="+", help="Result JSON files or directories containing result JSON files.")
+    parser.add_argument(
+        "--output-dir",
+        help="Legacy output directory. Omit to use the canonical results/analysis layout.",
+    )
+    parser.add_argument(
+        "--analysis-root",
+        default="results/analysis",
+        help="Root for canonical analysis output. Defaults to results/analysis.",
+    )
+    parser.add_argument("--backend", default="pylians", help="Backend to include. Defaults to pylians.")
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=20.0,
+        help="Overdensity threshold used for numerical-consistency and grid-convergence plots.",
+    )
+    parser.add_argument(
+        "--batch",
+        type=int,
+        action="append",
+        dest="batches",
+        help="Batch size to include. Repeat for multiple values. Defaults to 2, 4, 6, 8, 10.",
+    )
+    parser.add_argument(
+        "--grid",
+        type=int,
+        action="append",
+        dest="grids",
+        help="Grid size to include. Repeat for multiple values. Defaults to 256, 512, 1024.",
+    )
+    parser.add_argument(
+        "--particle",
+        choices=["gas", "dm"],
+        action="append",
+        dest="particles",
+        help="Particle type to include. Repeat for gas and dm. Defaults to both.",
+    )
+    parser.add_argument(
+        "--baseline-batch",
+        action="append",
+        default=[],
+        metavar="GRID:BATCH",
+        help="Batch to use for grid-convergence plots, for example 256:2. Repeat per grid.",
+    )
+    return parser
+
+
 def _load_tng_particles(*args, **kwargs):
     from .loaders import load_tng_particles
 
@@ -855,6 +905,42 @@ def evolution_plot_main(argv: list[str] | None = None) -> None:
         invert_redshift_axis=not args.no_invert_redshift_axis,
     )
     print(f"Wrote evolution plot: {output_path}")
+
+
+def _parse_baseline_batches(values: list[str]) -> dict[int, int]:
+    result: dict[int, int] = {}
+    for value in values:
+        try:
+            grid_text, batch_text = value.split(":", 1)
+            grid = int(grid_text)
+            batch = int(batch_text)
+        except ValueError as exc:
+            raise ValueError(f"--baseline-batch must use GRID:BATCH format, got {value!r}.") from exc
+        if grid < 1 or batch < 1:
+            raise ValueError("--baseline-batch grid and batch values must be positive.")
+        result[grid] = batch
+    return result
+
+
+def campaign_plot_main(argv: list[str] | None = None) -> None:
+    from .plotting import plot_campaign_files
+
+    parser = build_campaign_plot_parser()
+    args = parser.parse_args(argv)
+    output_paths = plot_campaign_files(
+        args.results,
+        output_dir=args.output_dir,
+        analysis_root=args.analysis_root,
+        backend=args.backend,
+        threshold=args.threshold,
+        batches=args.batches,
+        grids=args.grids,
+        particles=args.particles,
+        baseline_batch_by_grid=_parse_baseline_batches(args.baseline_batch),
+    )
+    print(f"Wrote {len(output_paths)} campaign plots:")
+    for output_path in output_paths:
+        print(output_path)
 
 
 if __name__ == "__main__":

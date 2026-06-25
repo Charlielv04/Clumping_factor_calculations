@@ -3,7 +3,7 @@ from argparse import Namespace
 
 import numpy as np
 
-from clumping_factor.cli import build_compute_parser, evolution_plot_main, plot_main, run_compute
+from clumping_factor.cli import build_campaign_plot_parser, build_compute_parser, evolution_plot_main, plot_main, run_compute
 from clumping_factor.models import GridResult, ParticleData
 from clumping_factor.plotting import _auto_plot_context, _plot_label
 from clumping_factor.results import canonical_thesan_result_path, default_output_path, resolve_simulation_name
@@ -31,6 +31,16 @@ def test_compute_help():
     assert "--work-partition" in help_text
     assert "--max-file-readers" in help_text
     assert "TSC" in help_text
+
+
+def test_campaign_plot_help():
+    parser = build_campaign_plot_parser()
+    help_text = parser.format_help()
+    assert "--batch" in help_text
+    assert "--grid" in help_text
+    assert "--particle" in help_text
+    assert "--baseline-batch" in help_text
+    assert "--analysis-root" in help_text
 
 
 def test_compute_parser_accepts_tsc_for_pylians():
