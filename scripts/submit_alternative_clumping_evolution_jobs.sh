@@ -56,10 +56,14 @@ name="cfalt_${job_simulation_name}"
 
 mkdir -p "logs/${SIMULATION_NAME}" "${OUTPUT_DIR}"
 
+if [[ "${MAX_CONCURRENT}" != "" ]]; then
+  echo "Note: this PBS qsub accepts -J X-Y[:Z] but not -J X-Y%N; MAX_CONCURRENT=${MAX_CONCURRENT} is not applied." >&2
+fi
+
 qsub \
   -N "${name}" \
   -q "${QUEUE}" \
-  -J "0-${last_index}%${MAX_CONCURRENT}" \
+  -J "0-${last_index}" \
   -o "${project_dir}/logs/${SIMULATION_NAME}/${name}.out" \
   -e "${project_dir}/logs/${SIMULATION_NAME}/${name}.err" \
   -l "select=1:ncpus=${NCPUS}:mem=${MEM}" \
