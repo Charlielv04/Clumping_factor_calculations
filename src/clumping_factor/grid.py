@@ -20,7 +20,7 @@ MAX_GRID_CELLS_ENV = "CLUMPING_MAX_GRID_CELLS"
 
 def _max_grid_cells() -> int:
     raw_value = os.environ.get(MAX_GRID_CELLS_ENV)
-    if raw_value is None:
+    if raw_value is None or raw_value.strip() == "":
         return DEFAULT_MAX_GRID_CELLS
     try:
         max_cells = int(raw_value)
