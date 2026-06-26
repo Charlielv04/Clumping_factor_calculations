@@ -24,11 +24,10 @@ cd "${PROJECT_DIR:-$PBS_O_WORKDIR}"
 mkdir -p results logs
 
 SNAPSHOT="${snapshots[${array_index}]}"
-SNAPSHOT_PADDED="$(printf '%03d' "${SNAPSHOT}")"
 BASE_PATH="${BASE_PATH:?BASE_PATH must point to the simulation output directory}"
 MFP_FILE="${MFP_FILE:?MFP_FILE must point to a THESAN mfp table}"
 SIMULATION_NAME="${SIMULATION_NAME:-}"
-OUTPUT_DIR="${OUTPUT_DIR:-results/${SIMULATION_NAME:-alternative_clumping}/alternative_clumping}"
+OUTPUT_DIR="${OUTPUT_DIR:-results}"
 CHUNK_SIZE="${CHUNK_SIZE:-1000000}"
 THREADS="${THREADS:-1}"
 PHOTON_GROUPS_CSV="${PHOTON_GROUPS_CSV:-0:1:2}"
@@ -60,7 +59,6 @@ if [[ -z "${SIMULATION_NAME}" ]]; then
 fi
 
 mkdir -p "${OUTPUT_DIR}"
-OUTPUT="${OUTPUT_DIR}/snapshot${SNAPSHOT_PADDED}_eq13.json"
 
 EXTRA_ARGS=()
 if [[ "${VERBOSE}" == "1" ]]; then
@@ -78,7 +76,7 @@ echo "Simulation: ${SIMULATION_NAME}"
 echo "Snapshot: ${SNAPSHOT}"
 echo "Base path: ${BASE_PATH}"
 echo "MFP file: ${MFP_FILE}"
-echo "Output: ${OUTPUT}"
+echo "Output root: ${OUTPUT_DIR}"
 echo "Chunk size: ${CHUNK_SIZE}"
 echo "Photon groups: ${PHOTON_GROUPS_CSV//:/ }"
 echo "chi_e source: ${CHI_E_SOURCE}"
@@ -108,7 +106,7 @@ clumping-factor-alternative \
   --snapshot "${SNAPSHOT}" \
   --mfp-file "${MFP_FILE}" \
   --simulation-name "${SIMULATION_NAME}" \
-  --output "${OUTPUT}" \
+  --output-dir "${OUTPUT_DIR}" \
   --backend "${BACKEND}" \
   --chunk-size "${CHUNK_SIZE}" \
   --threshold-min "${THRESHOLD_MIN}" \

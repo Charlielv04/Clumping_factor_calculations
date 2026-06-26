@@ -95,7 +95,7 @@ MAX_CONCURRENT=8 MEM=8gb WALLTIME=02:00:00 \
 bash scripts/submit_alternative_clumping_evolution_jobs.sh
 ```
 
-By default this submits snapshots `54 55 ... 80` on the `tiny` queue with `NCPUS=1 THREADS=1`, writes to `results/<simulation>/alternative_clumping/`, uses photon groups `0 1 2`, runs the `raw-volume` native gas-cell threshold sweep from overdensity `-1` to `25` with 200 samples, and enables verbose progress every 5 chunks. Override `SNAPSHOTS`, `OUTPUT_DIR`, `CHUNK_SIZE`, `PHOTON_GROUPS`, `BACKEND`, `THRESHOLD_MIN`, `THRESHOLD_MAX`, `THRESHOLD_COUNT`, `CHI_E_SOURCE`, `N_H_SOURCE`, or `FULLY_IONIZED=1` when needed. For `BACKEND=grid`, also set `MASK_PARTICLE_TYPE=gas`, `dm`, or `both`.
+By default this submits snapshots `54 55 ... 80` on the `tiny` queue with `NCPUS=1 THREADS=1`, writes to the canonical clumping JSON layout under `results/thesan/<simulation>/gas/alternative-raw-volume/snapshot<SNAPSHOT>_nogrid/threads1_batch1_run001.json`, uses photon groups `0 1 2`, runs the `raw-volume` native gas-cell threshold sweep from overdensity `-1` to `25` with 200 samples, and enables verbose progress every 5 chunks. Override `SNAPSHOTS`, `OUTPUT_DIR`, `CHUNK_SIZE`, `PHOTON_GROUPS`, `BACKEND`, `THRESHOLD_MIN`, `THRESHOLD_MAX`, `THRESHOLD_COUNT`, `CHI_E_SOURCE`, `N_H_SOURCE`, or `FULLY_IONIZED=1` when needed. For `BACKEND=grid`, also set `MASK_PARTICLE_TYPE=gas`, `dm`, or `both`.
 
 ```bash
 GRIDS=512 MEM_512=8gb WALLTIME_512=08:00:00 NCPUS=2 \

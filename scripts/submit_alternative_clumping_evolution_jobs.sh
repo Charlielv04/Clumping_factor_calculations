@@ -6,7 +6,7 @@ SNAPSHOTS="${SNAPSHOTS:-54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72
 BASE_PATH="${BASE_PATH:-../Thesan-2/output}"
 MFP_FILE="${MFP_FILE:?Set MFP_FILE to the THESAN mean-free-path table, e.g. /lustre/work/carlos.lopez/Thesan-1/mfp_Thesan1.dat.}"
 SIMULATION_NAME="${SIMULATION_NAME:-}"
-OUTPUT_DIR="${OUTPUT_DIR:-}"
+OUTPUT_DIR="${OUTPUT_DIR:-results}"
 NCPUS="${NCPUS:-1}"
 THREADS="${THREADS:-1}"
 MAX_CONCURRENT="${MAX_CONCURRENT:-8}"
@@ -47,10 +47,6 @@ if [[ -z "${SIMULATION_NAME}" ]]; then
     SIMULATION_NAME="$(basename "$(dirname "${base_trimmed}")")"
   fi
 fi
-if [[ -z "${OUTPUT_DIR}" ]]; then
-  OUTPUT_DIR="results/${SIMULATION_NAME}/alternative_clumping"
-fi
-
 read -r -a snapshot_array <<< "${SNAPSHOTS}"
 if (( ${#snapshot_array[@]} == 0 )); then
   echo "SNAPSHOTS must contain at least one snapshot number." >&2

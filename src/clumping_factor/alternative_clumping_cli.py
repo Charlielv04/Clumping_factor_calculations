@@ -4,6 +4,47 @@ import argparse
 from pathlib import Path
 from time import perf_counter
 
+from .results import resolve_simulation_name, sanitize_simulation_name
+
+
+def _simulation_family(simulation_name: str) -> str:
+    lowered = simulation_name.lower()
+    if lowered.startswith("thesan"):
+        return "thesan"
+    if lowered.startswith("tng"):
+        return "tng"
+    return "misc"
+
+
+def _canonical_backend_label(args: argparse.Namespace) -> str:
+    if args.backend == "raw-volume":
+        return "alternative-raw-volume"
+    mask = args.mask_particle_type or "mask"
+    mask_backend = args.mask_backend or "grid"
+    return f"alternative-grid-masked-{mask}-{mask_backend}"
+
+
+def canonical_alternative_clumping_output_path(
+    output_root: str | Path,
+    simulation_name: str,
+    backend_label: str,
+    snapshot: int,
+    grid_size: int | None,
+    threads: int,
+    batch_size: int,
+    run: int | str = 1,
+) -> Path:
+    snapshot_label = f"snapshot{int(snapshot):03d}_nogrid" if grid_size is None else f"snapshot{int(snapshot):03d}_grid{int(grid_size)}"
+    return (
+        Path(output_root)
+        / _simulation_family(simulation_name)
+        / sanitize_simulation_name(simulation_name)
+        / "gas"
+        / backend_label
+        / snapshot_label
+        / f"threads{int(threads)}_batch{int(batch_size)}_run{int(run):03d}.json"
+    )
+
 
 def build_alternative_clumping_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Compute Davies et al. Eq. 13 alternative clumping from THESAN ground-truth fields.")
@@ -11,7 +52,9 @@ def build_alternative_clumping_parser() -> argparse.ArgumentParser:
     parser.add_argument("--snapshot", type=int, required=True)
     parser.add_argument("--mfp-file", required=True, help="THESAN mean-free-path table with columns z and mfp [pMpc/h].")
     parser.add_argument("--simulation-name")
-    parser.add_argument("--output", required=True)
+    parser.add_argument("--output", help="Explicit JSON output path. Omit to use the canonical results tree.")
+    parser.add_argument("--output-dir", default="results", help="Canonical output root. Defaults to results.")
+    parser.add_argument("--run", type=int, default=1, help="Run number used in canonical output filenames.")
     parser.add_argument(
         "--backend",
         choices=["raw-volume", "grid"],
@@ -95,7 +138,23 @@ def run_alternative_clumping(args: argparse.Namespace) -> Path:
         progress=progress if args.verbose else None,
         progress_interval=args.progress_interval,
     )
-    return write_alternative_clumping_result(result, args.output)
+    if args.output:
+        output = Path(args.output)
+    else:
+        simulation_name = resolve_simulation_name(args.base_path, args.simulation_name)
+        grid_size = int(args.grid_size) if args.backend == "grid" else None
+        batch_size = int(args.radius_bin_batch_size) if args.backend == "grid" else 1
+        output = canonical_alternative_clumping_output_path(
+            args.output_dir,
+            simulation_name,
+            _canonical_backend_label(args),
+            args.snapshot,
+            grid_size,
+            args.threads,
+            batch_size,
+            args.run,
+        )
+    return write_alternative_clumping_result(result, output)
 
 
 def alternative_clumping_main(argv: list[str] | None = None) -> None:

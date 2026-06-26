@@ -9,7 +9,11 @@ from clumping_factor.alternative_clumping import (
     compute_alternative_clumping,
     interpolate_mfp,
 )
-from clumping_factor.alternative_clumping_cli import build_alternative_clumping_parser, run_alternative_clumping
+from clumping_factor.alternative_clumping_cli import (
+    build_alternative_clumping_parser,
+    canonical_alternative_clumping_output_path,
+    run_alternative_clumping,
+)
 from clumping_factor.cli import plot_main
 
 
@@ -81,6 +85,23 @@ def test_mfp_interpolation(tmp_path):
     high_mfp, high_metadata = interpolate_mfp(5.5, mfp_file)
     assert np.isclose(high_mfp, 7.0)
     assert high_metadata["mfp_interpolation"] == "nearest-high-redshift-edge"
+
+
+def test_canonical_alternative_clumping_output_path():
+    output = canonical_alternative_clumping_output_path(
+        "results",
+        "Thesan-2",
+        "alternative-raw-volume",
+        80,
+        None,
+        1,
+        1,
+        1,
+    )
+    assert (
+        output.as_posix()
+        == "results/thesan/Thesan-2/gas/alternative-raw-volume/snapshot080_nogrid/threads1_batch1_run001.json"
+    )
 
 
 def test_alternative_clumping_scales_with_photon_density(tmp_path):
