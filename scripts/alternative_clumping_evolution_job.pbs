@@ -29,7 +29,17 @@ MFP_FILE="${MFP_FILE:?MFP_FILE must point to a THESAN mfp table}"
 SIMULATION_NAME="${SIMULATION_NAME:-}"
 OUTPUT_DIR="${OUTPUT_DIR:-results}"
 CHUNK_SIZE="${CHUNK_SIZE:-1000000}"
+LOAD_MODE="${LOAD_MODE:-chunked}"
+MAX_FULL_LOAD_GB="${MAX_FULL_LOAD_GB:-16}"
+MEMORY_LIMIT="${MEMORY_LIMIT:-}"
+MEMORY_SAFETY_FRACTION="${MEMORY_SAFETY_FRACTION:-0.1}"
+SUMMARY_CACHE="${SUMMARY_CACHE:-auto}"
+SUMMARY_CACHE_DIR="${SUMMARY_CACHE_DIR:-results/.cache/summaries}"
+WORK_PARTITION="${WORK_PARTITION:-auto}"
+MAX_FILE_READERS="${MAX_FILE_READERS:-2}"
+CLUMPING_MAX_GRID_CELLS="${CLUMPING_MAX_GRID_CELLS:-}"
 THREADS="${THREADS:-1}"
+NCPUS="${NCPUS:-${THREADS}}"
 PHOTON_GROUPS_CSV="${PHOTON_GROUPS_CSV:-0:1:2}"
 HYDROGEN_MASS_FRACTION="${HYDROGEN_MASS_FRACTION:-0.76}"
 ALPHA_HII_CM3_S="${ALPHA_HII_CM3_S:-2.59e-13}"
@@ -42,7 +52,9 @@ THRESHOLD_MAX="${THRESHOLD_MAX:-25}"
 THRESHOLD_COUNT="${THRESHOLD_COUNT:-200}"
 GRID_SIZE="${GRID_SIZE:-256}"
 RADIUS_BINS="${RADIUS_BINS:-10}"
+RADIUS_BIN_BATCH_SIZE="${RADIUS_BIN_BATCH_SIZE:-1}"
 MAS="${MAS:-CIC}"
+MAS="${MAS^^}"
 MASK_PARTICLE_TYPE="${MASK_PARTICLE_TYPE:-}"
 MASK_BACKEND="${MASK_BACKEND:-sphere}"
 MASK_RADIUS_MODE="${MASK_RADIUS_MODE:-sphere}"
@@ -57,6 +69,14 @@ if [[ -z "${SIMULATION_NAME}" ]]; then
     SIMULATION_NAME="$(basename "$(dirname "${base_trimmed}")")"
   fi
 fi
+if [[ "${MAS}" != "CIC" && "${MAS}" != "TSC" ]]; then
+  echo "MAS must be CIC or TSC, got: ${MAS}" >&2
+  exit 1
+fi
+if [[ "${BACKEND}" == "raw-volume" && ( "${NCPUS}" != "1" || "${THREADS}" != "1" ) ]]; then
+  echo "BACKEND=raw-volume is streaming single-process; use NCPUS=1 THREADS=1 or BACKEND=grid for multithreading." >&2
+  exit 1
+fi
 
 mkdir -p "${OUTPUT_DIR}"
 
@@ -66,6 +86,12 @@ if [[ "${VERBOSE}" == "1" ]]; then
 fi
 if [[ "${FULLY_IONIZED}" == "1" ]]; then
   EXTRA_ARGS+=(--fully-ionized)
+fi
+if [[ -n "${MEMORY_LIMIT}" ]]; then
+  EXTRA_ARGS+=(--memory-limit "${MEMORY_LIMIT}" --memory-safety-fraction "${MEMORY_SAFETY_FRACTION}")
+fi
+if [[ -n "${CLUMPING_MAX_GRID_CELLS}" ]]; then
+  export CLUMPING_MAX_GRID_CELLS
 fi
 
 IFS=':' read -r -a photon_group_array <<< "${PHOTON_GROUPS_CSV}"
@@ -78,11 +104,14 @@ echo "Base path: ${BASE_PATH}"
 echo "MFP file: ${MFP_FILE}"
 echo "Output root: ${OUTPUT_DIR}"
 echo "Chunk size: ${CHUNK_SIZE}"
+echo "Load mode: ${LOAD_MODE}"
 echo "Photon groups: ${PHOTON_GROUPS_CSV//:/ }"
 echo "chi_e source: ${CHI_E_SOURCE}"
 echo "n_H source: ${N_H_SOURCE}"
 echo "Backend: ${BACKEND}"
 echo "Thresholds: ${THRESHOLD_MIN} to ${THRESHOLD_MAX} (${THRESHOLD_COUNT})"
+echo "Allocated CPUs requested: ${NCPUS}"
+echo "Threads: ${THREADS}"
 echo "Progress interval: ${PROGRESS_INTERVAL}"
 
 if [[ "${BACKEND}" == "grid" ]]; then
@@ -93,12 +122,26 @@ if [[ "${BACKEND}" == "grid" ]]; then
   EXTRA_ARGS+=(
     --grid-size "${GRID_SIZE}"
     --radius-bins "${RADIUS_BINS}"
+    --radius-bin-batch-size "${RADIUS_BIN_BATCH_SIZE}"
     --mas "${MAS}"
+    --load-mode "${LOAD_MODE}"
+    --max-full-load-gb "${MAX_FULL_LOAD_GB}"
     --threads "${THREADS}"
+    --summary-cache "${SUMMARY_CACHE}"
+    --summary-cache-dir "${SUMMARY_CACHE_DIR}"
+    --work-partition "${WORK_PARTITION}"
+    --max-file-readers "${MAX_FILE_READERS}"
     --mask-particle-type "${MASK_PARTICLE_TYPE}"
     --mask-backend "${MASK_BACKEND}"
     --mask-radius-mode "${MASK_RADIUS_MODE}"
   )
+  echo "Grid size: ${GRID_SIZE}"
+  echo "Radius bins: ${RADIUS_BINS}"
+  echo "Radius-bin batch size: ${RADIUS_BIN_BATCH_SIZE}"
+  echo "Mass assignment: ${MAS}"
+  echo "Memory limit: ${MEMORY_LIMIT:-unlimited}"
+  echo "Summary cache: ${SUMMARY_CACHE}"
+  echo "Work partition: ${WORK_PARTITION}"
 fi
 
 clumping-factor-alternative \

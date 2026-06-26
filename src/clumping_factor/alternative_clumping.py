@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+import os
+import shutil
+import tempfile
 from time import perf_counter
 from typing import Callable, Sequence
 
@@ -198,16 +202,6 @@ def _raw_volume_eq13_sweep(
     if progress:
         progress(f"streaming {expected_count:,} gas cells for raw-volume Eq. 13 sweep")
 
-    overdensity_parts: list[np.ndarray] = []
-    volume_parts: list[np.ndarray] = []
-    photon_parts: list[np.ndarray] = []
-    n_h_parts: list[np.ndarray] = []
-    xhi_parts: list[np.ndarray] = []
-    xhii_parts: list[np.ndarray] = []
-    chi_e_parts: list[np.ndarray] = []
-    xhi_mass_parts: list[np.ndarray] = []
-    hydrogen_mass_parts: list[np.ndarray] = []
-
     total_volume = 0.0
     total_mass = 0.0
     input_count = valid_count = dropped_count = chunks = 0
@@ -269,22 +263,6 @@ def _raw_volume_eq13_sweep(
                     total_volume += float(np.sum(volume_code, dtype=np.float64))
                     total_mass += float(np.sum(valid_mass, dtype=np.float64))
 
-                    density_g_cm3 = valid_density * units["density_unit_g_cm3"]
-                    hydrogen = hydrogen_fraction[valid]
-                    n_h = hydrogen * density_g_cm3 / PROTON_MASS_G
-                    photon_density = np.sum(photon_code[valid], axis=1) * units["photon_density_unit_cm3"]
-                    hydrogen_mass = hydrogen * valid_mass
-
-                    volume_parts.append(volume_code)
-                    photon_parts.append(photon_density)
-                    n_h_parts.append(n_h)
-                    xhi_parts.append(xhi[valid])
-                    xhii_parts.append(1.0 - xhi[valid])
-                    chi_e_parts.append(electron_abundance[valid])
-                    xhi_mass_parts.append(xhi[valid] * hydrogen_mass)
-                    hydrogen_mass_parts.append(hydrogen_mass)
-                    overdensity_parts.append(valid_density)
-
                 if progress and (chunks % progress_interval == 0 or input_count >= expected_count):
                     elapsed = perf_counter() - start_time
                     rate = input_count / elapsed if elapsed > 0 else 0.0
@@ -303,68 +281,146 @@ def _raw_volume_eq13_sweep(
         raise ValueError("No valid gas cells were found for alternative clumping.")
 
     mean_density_code = total_mass / total_volume
-    overdensity = np.concatenate(overdensity_parts) / mean_density_code - 1.0
-    volume = np.concatenate(volume_parts)
-    photon_density = np.concatenate(photon_parts)
-    n_h = np.concatenate(n_h_parts)
-    xhi = np.concatenate(xhi_parts)
-    xhii = np.concatenate(xhii_parts)
-    chi_e_cell = np.concatenate(chi_e_parts)
-    xhi_hydrogen_mass = np.concatenate(xhi_mass_parts)
-    hydrogen_mass = np.concatenate(hydrogen_mass_parts)
-
-    if progress:
-        progress(f"sorting {valid_count:,} valid gas cells by raw-volume overdensity")
     sort_t0 = perf_counter()
-    order = np.argsort(overdensity)
-    overdensity_sorted = overdensity[order]
-    volume_sorted = volume[order]
-    cumulative_volume = np.cumsum(volume_sorted, dtype=np.float64)
-    cumulative_photon = np.cumsum(photon_density[order] * volume_sorted, dtype=np.float64)
-    cumulative_n_h = np.cumsum(n_h[order] * volume_sorted, dtype=np.float64)
-    cumulative_xhi = np.cumsum(xhi[order] * volume_sorted, dtype=np.float64)
-    cumulative_xhii = np.cumsum(xhii[order] * volume_sorted, dtype=np.float64)
-    cumulative_chi_e = np.cumsum(chi_e_cell[order] * volume_sorted, dtype=np.float64)
-    cumulative_xhi_hydrogen_mass = np.cumsum(xhi_hydrogen_mass[order], dtype=np.float64)
-    cumulative_hydrogen_mass = np.cumsum(hydrogen_mass[order], dtype=np.float64)
-    sort_seconds = perf_counter() - sort_t0
-
-    if progress:
-        progress(f"evaluating Eq. 13 inputs for {thresholds.size} overdensity thresholds")
-    indices = np.searchsorted(overdensity_sorted, thresholds, side="left")
-    valid_threshold = indices > 0
-    selected = indices[valid_threshold] - 1
 
     shape = thresholds.shape
+    selected_counts = np.zeros(shape, dtype=np.int64)
+    selected_volume = np.zeros(shape, dtype=np.float64)
+    selected_photon = np.zeros(shape, dtype=np.float64)
+    selected_n_h = np.zeros(shape, dtype=np.float64)
+    selected_xhi = np.zeros(shape, dtype=np.float64)
+    selected_xhii = np.zeros(shape, dtype=np.float64)
+    selected_chi_e = np.zeros(shape, dtype=np.float64)
+    selected_xhi_hydrogen_mass = np.zeros(shape, dtype=np.float64)
+    selected_hydrogen_mass = np.zeros(shape, dtype=np.float64)
+
+    if progress:
+        progress(
+            f"second raw-volume pass: evaluating Eq. 13 inputs for {thresholds.size} "
+            f"thresholds without storing full-snapshot cell arrays"
+        )
+
+    second_input_count = second_valid_count = second_dropped_count = second_chunks = 0
+    for path in file_paths:
+        with h5py.File(path, "r") as handle:
+            if "PartType0" not in handle:
+                continue
+            gas = handle["PartType0"]
+            count = int(gas["Density"].shape[0])
+            for start in range(0, count, chunk_size):
+                stop = min(start + chunk_size, count)
+                second_chunks += 1
+                second_input_count += stop - start
+                density_code = np.asarray(gas["Density"][start:stop], dtype=np.float64)
+                mass_code = np.asarray(gas["Masses"][start:stop], dtype=np.float64)
+                photon_code = np.asarray(gas["PhotonDensity"][start:stop, photon_groups], dtype=np.float64)
+                xhi = np.asarray(gas["HI_Fraction"][start:stop], dtype=np.float64)
+                if "GFM_Metals" in gas and gas["GFM_Metals"].ndim == 2 and gas["GFM_Metals"].shape[1] >= 1:
+                    hydrogen_fraction = np.asarray(gas["GFM_Metals"][start:stop, 0], dtype=np.float64)
+                else:
+                    hydrogen_fraction = np.full_like(density_code, float(hydrogen_mass_fraction))
+                    missing_hydrogen_abundance = True
+                if chi_e_source == "electron-abundance":
+                    electron_abundance = np.asarray(gas["ElectronAbundance"][start:stop], dtype=np.float64)
+                else:
+                    electron_abundance = np.full_like(density_code, float(chi_e_constant))
+
+                valid = (
+                    np.isfinite(density_code)
+                    & np.isfinite(mass_code)
+                    & np.all(np.isfinite(photon_code), axis=1)
+                    & np.isfinite(xhi)
+                    & np.isfinite(hydrogen_fraction)
+                    & np.isfinite(electron_abundance)
+                    & (density_code > 0)
+                    & (mass_code > 0)
+                    & (xhi >= 0)
+                    & (xhi <= 1)
+                    & (hydrogen_fraction > 0)
+                    & (hydrogen_fraction <= 1)
+                    & (electron_abundance >= 0)
+                )
+                second_valid_count += int(np.count_nonzero(valid))
+                second_dropped_count += int((stop - start) - np.count_nonzero(valid))
+                if np.any(valid):
+                    valid_density = density_code[valid]
+                    valid_mass = mass_code[valid]
+                    volume_code = valid_mass / valid_density
+                    density_g_cm3 = valid_density * units["density_unit_g_cm3"]
+                    hydrogen = hydrogen_fraction[valid]
+                    n_h = hydrogen * density_g_cm3 / PROTON_MASS_G
+                    photon_density = np.sum(photon_code[valid], axis=1) * units["photon_density_unit_cm3"]
+                    hydrogen_mass = hydrogen * valid_mass
+                    overdensity = valid_density / mean_density_code - 1.0
+
+                    order = np.argsort(overdensity)
+                    overdensity_sorted = overdensity[order]
+                    indices = np.searchsorted(overdensity_sorted, thresholds, side="left")
+                    valid_threshold = indices > 0
+                    if np.any(valid_threshold):
+                        selected = indices[valid_threshold] - 1
+                        positions = np.flatnonzero(valid_threshold)
+                        volume_sorted = volume_code[order]
+                        cumulative_volume = np.cumsum(volume_sorted, dtype=np.float64)
+                        cumulative_photon = np.cumsum(photon_density[order] * volume_sorted, dtype=np.float64)
+                        cumulative_n_h = np.cumsum(n_h[order] * volume_sorted, dtype=np.float64)
+                        cumulative_xhi = np.cumsum(xhi[valid][order] * volume_sorted, dtype=np.float64)
+                        cumulative_xhii = np.cumsum((1.0 - xhi[valid][order]) * volume_sorted, dtype=np.float64)
+                        cumulative_chi_e = np.cumsum(electron_abundance[valid][order] * volume_sorted, dtype=np.float64)
+                        cumulative_xhi_h_mass = np.cumsum(xhi[valid][order] * hydrogen_mass[order], dtype=np.float64)
+                        cumulative_h_mass = np.cumsum(hydrogen_mass[order], dtype=np.float64)
+
+                        selected_counts[positions] += indices[valid_threshold]
+                        selected_volume[positions] += cumulative_volume[selected]
+                        selected_photon[positions] += cumulative_photon[selected]
+                        selected_n_h[positions] += cumulative_n_h[selected]
+                        selected_xhi[positions] += cumulative_xhi[selected]
+                        selected_xhii[positions] += cumulative_xhii[selected]
+                        selected_chi_e[positions] += cumulative_chi_e[selected]
+                        selected_xhi_hydrogen_mass[positions] += cumulative_xhi_h_mass[selected]
+                        selected_hydrogen_mass[positions] += cumulative_h_mass[selected]
+
+                if progress and (second_chunks % progress_interval == 0 or second_input_count >= expected_count):
+                    elapsed = perf_counter() - start_time
+                    rate = second_input_count / elapsed if elapsed > 0 else 0.0
+                    remaining = max(expected_count - second_input_count, 0)
+                    eta = remaining / rate if rate > 0 else np.nan
+                    eta_text = "unknown" if not np.isfinite(eta) else f"{eta / 60.0:.1f} min"
+                    progress(
+                        f"raw-volume threshold pass processed {second_input_count:,}/{expected_count:,} cells "
+                        f"({100.0 * second_input_count / expected_count:.1f}%), ETA {eta_text}"
+                    )
+
+    sort_seconds = perf_counter() - sort_t0
+    if second_valid_count != valid_count:
+        raise ValueError("Raw-volume pass mismatch: valid cell counts changed between passes.")
+
     n_gamma = np.full(shape, np.nan, dtype=np.float64)
     n_h_volume = np.full(shape, np.nan, dtype=np.float64)
     xhi_volume = np.full(shape, np.nan, dtype=np.float64)
     xhii_volume = np.full(shape, np.nan, dtype=np.float64)
     chi_e_volume = np.full(shape, np.nan, dtype=np.float64)
     xhi_mass = np.full(shape, np.nan, dtype=np.float64)
-    selected_volume = np.zeros(shape, dtype=np.float64)
-
-    selected_volume[valid_threshold] = cumulative_volume[selected]
-    positions = np.flatnonzero(valid_threshold)
-    n_gamma[positions] = cumulative_photon[selected] / selected_volume[valid_threshold]
-    n_h_volume[positions] = cumulative_n_h[selected] / selected_volume[valid_threshold]
-    xhi_volume[positions] = cumulative_xhi[selected] / selected_volume[valid_threshold]
-    xhii_volume[positions] = cumulative_xhii[selected] / selected_volume[valid_threshold]
-    chi_e_volume[positions] = cumulative_chi_e[selected] / selected_volume[valid_threshold]
-    nonzero_h_mass = cumulative_hydrogen_mass[selected] > 0
-    xhi_mass_positions = positions[nonzero_h_mass]
-    xhi_mass[xhi_mass_positions] = cumulative_xhi_hydrogen_mass[selected[nonzero_h_mass]] / cumulative_hydrogen_mass[selected[nonzero_h_mass]]
+    nonzero_volume = selected_volume > 0
+    n_gamma[nonzero_volume] = selected_photon[nonzero_volume] / selected_volume[nonzero_volume]
+    n_h_volume[nonzero_volume] = selected_n_h[nonzero_volume] / selected_volume[nonzero_volume]
+    xhi_volume[nonzero_volume] = selected_xhi[nonzero_volume] / selected_volume[nonzero_volume]
+    xhii_volume[nonzero_volume] = selected_xhii[nonzero_volume] / selected_volume[nonzero_volume]
+    chi_e_volume[nonzero_volume] = selected_chi_e[nonzero_volume] / selected_volume[nonzero_volume]
+    nonzero_h_mass = selected_hydrogen_mass > 0
+    xhi_mass[nonzero_h_mass] = selected_xhi_hydrogen_mass[nonzero_h_mass] / selected_hydrogen_mass[nonzero_h_mass]
 
     diagnostics = {
         "overdensity_definition": "native gas-cell Density / volume-weighted mean(Density) - 1",
         "selection": "raw-volume gas cells below overdensity threshold",
-        "selected_cell_counts": indices.astype(np.int64).tolist(),
-        "selected_cell_fractions": (indices / valid_count).astype(np.float64).tolist(),
+        "selected_cell_counts": selected_counts.astype(np.int64).tolist(),
+        "selected_cell_fractions": (selected_counts / valid_count).astype(np.float64).tolist(),
         "selected_volume_code": selected_volume.tolist(),
         "selected_volume_fractions": (selected_volume / total_volume).astype(np.float64).tolist(),
         "total_volume_code": float(total_volume),
         "total_cells": int(valid_count),
         "full_snapshot_mean_density_code": float(mean_density_code),
+        "raw_volume_algorithm": "two-pass chunked threshold accumulation",
     }
     timings = {"raw_volume_sort_and_cumulative_sums": sort_seconds}
     fields = {
@@ -392,55 +448,76 @@ def _build_grid_mask(args) -> tuple[np.ndarray, dict, dict]:
     return _build_density_field(args, args.mask_particle_type, args.mask_backend, args.mask_radius_mode)
 
 
-def _gridded_eq13_sweep(
-    base_path: str | Path,
+_EQ13_GRID_NAMES = (
+    "volume",
+    "photon",
+    "n_h",
+    "xhi",
+    "xhii",
+    "chi_e",
+    "xhi_h_mass",
+    "h_mass",
+)
+
+
+def _write_eq13_worker_grids(grids: dict[str, np.ndarray], output_dir: str | Path, worker_index: int) -> tuple[dict[str, str], float]:
+    output_dir = Path(output_dir)
+    paths: dict[str, str] = {}
+    t0 = perf_counter()
+    for name in _EQ13_GRID_NAMES:
+        path = output_dir / f"worker-{worker_index}-{name}.npy"
+        np.save(path, grids[name], allow_pickle=False)
+        paths[name] = str(path)
+    return paths, perf_counter() - t0
+
+
+def _reduce_eq13_worker_grids(paths: dict[str, str], target_grids: dict[str, np.ndarray]) -> float:
+    t0 = perf_counter()
+    for name, path in paths.items():
+        worker_grid = np.load(path, mmap_mode="r", allow_pickle=False)
+        target_grids[name] += worker_grid.astype(target_grids[name].dtype, copy=False)
+        del worker_grid
+    return perf_counter() - t0
+
+
+def _compute_eq13_grid_worker(
+    base_path: str,
     snapshot: int,
+    work_units: tuple[tuple[int, int, int], ...],
     photon_groups: tuple[int, ...],
     chunk_size: int,
     hydrogen_mass_fraction: float,
     chi_e_source: str,
     chi_e_constant: float,
     units: dict[str, float],
-    thresholds: np.ndarray,
-    mask_grid: np.ndarray,
     grid_size: int,
+    lbox: float,
     mas: str,
-    progress: Callable[[str], None] | None,
-    progress_interval: int,
-    start_time: float,
-) -> tuple[dict[str, np.ndarray | float | int | bool], dict[str, list | float | int | str], dict[str, float]]:
+    output_dir: str,
+    worker_index: int,
+) -> tuple[dict[str, str], dict]:
     import h5py
 
     from .grid import _add_deposited_mass
-    from .loaders import read_snapshot_metadata
+    from .loaders import snapshot_file_paths
 
-    metadata = read_snapshot_metadata(base_path, snapshot)
     shape = (int(grid_size), int(grid_size), int(grid_size))
-    volume_grid = np.zeros(shape, dtype=np.float64)
-    photon_grid = np.zeros(shape, dtype=np.float64)
-    n_h_grid = np.zeros(shape, dtype=np.float64)
-    xhi_grid = np.zeros(shape, dtype=np.float64)
-    xhii_grid = np.zeros(shape, dtype=np.float64)
-    chi_e_grid = np.zeros(shape, dtype=np.float64)
-    xhi_h_mass_grid = np.zeros(shape, dtype=np.float64)
-    h_mass_grid = np.zeros(shape, dtype=np.float64)
-
+    grids = {name: np.zeros(shape, dtype=np.float64) for name in _EQ13_GRID_NAMES}
+    paths = snapshot_file_paths(base_path, snapshot)
     required = {"Coordinates", "Density", "Masses", "PhotonDensity", "HI_Fraction"}
     if chi_e_source == "electron-abundance":
         required.add("ElectronAbundance")
 
-    file_paths = snapshot_file_paths(base_path, snapshot)
-    expected_count = 0
-    for path in file_paths:
-        with h5py.File(path, "r") as handle:
-            expected_count += int(handle["PartType0"]["Density"].shape[0]) if "PartType0" in handle else 0
-
     input_count = valid_count = dropped_count = chunks = 0
+    bytes_read = 0
+    io_seconds = 0.0
+    deposit_seconds = 0.0
     missing_hydrogen_abundance = False
-    if progress:
-        progress(f"depositing gas Eq. 13 fields onto {grid_size}^3 grid")
-    deposit_t0 = perf_counter()
-    for path in file_paths:
+    worker_t0 = perf_counter()
+    worker_file_indices = sorted({unit[0] for unit in work_units})
+
+    for file_index, range_start, range_stop in work_units:
+        path = paths[file_index]
         with h5py.File(path, "r") as handle:
             if "PartType0" not in handle:
                 continue
@@ -449,10 +526,12 @@ def _gridded_eq13_sweep(
             if missing:
                 raise ValueError(f"{path} is missing required PartType0 datasets: {', '.join(missing)}.")
             count = int(gas["Density"].shape[0])
-            for start in range(0, count, chunk_size):
-                stop = min(start + chunk_size, count)
+            stop_bound = min(int(range_stop), count)
+            for start in range(int(range_start), stop_bound, int(chunk_size)):
+                stop = min(start + int(chunk_size), stop_bound)
                 chunks += 1
                 input_count += stop - start
+                io_t0 = perf_counter()
                 coords = np.asarray(gas["Coordinates"][start:stop], dtype=np.float64)
                 density_code = np.asarray(gas["Density"][start:stop], dtype=np.float64)
                 mass_code = np.asarray(gas["Masses"][start:stop], dtype=np.float64)
@@ -467,6 +546,16 @@ def _gridded_eq13_sweep(
                     electron_abundance = np.asarray(gas["ElectronAbundance"][start:stop], dtype=np.float64)
                 else:
                     electron_abundance = np.full_like(density_code, float(chi_e_constant))
+                io_seconds += perf_counter() - io_t0
+                bytes_read += int(
+                    coords.nbytes
+                    + density_code.nbytes
+                    + mass_code.nbytes
+                    + photon_code.nbytes
+                    + xhi.nbytes
+                    + hydrogen_fraction.nbytes
+                    + electron_abundance.nbytes
+                )
 
                 valid = (
                     np.all(np.isfinite(coords), axis=1)
@@ -486,33 +575,150 @@ def _gridded_eq13_sweep(
                 )
                 valid_count += int(np.count_nonzero(valid))
                 dropped_count += int((stop - start) - np.count_nonzero(valid))
-                if np.any(valid):
-                    valid_coords = coords[valid]
-                    volume = mass_code[valid] / density_code[valid]
-                    density_g_cm3 = density_code[valid] * units["density_unit_g_cm3"]
-                    hydrogen = hydrogen_fraction[valid]
-                    n_h = hydrogen * density_g_cm3 / PROTON_MASS_G
-                    photon_density = np.sum(photon_code[valid], axis=1) * units["photon_density_unit_cm3"]
-                    hydrogen_mass = hydrogen * mass_code[valid]
-                    _add_deposited_mass(volume_grid, valid_coords, volume, metadata.lbox, grid_size, mas)
-                    _add_deposited_mass(photon_grid, valid_coords, photon_density * volume, metadata.lbox, grid_size, mas)
-                    _add_deposited_mass(n_h_grid, valid_coords, n_h * volume, metadata.lbox, grid_size, mas)
-                    _add_deposited_mass(xhi_grid, valid_coords, xhi[valid] * volume, metadata.lbox, grid_size, mas)
-                    _add_deposited_mass(xhii_grid, valid_coords, (1.0 - xhi[valid]) * volume, metadata.lbox, grid_size, mas)
-                    _add_deposited_mass(chi_e_grid, valid_coords, electron_abundance[valid] * volume, metadata.lbox, grid_size, mas)
-                    _add_deposited_mass(xhi_h_mass_grid, valid_coords, xhi[valid] * hydrogen_mass, metadata.lbox, grid_size, mas)
-                    _add_deposited_mass(h_mass_grid, valid_coords, hydrogen_mass, metadata.lbox, grid_size, mas)
-                if progress and (chunks % progress_interval == 0 or input_count >= expected_count):
-                    elapsed = perf_counter() - start_time
-                    rate = input_count / elapsed if elapsed > 0 else 0.0
-                    remaining = max(expected_count - input_count, 0)
-                    eta = remaining / rate if rate > 0 else np.nan
-                    eta_text = "unknown" if not np.isfinite(eta) else f"{eta / 60.0:.1f} min"
-                    progress(
-                        f"deposited {input_count:,}/{expected_count:,} cells "
-                        f"({100.0 * input_count / expected_count:.1f}%), "
-                        f"valid {valid_count:,}, ETA {eta_text}"
-                    )
+                if not np.any(valid):
+                    continue
+
+                deposit_t0 = perf_counter()
+                valid_coords = coords[valid]
+                volume = mass_code[valid] / density_code[valid]
+                density_g_cm3 = density_code[valid] * units["density_unit_g_cm3"]
+                hydrogen = hydrogen_fraction[valid]
+                n_h = hydrogen * density_g_cm3 / PROTON_MASS_G
+                photon_density = np.sum(photon_code[valid], axis=1) * units["photon_density_unit_cm3"]
+                hydrogen_mass = hydrogen * mass_code[valid]
+                _add_deposited_mass(grids["volume"], valid_coords, volume, lbox, grid_size, mas)
+                _add_deposited_mass(grids["photon"], valid_coords, photon_density * volume, lbox, grid_size, mas)
+                _add_deposited_mass(grids["n_h"], valid_coords, n_h * volume, lbox, grid_size, mas)
+                _add_deposited_mass(grids["xhi"], valid_coords, xhi[valid] * volume, lbox, grid_size, mas)
+                _add_deposited_mass(grids["xhii"], valid_coords, (1.0 - xhi[valid]) * volume, lbox, grid_size, mas)
+                _add_deposited_mass(grids["chi_e"], valid_coords, electron_abundance[valid] * volume, lbox, grid_size, mas)
+                _add_deposited_mass(grids["xhi_h_mass"], valid_coords, xhi[valid] * hydrogen_mass, lbox, grid_size, mas)
+                _add_deposited_mass(grids["h_mass"], valid_coords, hydrogen_mass, lbox, grid_size, mas)
+                deposit_seconds += perf_counter() - deposit_t0
+
+    output_paths, grid_write_seconds = _write_eq13_worker_grids(grids, output_dir, worker_index)
+    summary = {
+        "worker_index": int(worker_index),
+        "file_indices": worker_file_indices,
+        "work_units": [list(unit) for unit in work_units],
+        "input_count": int(input_count),
+        "valid_count": int(valid_count),
+        "dropped_count": int(dropped_count),
+        "chunk_count": int(chunks),
+        "io_seconds": io_seconds,
+        "deposit_seconds": deposit_seconds,
+        "bytes_read": int(bytes_read),
+        "grid_write_seconds": grid_write_seconds,
+        "missing_hydrogen_abundance_used_fallback": bool(missing_hydrogen_abundance),
+        "worker_total_seconds": perf_counter() - worker_t0,
+    }
+    return output_paths, summary
+
+
+def _run_eq13_grid_worker(args: tuple) -> tuple[dict[str, str], dict]:
+    return _compute_eq13_grid_worker(*args)
+
+
+def _gridded_eq13_sweep(
+    base_path: str | Path,
+    snapshot: int,
+    photon_groups: tuple[int, ...],
+    chunk_size: int,
+    hydrogen_mass_fraction: float,
+    chi_e_source: str,
+    chi_e_constant: float,
+    units: dict[str, float],
+    thresholds: np.ndarray,
+    mask_grid: np.ndarray,
+    grid_size: int,
+    mas: str,
+    threads: int,
+    work_partition: str,
+    max_file_readers: int,
+    temp_dir: str | None,
+    progress: Callable[[str], None] | None,
+    progress_interval: int,
+    start_time: float,
+) -> tuple[dict[str, np.ndarray | float | int | bool], dict[str, list | float | int | str], dict[str, float]]:
+    from .grid import _plan_particle_work
+    from .loaders import read_snapshot_metadata, snapshot_file_particle_counts
+
+    metadata = read_snapshot_metadata(base_path, snapshot)
+    shape = (int(grid_size), int(grid_size), int(grid_size))
+    target_grids = {name: np.zeros(shape, dtype=np.float64) for name in _EQ13_GRID_NAMES}
+    file_counts = snapshot_file_particle_counts(base_path, snapshot, "gas")
+    expected_count = int(sum(file_counts))
+    work_plan = _plan_particle_work(file_counts, int(threads), partition_mode=work_partition, max_ranges_per_file=max_file_readers)
+    effective_workers = len(work_plan["assignments"])
+    if progress:
+        progress(f"depositing gas Eq. 13 fields onto {grid_size}^3 grid with {effective_workers} local workers")
+    deposit_t0 = perf_counter()
+    reduce_seconds = 0.0
+    worker_summaries: list[dict] = []
+    temp_parent = temp_dir or os.environ.get("TMPDIR")
+    with tempfile.TemporaryDirectory(prefix="clumping-eq13-grid-", dir=temp_parent) as work_dir:
+        required_temp_bytes = effective_workers * len(_EQ13_GRID_NAMES) * int(np.prod(shape)) * np.dtype(np.float64).itemsize
+        free_temp_bytes = shutil.disk_usage(work_dir).free
+        if free_temp_bytes < required_temp_bytes:
+            raise OSError(
+                f"Temporary Eq. 13 grid outputs need {required_temp_bytes / 1024**3:.2f} GiB, but "
+                f"{work_dir} has only {free_temp_bytes / 1024**3:.2f} GiB free."
+            )
+        worker_args = [
+            (
+                str(base_path),
+                int(snapshot),
+                assignment,
+                photon_groups,
+                int(chunk_size),
+                float(hydrogen_mass_fraction),
+                chi_e_source,
+                float(chi_e_constant),
+                units,
+                int(grid_size),
+                float(metadata.lbox),
+                mas,
+                str(work_dir),
+                worker_index,
+            )
+            for worker_index, assignment in enumerate(work_plan["assignments"])
+        ]
+        if effective_workers == 1:
+            results = [_compute_eq13_grid_worker(*worker_args[0])]
+            for paths, summary in results:
+                reduce_seconds += _reduce_eq13_worker_grids(paths, target_grids)
+                worker_summaries.append(summary)
+        else:
+            completed = 0
+            with ProcessPoolExecutor(max_workers=effective_workers) as executor:
+                futures = [executor.submit(_run_eq13_grid_worker, args) for args in worker_args]
+                for future in as_completed(futures):
+                    paths, summary = future.result()
+                    reduce_seconds += _reduce_eq13_worker_grids(paths, target_grids)
+                    worker_summaries.append(summary)
+                    completed += 1
+                    if progress:
+                        elapsed = perf_counter() - start_time
+                        valid_so_far = sum(int(item["valid_count"]) for item in worker_summaries)
+                        progress(
+                            f"reduced Eq. 13 worker {completed}/{effective_workers}; "
+                            f"valid cells reduced {valid_so_far:,}; elapsed {elapsed / 60.0:.1f} min"
+                        )
+
+    input_count = sum(int(summary["input_count"]) for summary in worker_summaries)
+    valid_count = sum(int(summary["valid_count"]) for summary in worker_summaries)
+    dropped_count = sum(int(summary["dropped_count"]) for summary in worker_summaries)
+    chunks = sum(int(summary["chunk_count"]) for summary in worker_summaries)
+    missing_hydrogen_abundance = any(bool(summary["missing_hydrogen_abundance_used_fallback"]) for summary in worker_summaries)
+
+    volume_grid = target_grids["volume"]
+    photon_grid = target_grids["photon"]
+    n_h_grid = target_grids["n_h"]
+    xhi_grid = target_grids["xhi"]
+    xhii_grid = target_grids["xhii"]
+    chi_e_grid = target_grids["chi_e"]
+    xhi_h_mass_grid = target_grids["xhi_h_mass"]
+    h_mass_grid = target_grids["h_mass"]
 
     positive_volume = volume_grid > 0
     field_grids = {}
@@ -581,8 +787,29 @@ def _gridded_eq13_sweep(
         "total_cells": int(mask_rho.size),
         "mask_mean_density": mask_mean,
         "gas_field_positive_volume_cell_count": int(np.count_nonzero(positive_volume)),
+        "parallel_mode": "single_node_process_workers",
+        "requested_threads": int(threads),
+        "effective_workers": int(effective_workers),
+        "worker_work_assignments": [[list(unit) for unit in assignment] for assignment in work_plan["assignments"]],
+        "worker_estimated_particles": work_plan["loads"],
+        "worker_assignment_imbalance": work_plan["imbalance"],
+        "work_partition_mode": work_plan["mode"],
+        "work_unit_count": work_plan["work_unit_count"],
+        "max_readers_per_file": int(max_file_readers),
+        "workers": worker_summaries,
+        "worker_bytes_read_total": sum(int(summary.get("bytes_read", 0)) for summary in worker_summaries),
+        "temporary_grid_storage": "npy_mmap",
+        "temporary_grid_bytes_required": int(required_temp_bytes),
+        "temporary_grid_bytes_free_at_start": int(free_temp_bytes),
     }
-    timings = {"grid_field_deposit": perf_counter() - deposit_t0}
+    timings = {
+        "grid_field_deposit": perf_counter() - deposit_t0,
+        "grid_field_reduce_worker_grids": reduce_seconds,
+        "grid_field_worker_io_total": sum(float(summary.get("io_seconds", 0.0)) for summary in worker_summaries),
+        "grid_field_worker_deposit_total": sum(float(summary.get("deposit_seconds", 0.0)) for summary in worker_summaries),
+        "grid_field_worker_grid_write_total": sum(float(summary.get("grid_write_seconds", 0.0)) for summary in worker_summaries),
+        "grid_field_worker_total_max": max((float(summary.get("worker_total_seconds", 0.0)) for summary in worker_summaries), default=0.0),
+    }
     return fields, diagnostics, timings
 
 
@@ -678,6 +905,10 @@ def compute_alternative_clumping(
             mask_grid,
             int(grid_args.grid_size),
             getattr(grid_args, "mas", "CIC"),
+            int(getattr(grid_args, "threads", 1)),
+            getattr(grid_args, "work_partition", "auto"),
+            int(getattr(grid_args, "max_file_readers", 2)),
+            getattr(grid_args, "temp_dir", None),
             progress,
             progress_interval,
             total_t0,

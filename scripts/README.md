@@ -97,6 +97,17 @@ bash scripts/submit_alternative_clumping_evolution_jobs.sh
 
 By default this submits snapshots `54 55 ... 80` on the `tiny` queue with `NCPUS=1 THREADS=1`, writes to the canonical clumping JSON layout under `results/thesan/<simulation>/gas/alternative-raw-volume/snapshot<SNAPSHOT>_nogrid/threads1_batch1_run001.json`, uses photon groups `0 1 2`, runs the `raw-volume` native gas-cell threshold sweep from overdensity `-1` to `25` with 200 samples, and enables verbose progress every 5 chunks. Override `SNAPSHOTS`, `OUTPUT_DIR`, `CHUNK_SIZE`, `PHOTON_GROUPS`, `BACKEND`, `THRESHOLD_MIN`, `THRESHOLD_MAX`, `THRESHOLD_COUNT`, `CHI_E_SOURCE`, `N_H_SOURCE`, or `FULLY_IONIZED=1` when needed. For `BACKEND=grid`, also set `MASK_PARTICLE_TYPE=gas`, `dm`, or `both`.
 
+For the multithreaded gridded Eq. 13 path, submit the same snapshots with the existing clumping grid controls:
+
+```bash
+BASE_PATH=/lustre/work/carlos.lopez/Thesan-2/output \
+SIMULATION_NAME=Thesan-2 \
+MFP_FILE=/lustre/work/carlos.lopez/Thesan-1/mfp_Thesan1.dat \
+BACKEND=grid MASK_PARTICLE_TYPE=gas MASK_BACKEND=sphere MASK_RADIUS_MODE=sphere \
+GRID_SIZE=256 RADIUS_BINS=10 NCPUS=8 THREADS=8 MEM=32gb WALLTIME=08:00:00 QUEUE=mini \
+bash scripts/submit_alternative_clumping_evolution_jobs.sh
+```
+
 ```bash
 GRIDS=512 MEM_512=8gb WALLTIME_512=08:00:00 NCPUS=2 \
 bash scripts/submit_clumping_jobs.sh
