@@ -2,17 +2,20 @@
 
 set -euo pipefail
 
-: "${SNAPSHOTS_CSV:?SNAPSHOTS_CSV must contain colon-separated snapshot numbers}"
-array_index="${PBS_ARRAY_INDEX:-${PBS_ARRAYID:-}}"
-if [[ -z "${array_index}" ]]; then
-  echo "PBS array index is not available." >&2
-  exit 1
-fi
-
-IFS=':' read -r -a snapshots <<< "${SNAPSHOTS_CSV}"
-if (( array_index < 0 || array_index >= ${#snapshots[@]} )); then
-  echo "PBS array index ${array_index} is outside the snapshot list." >&2
-  exit 1
+SNAPSHOT="${SNAPSHOT:-}"
+if [[ -z "${SNAPSHOT}" ]]; then
+  : "${SNAPSHOTS_CSV:?Set SNAPSHOT for a single job or SNAPSHOTS_CSV for an array job.}"
+  array_index="${PBS_ARRAY_INDEX:-${PBS_ARRAYID:-}}"
+  if [[ -z "${array_index}" ]]; then
+    echo "PBS array index is not available." >&2
+    exit 1
+  fi
+  IFS=':' read -r -a snapshots <<< "${SNAPSHOTS_CSV}"
+  if (( array_index < 0 || array_index >= ${#snapshots[@]} )); then
+    echo "PBS array index ${array_index} is outside the snapshot list." >&2
+    exit 1
+  fi
+  SNAPSHOT="${snapshots[${array_index}]}"
 fi
 
 set +u
@@ -23,7 +26,6 @@ conda activate "${CONDA_ENV:-clumping-factor}"
 cd "${PROJECT_DIR:-$PBS_O_WORKDIR}"
 mkdir -p results logs
 
-SNAPSHOT="${snapshots[${array_index}]}"
 BASE_PATH="${BASE_PATH:?BASE_PATH must point to the simulation output directory}"
 MFP_FILE="${MFP_FILE:?MFP_FILE must point to a THESAN mfp table}"
 SIMULATION_NAME="${SIMULATION_NAME:-}"

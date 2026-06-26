@@ -2,14 +2,13 @@
 
 set -euo pipefail
 
-SNAPSHOTS="${SNAPSHOTS:?Set SNAPSHOTS to a space-separated list, for example '80' or '54 58 61 64 70 75 80'.}"
+SNAPSHOT="${SNAPSHOT:?Set SNAPSHOT to a single snapshot number, for example 80.}"
 BASE_PATH="${BASE_PATH:-../Thesan-2/output}"
 MFP_FILE="${MFP_FILE:?Set MFP_FILE to the THESAN mean-free-path table, e.g. /lustre/work/carlos.lopez/Thesan-1/mfp_Thesan1.dat.}"
 SIMULATION_NAME="${SIMULATION_NAME:-}"
 OUTPUT_DIR="${OUTPUT_DIR:-results}"
 NCPUS="${NCPUS:-1}"
 THREADS="${THREADS:-${NCPUS}}"
-MAX_CONCURRENT="${MAX_CONCURRENT:-8}"
 MEM="${MEM:-8gb}"
 WALLTIME="${WALLTIME:-02:00:00}"
 QUEUE="${QUEUE:-auto}"
@@ -69,22 +68,6 @@ if [[ -z "${SIMULATION_NAME}" ]]; then
     SIMULATION_NAME="$(basename "$(dirname "${base_trimmed}")")"
   fi
 fi
-read -r -a snapshot_array <<< "${SNAPSHOTS}"
-if (( ${#snapshot_array[@]} == 0 )); then
-  echo "SNAPSHOTS must contain at least one snapshot number." >&2
-  exit 1
-fi
-snapshots_csv="$(IFS=:; echo "${snapshot_array[*]}")"
-read -r -a photon_group_array <<< "${PHOTON_GROUPS}"
-photon_groups_csv="$(IFS=:; echo "${photon_group_array[*]}")"
-last_index=$((${#snapshot_array[@]} - 1))
-project_dir="$(pwd)"
-job_simulation_name="${SIMULATION_NAME//[^A-Za-z0-9_]/_}"
-if [[ "${BACKEND}" == "grid" ]]; then
-  name="cfalt_${job_simulation_name}_grid_g${GRID_SIZE}_t${THREADS}"
-else
-  name="cfalt_${job_simulation_name}_rawvol"
-fi
 
 case "${QUEUE}" in
   auto)
@@ -102,26 +85,31 @@ case "${QUEUE}" in
     ;;
 esac
 
-mkdir -p "logs/${SIMULATION_NAME}" "${OUTPUT_DIR}"
-
-if [[ "${MAX_CONCURRENT}" != "" ]]; then
-  echo "Note: this PBS qsub accepts -J X-Y[:Z] but not -J X-Y%N; MAX_CONCURRENT=${MAX_CONCURRENT} is not applied." >&2
+project_dir="$(pwd)"
+job_simulation_name="${SIMULATION_NAME//[^A-Za-z0-9_]/_}"
+snapshot_padded="$(printf "%03d" "${SNAPSHOT}")"
+if [[ "${BACKEND}" == "grid" ]]; then
+  name="cfalt_${job_simulation_name}_s${snapshot_padded}_grid_g${GRID_SIZE}_t${THREADS}"
+else
+  name="cfalt_${job_simulation_name}_s${snapshot_padded}_rawvol"
 fi
 
+read -r -a photon_group_array <<< "${PHOTON_GROUPS}"
+photon_groups_csv="$(IFS=:; echo "${photon_group_array[*]}")"
+mkdir -p "logs/${SIMULATION_NAME}" "${OUTPUT_DIR}"
+
 qsub_args=(
-  -N "${name}" \
-  -J "0-${last_index}" \
-  -o "${project_dir}/logs/${SIMULATION_NAME}/${name}.out" \
-  -e "${project_dir}/logs/${SIMULATION_NAME}/${name}.err" \
-  -l "select=1:ncpus=${NCPUS}:mem=${MEM}" \
-  -l "walltime=${WALLTIME}" \
-  -v "PROJECT_DIR=${project_dir},SNAPSHOTS_CSV=${snapshots_csv},BASE_PATH=${BASE_PATH},MFP_FILE=${MFP_FILE},SIMULATION_NAME=${SIMULATION_NAME},OUTPUT_DIR=${OUTPUT_DIR},CONDA_ENV=${CONDA_ENV},CHUNK_SIZE=${CHUNK_SIZE},LOAD_MODE=${LOAD_MODE},MAX_FULL_LOAD_GB=${MAX_FULL_LOAD_GB},MEMORY_LIMIT=${MEM},MEMORY_SAFETY_FRACTION=${MEMORY_SAFETY_FRACTION},SUMMARY_CACHE=${SUMMARY_CACHE},SUMMARY_CACHE_DIR=${SUMMARY_CACHE_DIR},WORK_PARTITION=${WORK_PARTITION},MAX_FILE_READERS=${MAX_FILE_READERS},CLUMPING_MAX_GRID_CELLS=${CLUMPING_MAX_GRID_CELLS},PHOTON_GROUPS_CSV=${photon_groups_csv},HYDROGEN_MASS_FRACTION=${HYDROGEN_MASS_FRACTION},ALPHA_HII_CM3_S=${ALPHA_HII_CM3_S},CHI_E=${CHI_E},CHI_E_SOURCE=${CHI_E_SOURCE},N_H_SOURCE=${N_H_SOURCE},BACKEND=${BACKEND},THRESHOLD_MIN=${THRESHOLD_MIN},THRESHOLD_MAX=${THRESHOLD_MAX},THRESHOLD_COUNT=${THRESHOLD_COUNT},GRID_SIZE=${GRID_SIZE},RADIUS_BINS=${RADIUS_BINS},RADIUS_BIN_BATCH_SIZE=${RADIUS_BIN_BATCH_SIZE},MAS=${MAS},MASK_PARTICLE_TYPE=${MASK_PARTICLE_TYPE},MASK_BACKEND=${MASK_BACKEND},MASK_RADIUS_MODE=${MASK_RADIUS_MODE},NCPUS=${NCPUS},THREADS=${THREADS},FULLY_IONIZED=${FULLY_IONIZED},PROGRESS_INTERVAL=${PROGRESS_INTERVAL},VERBOSE=${VERBOSE}" \
+  -N "${name}"
+  -o "${project_dir}/logs/${SIMULATION_NAME}/${name}.out"
+  -e "${project_dir}/logs/${SIMULATION_NAME}/${name}.err"
+  -l "select=1:ncpus=${NCPUS}:mem=${MEM}"
+  -l "walltime=${WALLTIME}"
+  -v "PROJECT_DIR=${project_dir},SNAPSHOT=${SNAPSHOT},BASE_PATH=${BASE_PATH},MFP_FILE=${MFP_FILE},SIMULATION_NAME=${SIMULATION_NAME},OUTPUT_DIR=${OUTPUT_DIR},CONDA_ENV=${CONDA_ENV},CHUNK_SIZE=${CHUNK_SIZE},LOAD_MODE=${LOAD_MODE},MAX_FULL_LOAD_GB=${MAX_FULL_LOAD_GB},MEMORY_LIMIT=${MEM},MEMORY_SAFETY_FRACTION=${MEMORY_SAFETY_FRACTION},SUMMARY_CACHE=${SUMMARY_CACHE},SUMMARY_CACHE_DIR=${SUMMARY_CACHE_DIR},WORK_PARTITION=${WORK_PARTITION},MAX_FILE_READERS=${MAX_FILE_READERS},CLUMPING_MAX_GRID_CELLS=${CLUMPING_MAX_GRID_CELLS},PHOTON_GROUPS_CSV=${photon_groups_csv},HYDROGEN_MASS_FRACTION=${HYDROGEN_MASS_FRACTION},ALPHA_HII_CM3_S=${ALPHA_HII_CM3_S},CHI_E=${CHI_E},CHI_E_SOURCE=${CHI_E_SOURCE},N_H_SOURCE=${N_H_SOURCE},BACKEND=${BACKEND},THRESHOLD_MIN=${THRESHOLD_MIN},THRESHOLD_MAX=${THRESHOLD_MAX},THRESHOLD_COUNT=${THRESHOLD_COUNT},GRID_SIZE=${GRID_SIZE},RADIUS_BINS=${RADIUS_BINS},RADIUS_BIN_BATCH_SIZE=${RADIUS_BIN_BATCH_SIZE},MAS=${MAS},MASK_PARTICLE_TYPE=${MASK_PARTICLE_TYPE},MASK_BACKEND=${MASK_BACKEND},MASK_RADIUS_MODE=${MASK_RADIUS_MODE},NCPUS=${NCPUS},THREADS=${THREADS},FULLY_IONIZED=${FULLY_IONIZED},PROGRESS_INTERVAL=${PROGRESS_INTERVAL},VERBOSE=${VERBOSE}"
   scripts/alternative_clumping_evolution_job.pbs
 )
 if [[ -n "${selected_queue}" ]]; then
   qsub_args=(-q "${selected_queue}" "${qsub_args[@]}")
 fi
 
-echo "Submitting ${name}: backend=${BACKEND}, snapshots=${#snapshot_array[@]}, ncpus=${NCPUS}, threads=${THREADS}, mem=${MEM}, walltime=${WALLTIME}, queue=${selected_queue:-default}"
-echo "Snapshot list: ${SNAPSHOTS}"
+echo "Submitting ${name}: backend=${BACKEND}, snapshot=${SNAPSHOT}, ncpus=${NCPUS}, threads=${THREADS}, mem=${MEM}, walltime=${WALLTIME}, queue=${selected_queue:-default}"
 qsub "${qsub_args[@]}"

@@ -88,6 +88,19 @@ bash scripts/submit_evolution_jobs.sh
 Submit tiny one-thread Davies et al. Eq. 13 alternative-clumping jobs across the THESAN reionization snapshots. Each PBS array task reads one snapshot, streams `PhotonDensity`, and writes one JSON result:
 
 ```bash
+SNAPSHOT=80 \
+BASE_PATH=/lustre/work/carlos.lopez/Thesan-2/output \
+SIMULATION_NAME=Thesan-2 \
+MFP_FILE=/lustre/work/carlos.lopez/Thesan-1/mfp_Thesan1.dat \
+BACKEND=raw-volume \
+NCPUS=1 THREADS=1 MEM=8gb WALLTIME=02:00:00 QUEUE=tiny \
+bash scripts/submit_alternative_clumping_job.sh
+```
+
+For multiple snapshots, use the array helper:
+
+```bash
+SNAPSHOTS="54 58 61 64 70 75 80" \
 BASE_PATH=/lustre/work/carlos.lopez/Thesan-2/output \
 SIMULATION_NAME=Thesan-2 \
 MFP_FILE=/lustre/work/carlos.lopez/Thesan-1/mfp_Thesan1.dat \
