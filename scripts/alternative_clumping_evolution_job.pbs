@@ -30,12 +30,23 @@ MFP_FILE="${MFP_FILE:?MFP_FILE must point to a THESAN mfp table}"
 SIMULATION_NAME="${SIMULATION_NAME:-}"
 OUTPUT_DIR="${OUTPUT_DIR:-results/${SIMULATION_NAME:-alternative_clumping}/alternative_clumping}"
 CHUNK_SIZE="${CHUNK_SIZE:-1000000}"
+THREADS="${THREADS:-1}"
 PHOTON_GROUPS_CSV="${PHOTON_GROUPS_CSV:-0:1:2}"
 HYDROGEN_MASS_FRACTION="${HYDROGEN_MASS_FRACTION:-0.76}"
 ALPHA_HII_CM3_S="${ALPHA_HII_CM3_S:-2.59e-13}"
 CHI_E="${CHI_E:-1.08}"
 CHI_E_SOURCE="${CHI_E_SOURCE:-constant}"
 N_H_SOURCE="${N_H_SOURCE:-simulation-volume-mean}"
+BACKEND="${BACKEND:-raw-volume}"
+THRESHOLD_MIN="${THRESHOLD_MIN:--1}"
+THRESHOLD_MAX="${THRESHOLD_MAX:-25}"
+THRESHOLD_COUNT="${THRESHOLD_COUNT:-200}"
+GRID_SIZE="${GRID_SIZE:-256}"
+RADIUS_BINS="${RADIUS_BINS:-10}"
+MAS="${MAS:-CIC}"
+MASK_PARTICLE_TYPE="${MASK_PARTICLE_TYPE:-}"
+MASK_BACKEND="${MASK_BACKEND:-sphere}"
+MASK_RADIUS_MODE="${MASK_RADIUS_MODE:-sphere}"
 FULLY_IONIZED="${FULLY_IONIZED:-0}"
 PROGRESS_INTERVAL="${PROGRESS_INTERVAL:-5}"
 VERBOSE="${VERBOSE:-1}"
@@ -72,7 +83,25 @@ echo "Chunk size: ${CHUNK_SIZE}"
 echo "Photon groups: ${PHOTON_GROUPS_CSV//:/ }"
 echo "chi_e source: ${CHI_E_SOURCE}"
 echo "n_H source: ${N_H_SOURCE}"
+echo "Backend: ${BACKEND}"
+echo "Thresholds: ${THRESHOLD_MIN} to ${THRESHOLD_MAX} (${THRESHOLD_COUNT})"
 echo "Progress interval: ${PROGRESS_INTERVAL}"
+
+if [[ "${BACKEND}" == "grid" ]]; then
+  if [[ -z "${MASK_PARTICLE_TYPE}" ]]; then
+    echo "BACKEND=grid requires MASK_PARTICLE_TYPE=gas, dm, or both." >&2
+    exit 1
+  fi
+  EXTRA_ARGS+=(
+    --grid-size "${GRID_SIZE}"
+    --radius-bins "${RADIUS_BINS}"
+    --mas "${MAS}"
+    --threads "${THREADS}"
+    --mask-particle-type "${MASK_PARTICLE_TYPE}"
+    --mask-backend "${MASK_BACKEND}"
+    --mask-radius-mode "${MASK_RADIUS_MODE}"
+  )
+fi
 
 clumping-factor-alternative \
   --base-path "${BASE_PATH}" \
@@ -80,7 +109,11 @@ clumping-factor-alternative \
   --mfp-file "${MFP_FILE}" \
   --simulation-name "${SIMULATION_NAME}" \
   --output "${OUTPUT}" \
+  --backend "${BACKEND}" \
   --chunk-size "${CHUNK_SIZE}" \
+  --threshold-min "${THRESHOLD_MIN}" \
+  --threshold-max "${THRESHOLD_MAX}" \
+  --threshold-count "${THRESHOLD_COUNT}" \
   --photon-groups "${photon_group_array[@]}" \
   --hydrogen-mass-fraction "${HYDROGEN_MASS_FRACTION}" \
   --alpha-hii-cm3-s "${ALPHA_HII_CM3_S}" \

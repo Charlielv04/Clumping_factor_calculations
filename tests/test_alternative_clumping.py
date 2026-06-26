@@ -10,6 +10,7 @@ from clumping_factor.alternative_clumping import (
     interpolate_mfp,
 )
 from clumping_factor.alternative_clumping_cli import build_alternative_clumping_parser, run_alternative_clumping
+from clumping_factor.cli import plot_main
 
 
 def _write_snapshot(base_path, photon_scale=1.0):
@@ -31,6 +32,17 @@ def _write_snapshot(base_path, photon_scale=1.0):
         header.attrs["UnitMass_in_g"] = 1.98847e43
         header.attrs["UnitVelocity_in_cm_per_s"] = 1e5
         gas = handle.create_group("PartType0")
+        gas.create_dataset(
+            "Coordinates",
+            data=np.array(
+                [
+                    [1.0, 1.0, 1.0],
+                    [4.0, 4.0, 4.0],
+                    [8.0, 8.0, 8.0],
+                ],
+                dtype=np.float64,
+            ),
+        )
         gas.create_dataset("Density", data=np.array([1e-7, 2e-7, 3e-7], dtype=np.float64))
         gas.create_dataset("Masses", data=np.array([1.0, 2.0, 3.0], dtype=np.float64))
         gas.create_dataset(
@@ -73,13 +85,38 @@ def test_mfp_interpolation(tmp_path):
 
 def test_alternative_clumping_scales_with_photon_density(tmp_path):
     mfp_file = _write_mfp(tmp_path / "mfp.dat")
-    low = compute_alternative_clumping(_write_snapshot(tmp_path / "low", photon_scale=1.0), 80, mfp_file)
-    high = compute_alternative_clumping(_write_snapshot(tmp_path / "high", photon_scale=2.0), 80, mfp_file)
-    assert high.document["quantities"]["clumping_factor_eq13"] > low.document["quantities"]["clumping_factor_eq13"]
-    assert np.isclose(
-        high.document["quantities"]["clumping_factor_eq13"],
-        2.0 * low.document["quantities"]["clumping_factor_eq13"],
+    low = compute_alternative_clumping(
+        _write_snapshot(tmp_path / "low", photon_scale=1.0),
+        80,
+        mfp_file,
+        thresholds=[20.0],
     )
+    high = compute_alternative_clumping(
+        _write_snapshot(tmp_path / "high", photon_scale=2.0),
+        80,
+        mfp_file,
+        thresholds=[20.0],
+    )
+    assert high.document["quantities"]["clumping_factor_eq13"][0] > low.document["quantities"]["clumping_factor_eq13"][0]
+    assert np.isclose(
+        high.document["quantities"]["clumping_factor_eq13"][0],
+        2.0 * low.document["quantities"]["clumping_factor_eq13"][0],
+    )
+
+
+def test_alternative_clumping_raw_volume_sweeps_igm_thresholds(tmp_path):
+    result = compute_alternative_clumping(
+        _write_snapshot(tmp_path / "snapshot"),
+        80,
+        _write_mfp(tmp_path / "mfp.dat"),
+        thresholds=[0.0, 20.0],
+    ).document
+    assert result["thresholds"] == [0.0, 20.0]
+    assert result["diagnostics"]["clumping"]["selected_cell_counts"] == [1, 3]
+    assert np.isclose(result["quantities"]["x_hi_volume_weighted"][0], 1e-4)
+    assert len(result["clumping_factors"]) == 2
+    assert result["parameters"]["averaging_domain"] == "IGM overdensity threshold sweep"
+    assert result["parameters"]["backend"] == "raw-volume"
 
 
 def test_alternative_clumping_cli_writes_json(tmp_path):
@@ -107,8 +144,10 @@ def test_alternative_clumping_cli_writes_json(tmp_path):
     document = json.loads(output.read_text())
     assert document["calculation"] == "alternative_clumping_eq13_davies_2024"
     assert document["parameters"]["photon_groups"] == [0, 1, 2]
-    assert document["quantities"]["n_gamma_cm3"] > 0
-    assert document["quantities"]["clumping_factor_eq13"] > 0
+    assert document["thresholds"]
+    assert len(document["thresholds"]) == len(document["clumping_factors"])
+    assert max(value for value in document["quantities"]["n_gamma_cm3"] if value is not None) > 0
+    assert max(value for value in document["quantities"]["clumping_factor_eq13"] if value is not None) > 0
 
 
 def test_alternative_clumping_verbose_reports_progress(tmp_path, capsys):
@@ -145,13 +184,29 @@ def test_eq13_result_matches_recorded_inputs(tmp_path):
         80,
         _write_mfp(tmp_path / "mfp.dat"),
         fully_ionized=True,
+        thresholds=[20.0],
     ).document
     q = result["quantities"]
     p = result["parameters"]
-    expected = q["n_gamma_cm3"] * SPEED_OF_LIGHT_CM_S / (
+    expected = q["n_gamma_cm3"][0] * SPEED_OF_LIGHT_CM_S / (
         q["lambda_mfp_cm"]
         * ALPHA_B_HII_10000K_CM3_S
-        * p["chi_e"]
-        * q["n_h_cm3"] ** 2
+        * q["chi_e"][0]
+        * q["n_h_cm3"][0] ** 2
     )
-    assert np.isclose(q["clumping_factor_eq13"], expected)
+    assert np.isclose(q["clumping_factor_eq13"][0], expected)
+
+
+def test_alternative_clumping_output_is_plot_compatible(tmp_path):
+    base_path = _write_snapshot(tmp_path / "snapshot")
+    output = tmp_path / "eq13.json"
+    result = compute_alternative_clumping(
+        base_path,
+        80,
+        _write_mfp(tmp_path / "mfp.dat"),
+        thresholds=[0.0, 10.0, 20.0],
+    )
+    output.write_text(json.dumps(result.document), encoding="utf-8")
+    plot_output = tmp_path / "plot.png"
+    plot_main([str(output), "--output", str(plot_output)])
+    assert plot_output.exists()
