@@ -266,6 +266,7 @@ def iter_particle_chunks(
     particle_type: str,
     radius_mode: str,
     chunk_size: int,
+    include_chemistry: bool = False,
     file_indices: set[int] | None = None,
     work_units: tuple[ParticleWorkUnit, ...] | list[ParticleWorkUnit] | None = None,
 ) -> Iterator[dict]:
@@ -317,9 +318,26 @@ def iter_particle_chunks(
                     coords_raw = group["Coordinates"][start:stop]
                     density_raw = None
                     masses_raw = None
+                    hi_raw = None
+                    hii_raw = None
+                    electron_raw = None
+                    hydrogen_raw = None
                     if particle_type == "gas":
                         density_raw = group["Density"][start:stop]
                         masses_raw = group["Masses"][start:stop]
+                        if include_chemistry:
+                            hi_raw = group["HI_Fraction"][start:stop] if "HI_Fraction" in group else None
+                            hii_raw = group["HII_Fraction"][start:stop] if "HII_Fraction" in group else None
+                            electron_raw = (
+                                group["ElectronAbundance"][start:stop] if "ElectronAbundance" in group else None
+                            )
+                            hydrogen_raw = (
+                                group["GFM_Metals"][start:stop, 0]
+                                if "GFM_Metals" in group
+                                and group["GFM_Metals"].ndim == 2
+                                and group["GFM_Metals"].shape[1] >= 1
+                                else None
+                            )
                     elif "Masses" in group:
                         masses_raw = group["Masses"][start:stop]
                     io_seconds = perf_counter() - io_t0
@@ -334,7 +352,7 @@ def iter_particle_chunks(
                         radii = gas_radii_from_density(masses, density, radius_mode) if coords.size else np.empty(0, dtype=np.float32)
                         cell_volume = masses / density if coords.size else np.empty(0, dtype=np.float32)
                         preprocess_seconds = perf_counter() - preprocess_t0
-                        yield {
+                        chunk = {
                             "particle_type": "gas",
                             "coords": coords,
                             "density": density,
@@ -352,6 +370,23 @@ def iter_particle_chunks(
                             "preprocess_seconds": preprocess_seconds,
                             "bytes_read": bytes_read,
                         }
+                        if include_chemistry:
+                            valid = (
+                                np.all(np.isfinite(coords_raw), axis=1)
+                                & np.isfinite(density_raw)
+                                & np.isfinite(masses_raw)
+                                & (density_raw > 0)
+                                & (masses_raw > 0)
+                            )
+                            if hi_raw is not None:
+                                chunk["hi_fraction"] = np.ascontiguousarray(hi_raw[valid], dtype=np.float64)
+                            if hii_raw is not None:
+                                chunk["hii_fraction"] = np.ascontiguousarray(hii_raw[valid], dtype=np.float64)
+                            if electron_raw is not None:
+                                chunk["electron_abundance"] = np.ascontiguousarray(electron_raw[valid], dtype=np.float64)
+                            if hydrogen_raw is not None:
+                                chunk["hydrogen_mass_fraction"] = np.ascontiguousarray(hydrogen_raw[valid], dtype=np.float64)
+                        yield chunk
                     else:
                         if masses_raw is None:
                             particle_mass = float(metadata.mass_table[1])

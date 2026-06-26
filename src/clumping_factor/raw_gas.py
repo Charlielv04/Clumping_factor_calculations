@@ -132,6 +132,11 @@ def raw_gas_volume_weighted_clumping_sweep(
 def _raw_chunk_summary(
     chunk_factory: Callable[[], Iterable[dict]],
     lbox: float,
+    clumping_mode: str = "density",
+    hii_source: str = "auto",
+    electron_source: str = "constant",
+    constant_electron_abundance: float = 1.08,
+    hydrogen_mass_fraction: float = 0.76,
     progress: Callable[[str], None] | None = None,
     progress_interval: int = 25,
 ) -> dict:
@@ -142,6 +147,9 @@ def _raw_chunk_summary(
     mass_sum = 0.0
     density_sum = 0.0
     volume_sum = 0.0
+    target_a_sum = 0.0
+    target_b_sum = 0.0
+    target_product_sum = 0.0
     if progress:
         progress("starting raw gas chunk summary pass")
     for chunk in chunk_factory():
@@ -152,6 +160,19 @@ def _raw_chunk_summary(
         mass_sum += float(np.sum(chunk["masses"], dtype=np.float64))
         density_sum += float(np.sum(chunk["density"], dtype=np.float64))
         volume_sum += float(np.sum(chunk["cell_volume"], dtype=np.float64))
+        if clumping_mode != "density":
+            target_a, target_b = _raw_clumping_targets(
+                chunk,
+                clumping_mode,
+                hii_source,
+                electron_source,
+                constant_electron_abundance,
+                hydrogen_mass_fraction,
+            )
+            volume = np.asarray(chunk["cell_volume"], dtype=np.float64)
+            target_a_sum += float(np.sum(target_a * volume, dtype=np.float64))
+            target_b_sum += float(np.sum(target_b * volume, dtype=np.float64))
+            target_product_sum += float(np.sum(target_a * target_b * volume, dtype=np.float64))
         if progress and chunk_count % progress_interval == 0:
             progress(f"raw summary pass read {chunk_count} chunks; valid gas cells so far: {valid_count:,}")
     if valid_count == 0:
@@ -170,7 +191,63 @@ def _raw_chunk_summary(
         "density_sum": density_sum,
         "volume_sum": volume_sum,
         "rho_mean": rho_mean,
+        "target_a_sum": target_a_sum,
+        "target_b_sum": target_b_sum,
+        "target_product_sum": target_product_sum,
     }
+
+
+def _raw_hii_fraction(chunk: dict, hii_source: str) -> np.ndarray:
+    density = np.asarray(chunk["density"], dtype=np.float64)
+    if hii_source == "fully-ionized":
+        return np.ones_like(density)
+    if hii_source in {"auto", "hii-fraction"} and "hii_fraction" in chunk:
+        hii = np.asarray(chunk["hii_fraction"], dtype=np.float64)
+    elif hii_source in {"auto", "hi-fraction"} and "hi_fraction" in chunk:
+        hii = 1.0 - np.asarray(chunk["hi_fraction"], dtype=np.float64)
+    else:
+        raise ValueError(
+            "Requested HII source is unavailable. Use --raw-hii-source fully-ionized, "
+            "or provide HI_Fraction/HII_Fraction in the snapshot."
+        )
+    if hii.shape != density.shape or not np.all(np.isfinite(hii)) or np.any(hii < 0):
+        raise ValueError("HII fraction must be finite, non-negative, and match the gas density shape.")
+    return np.clip(hii, 0.0, 1.0)
+
+
+def _raw_clumping_targets(
+    chunk: dict,
+    clumping_mode: str,
+    hii_source: str,
+    electron_source: str,
+    constant_electron_abundance: float,
+    hydrogen_mass_fraction: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    density = np.asarray(chunk["density"], dtype=np.float64)
+    hydrogen_fraction = np.asarray(
+        chunk.get("hydrogen_mass_fraction", np.full(density.shape, float(hydrogen_mass_fraction))),
+        dtype=np.float64,
+    )
+    if hydrogen_fraction.shape != density.shape or not np.all(np.isfinite(hydrogen_fraction)):
+        raise ValueError("hydrogen_mass_fraction must be finite and match the gas density shape.")
+    hydrogen_density = hydrogen_fraction * density
+    hii_density = hydrogen_density * _raw_hii_fraction(chunk, hii_source)
+    if clumping_mode == "hii-density":
+        return hii_density, hii_density
+    if clumping_mode == "electron-hii":
+        if electron_source == "electron-abundance":
+            if "electron_abundance" not in chunk:
+                raise ValueError("ElectronAbundance is required when --raw-electron-source electron-abundance.")
+            electron_abundance = np.asarray(chunk["electron_abundance"], dtype=np.float64)
+        elif electron_source == "constant":
+            electron_abundance = np.full(density.shape, float(constant_electron_abundance), dtype=np.float64)
+        else:
+            raise ValueError("electron_source must be 'constant' or 'electron-abundance'.")
+        if electron_abundance.shape != density.shape or not np.all(np.isfinite(electron_abundance)) or np.any(electron_abundance < 0):
+            raise ValueError("Electron abundance must be finite, non-negative, and match the gas density shape.")
+        electron_density = electron_abundance * hydrogen_density
+        return electron_density, hii_density
+    raise ValueError("clumping_mode must be 'density', 'hii-density', or 'electron-hii'.")
 
 
 def raw_gas_clumping_sweep_chunked(
@@ -179,6 +256,11 @@ def raw_gas_clumping_sweep_chunked(
     lbox: float,
     chunk_size: int,
     volume_weighted: bool = False,
+    clumping_mode: str = "density",
+    hii_source: str = "auto",
+    electron_source: str = "constant",
+    constant_electron_abundance: float = 1.08,
+    hydrogen_mass_fraction: float = 0.76,
     progress: Callable[[str], None] | None = None,
     progress_interval: int = 25,
 ) -> tuple[np.ndarray, dict[str, float], dict]:
@@ -186,12 +268,25 @@ def raw_gas_clumping_sweep_chunked(
     thresholds = np.asarray(thresholds, dtype=np.float64)
 
     t0 = perf_counter()
-    summary = _raw_chunk_summary(chunk_factory, lbox, progress, progress_interval)
+    if clumping_mode not in {"density", "hii-density", "electron-hii"}:
+        raise ValueError("clumping_mode must be 'density', 'hii-density', or 'electron-hii'.")
+    summary = _raw_chunk_summary(
+        chunk_factory,
+        lbox,
+        clumping_mode,
+        hii_source,
+        electron_source,
+        constant_electron_abundance,
+        hydrogen_mass_fraction,
+        progress,
+        progress_interval,
+    )
     summary_time = perf_counter() - t0
     rho_mean = float(summary["rho_mean"])
 
     selected_counts = np.zeros(thresholds.shape, dtype=np.int64)
     selected_density_sums = np.zeros(thresholds.shape, dtype=np.float64)
+    selected_rho_b_sums = np.zeros(thresholds.shape, dtype=np.float64)
     selected_rho2_sums = np.zeros(thresholds.shape, dtype=np.float64)
     selected_volumes = np.zeros(thresholds.shape, dtype=np.float64)
 
@@ -206,6 +301,20 @@ def raw_gas_clumping_sweep_chunked(
         order = np.argsort(overdensity)
         overdensity_sorted = overdensity[order]
         density_sorted = density[order]
+        if clumping_mode == "density":
+            target_a_sorted = density_sorted
+            target_b_sorted = density_sorted
+        else:
+            target_a, target_b = _raw_clumping_targets(
+                chunk,
+                clumping_mode,
+                hii_source,
+                electron_source,
+                constant_electron_abundance,
+                hydrogen_mass_fraction,
+            )
+            target_a_sorted = target_a[order]
+            target_b_sorted = target_b[order]
         indices = np.searchsorted(overdensity_sorted, thresholds, side="left")
         valid = indices > 0
         selected_counts += indices.astype(np.int64)
@@ -213,15 +322,18 @@ def raw_gas_clumping_sweep_chunked(
         if volume_weighted:
             volume_sorted = np.asarray(chunk["cell_volume"], dtype=np.float64)[order]
             cumulative_volume = np.cumsum(volume_sorted, dtype=np.float64)
-            cumulative_rho = np.cumsum(density_sorted * volume_sorted, dtype=np.float64)
-            cumulative_rho2 = np.cumsum(density_sorted**2 * volume_sorted, dtype=np.float64)
+            cumulative_rho = np.cumsum(target_a_sorted * volume_sorted, dtype=np.float64)
+            cumulative_rho_b = np.cumsum(target_b_sorted * volume_sorted, dtype=np.float64)
+            cumulative_rho2 = np.cumsum(target_a_sorted * target_b_sorted * volume_sorted, dtype=np.float64)
             selected_volumes[valid] += cumulative_volume[indices[valid] - 1]
         else:
-            cumulative_rho = np.cumsum(density_sorted, dtype=np.float64)
-            cumulative_rho2 = np.cumsum(density_sorted**2, dtype=np.float64)
+            cumulative_rho = np.cumsum(target_a_sorted, dtype=np.float64)
+            cumulative_rho_b = np.cumsum(target_b_sorted, dtype=np.float64)
+            cumulative_rho2 = np.cumsum(target_a_sorted * target_b_sorted, dtype=np.float64)
             selected_volumes[valid] += indices[valid]
 
         selected_density_sums[valid] += cumulative_rho[indices[valid] - 1]
+        selected_rho_b_sums[valid] += cumulative_rho_b[indices[valid] - 1]
         selected_rho2_sums[valid] += cumulative_rho2[indices[valid] - 1]
         if progress and chunk_count % progress_interval == 0:
             progress(f"raw threshold sweep processed {chunk_count} chunks")
@@ -232,11 +344,13 @@ def raw_gas_clumping_sweep_chunked(
     clumping_factors = np.full(thresholds.shape, np.nan, dtype=np.float64)
     nonzero = selected_volumes > 0
     mean_rho = np.zeros(thresholds.shape, dtype=np.float64)
+    mean_rho_b = np.zeros(thresholds.shape, dtype=np.float64)
     mean_rho2 = np.zeros(thresholds.shape, dtype=np.float64)
     mean_rho[nonzero] = selected_density_sums[nonzero] / selected_volumes[nonzero]
+    mean_rho_b[nonzero] = selected_rho_b_sums[nonzero] / selected_volumes[nonzero]
     mean_rho2[nonzero] = selected_rho2_sums[nonzero] / selected_volumes[nonzero]
-    positive = nonzero & (mean_rho > 0)
-    clumping_factors[positive] = mean_rho2[positive] / mean_rho[positive] ** 2
+    positive = nonzero & (mean_rho > 0) & (mean_rho_b > 0)
+    clumping_factors[positive] = mean_rho2[positive] / (mean_rho[positive] * mean_rho_b[positive])
 
     total_density_sum = float(summary["mass_sum"] if volume_weighted else summary["density_sum"])
     selected_density_fractions = selected_density_sums / total_density_sum if total_density_sum > 0 else np.zeros(thresholds.shape, dtype=np.float64)
@@ -255,6 +369,14 @@ def raw_gas_clumping_sweep_chunked(
         "selected_density_sums": selected_density_sums.tolist(),
         "selected_density_fractions": selected_density_fractions.tolist(),
         "overdensity_definition": "Density / (sum(Masses) / Lbox**3) - 1",
+        "raw_clumping_mode": clumping_mode,
+        "raw_hii_source": hii_source,
+        "raw_electron_source": electron_source,
+        "raw_constant_electron_abundance": float(constant_electron_abundance),
+        "raw_hydrogen_mass_fraction_fallback": float(hydrogen_mass_fraction),
+        "selected_target_a_sums": selected_density_sums.tolist(),
+        "selected_target_b_sums": selected_rho_b_sums.tolist(),
+        "selected_target_product_sums": selected_rho2_sums.tolist(),
     }
     if volume_weighted:
         total_volume = float(summary["volume_sum"])
@@ -264,7 +386,7 @@ def raw_gas_clumping_sweep_chunked(
                 "total_volume": total_volume,
                 "selected_volumes": selected_volumes.tolist(),
                 "selected_volume_fractions": (selected_volumes / total_volume if total_volume > 0 else selected_volumes).tolist(),
-                "clumping_definition": "sum(rho**2 * volume) / sum(volume) divided by (sum(rho * volume) / sum(volume))**2",
+                "clumping_definition": "volume-weighted <target_a * target_b> / (<target_a> * <target_b>)",
             }
         )
     else:

@@ -139,8 +139,8 @@ def _validate_common_args(
         raise ValueError("THESAN PhotonDensity has three groups with valid indices 0, 1, and 2.")
     if alpha_hii_cm3_s <= 0 or chi_e <= 0:
         raise ValueError("alpha_hii_cm3_s and chi_e must be positive.")
-    if n_h_source not in {"simulation-volume-mean", "cosmic-mean"}:
-        raise ValueError("n_h_source must be 'simulation-volume-mean' or 'cosmic-mean'.")
+    if n_h_source not in {"cosmic-mean", "simulation-volume-mean", "selected-igm-mean"}:
+        raise ValueError("n_h_source must be 'cosmic-mean', 'simulation-volume-mean', or 'selected-igm-mean'.")
     if chi_e_source not in {"constant", "electron-abundance"}:
         raise ValueError("chi_e_source must be 'constant' or 'electron-abundance'.")
     if progress_interval < 1:
@@ -204,6 +204,7 @@ def _raw_volume_eq13_sweep(
 
     total_volume = 0.0
     total_mass = 0.0
+    total_n_h_volume_weighted = 0.0
     input_count = valid_count = dropped_count = chunks = 0
     missing_hydrogen_abundance = False
 
@@ -260,8 +261,12 @@ def _raw_volume_eq13_sweep(
                     valid_density = density_code[valid]
                     valid_mass = mass_code[valid]
                     volume_code = valid_mass / valid_density
+                    density_g_cm3 = valid_density * units["density_unit_g_cm3"]
+                    hydrogen = hydrogen_fraction[valid]
+                    n_h = hydrogen * density_g_cm3 / PROTON_MASS_G
                     total_volume += float(np.sum(volume_code, dtype=np.float64))
                     total_mass += float(np.sum(valid_mass, dtype=np.float64))
+                    total_n_h_volume_weighted += float(np.sum(n_h * volume_code, dtype=np.float64))
 
                 if progress and (chunks % progress_interval == 0 or input_count >= expected_count):
                     elapsed = perf_counter() - start_time
@@ -435,6 +440,7 @@ def _raw_volume_eq13_sweep(
         "valid_count": valid_count,
         "dropped_count": dropped_count,
         "chunk_count": chunks,
+        "full_snapshot_n_h_volume_mean_cm3": total_n_h_volume_weighted / total_volume,
         "missing_hydrogen_abundance_used_fallback": missing_hydrogen_abundance,
     }
     return fields, diagnostics, timings
@@ -721,6 +727,10 @@ def _gridded_eq13_sweep(
     h_mass_grid = target_grids["h_mass"]
 
     positive_volume = volume_grid > 0
+    total_deposited_volume = float(np.sum(volume_grid, dtype=np.float64))
+    full_snapshot_n_h_volume_mean = (
+        float(np.sum(n_h_grid, dtype=np.float64) / total_deposited_volume) if total_deposited_volume > 0 else np.nan
+    )
     field_grids = {}
     for name, grid in {
         "n_gamma_cm3": photon_grid,
@@ -751,6 +761,7 @@ def _gridded_eq13_sweep(
         "valid_count": valid_count,
         "dropped_count": dropped_count,
         "chunk_count": chunks,
+        "full_snapshot_n_h_volume_mean_cm3": full_snapshot_n_h_volume_mean,
         "missing_hydrogen_abundance_used_fallback": missing_hydrogen_abundance,
     }
     for name, flat_values in field_grids.items():
@@ -823,8 +834,8 @@ def compute_alternative_clumping(
     alpha_hii_cm3_s: float = ALPHA_B_HII_10000K_CM3_S,
     chi_e: float = 1.08,
     chi_e_source: str = "constant",
-    n_h_source: str = "simulation-volume-mean",
-    fully_ionized: bool = False,
+    n_h_source: str = "cosmic-mean",
+    fully_ionized: bool = True,
     backend: str = "raw-volume",
     thresholds: Sequence[float] | None = None,
     threshold_min: float = -1.0,
@@ -921,8 +932,14 @@ def compute_alternative_clumping(
         if np.isfinite(omega_baryon)
         else np.nan
     )
-    n_h_igm = np.asarray(fields["n_h_igm_volume_mean_cm3"], dtype=np.float64)
-    n_h_cm3 = n_h_igm if n_h_source == "simulation-volume-mean" else np.full(thresholds_array.shape, n_h_cosmic_cm3)
+    n_h_selected_igm = np.asarray(fields["n_h_igm_volume_mean_cm3"], dtype=np.float64)
+    n_h_simulation_volume_cm3 = float(fields.get("full_snapshot_n_h_volume_mean_cm3", np.nan))
+    if n_h_source == "selected-igm-mean":
+        n_h_cm3 = n_h_selected_igm
+    elif n_h_source == "simulation-volume-mean":
+        n_h_cm3 = np.full(thresholds_array.shape, n_h_simulation_volume_cm3, dtype=np.float64)
+    else:
+        n_h_cm3 = np.full(thresholds_array.shape, n_h_cosmic_cm3, dtype=np.float64)
     mfp_pmpc_h, mfp_metadata = interpolate_mfp(redshift, mfp_file)
     lambda_mfp_cm = mfp_pmpc_h / hubble_param * MPC_CM
     chi_e_array = np.asarray(fields["chi_e"], dtype=np.float64)
@@ -955,7 +972,7 @@ def compute_alternative_clumping(
         "alpha_hii_source": "Case B HII recombination at 10000 K default",
         "chi_e_source": chi_e_source,
         "n_h_source": n_h_source,
-        "averaging_domain": "IGM overdensity threshold sweep",
+        "averaging_domain": "IGM overdensity threshold sweep for n_gamma/x_HI diagnostics; Eq. 13 denominator density is controlled by n_h_source",
         "fully_ionized_approximation": bool(fully_ionized),
         "hydrogen_mass_fraction_fallback": float(hydrogen_mass_fraction),
         "threshold_min": float(thresholds_array[0]) if thresholds is not None else float(threshold_min),
@@ -1008,8 +1025,10 @@ def compute_alternative_clumping(
             "lambda_mfp_pMpc_h": float(mfp_pmpc_h),
             "lambda_mfp_cm": float(lambda_mfp_cm),
             "n_h_cm3": _array_or_none(n_h_cm3),
-            "n_h_igm_volume_mean_cm3": _array_or_none(n_h_igm),
+            "n_h_selected_igm_volume_mean_cm3": _array_or_none(n_h_selected_igm),
+            "n_h_igm_volume_mean_cm3": _array_or_none(n_h_selected_igm),
             "n_h_cosmic_mean_cm3": _finite_or_none(n_h_cosmic_cm3),
+            "n_h_simulation_volume_mean_cm3": _finite_or_none(n_h_simulation_volume_cm3),
             "x_hi_volume_weighted": _array_or_none(np.asarray(fields["x_hi_volume_weighted"], dtype=np.float64)),
             "x_hi_mass_weighted": _array_or_none(np.asarray(fields["x_hi_mass_weighted"], dtype=np.float64)),
             "x_hii_volume_weighted": _array_or_none(np.asarray(fields["x_hii_volume_weighted"], dtype=np.float64)),

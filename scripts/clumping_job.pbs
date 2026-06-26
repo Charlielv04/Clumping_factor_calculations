@@ -41,6 +41,11 @@ PROGRESS_INTERVAL="${PROGRESS_INTERVAL:-25}"
 VERBOSE="${VERBOSE:-1}"
 SIGMA_BAR_ION_CM2="${SIGMA_BAR_ION_CM2:-}"
 SIGMA_BAR_ION_SOURCE="${SIGMA_BAR_ION_SOURCE:-}"
+RAW_CLUMPING_MODE="${RAW_CLUMPING_MODE:-density}"
+RAW_HII_SOURCE="${RAW_HII_SOURCE:-auto}"
+RAW_ELECTRON_SOURCE="${RAW_ELECTRON_SOURCE:-constant}"
+RAW_CONSTANT_ELECTRON_ABUNDANCE="${RAW_CONSTANT_ELECTRON_ABUNDANCE:-1.08}"
+RAW_HYDROGEN_MASS_FRACTION="${RAW_HYDROGEN_MASS_FRACTION:-0.76}"
 if [[ "${MAS}" != "CIC" && "${MAS}" != "TSC" ]]; then
   echo "MAS must be CIC or TSC, got: ${MAS}" >&2
   exit 1
@@ -108,6 +113,18 @@ if [[ "${BACKEND}" == "raw-transmission" ]]; then
   : "${SIGMA_BAR_ION_SOURCE:?SIGMA_BAR_ION_SOURCE is required for raw-transmission}"
   EXTRA_ARGS+=(--sigma-bar-ion-cm2 "${SIGMA_BAR_ION_CM2}" --sigma-bar-ion-source "${SIGMA_BAR_ION_SOURCE}")
 fi
+if [[ "${BACKEND}" == "raw" || "${BACKEND}" == "raw-volume" ]]; then
+  EXTRA_ARGS+=(
+    --raw-clumping-mode "${RAW_CLUMPING_MODE}"
+    --raw-hii-source "${RAW_HII_SOURCE}"
+    --raw-electron-source "${RAW_ELECTRON_SOURCE}"
+    --raw-constant-electron-abundance "${RAW_CONSTANT_ELECTRON_ABUNDANCE}"
+    --raw-hydrogen-mass-fraction "${RAW_HYDROGEN_MASS_FRACTION}"
+  )
+  if [[ "${RAW_CLUMPING_MODE}" != "density" ]]; then
+    OUTPUT_STEM="${OUTPUT_STEM}_rawmode-${RAW_CLUMPING_MODE}"
+  fi
+fi
 
 if [[ -n "${TARGET_PARTICLE_TYPE:-}" ]]; then
   EXTRA_ARGS+=(--target-particle-type "${TARGET_PARTICLE_TYPE}")
@@ -154,6 +171,9 @@ echo "Grid memory limit: ${MEMORY_LIMIT:-unlimited}"
 echo "Summary cache: ${SUMMARY_CACHE}"
 echo "Work partition: ${WORK_PARTITION}"
 echo "Progress interval: ${PROGRESS_INTERVAL}"
+echo "Raw clumping mode: ${RAW_CLUMPING_MODE}"
+echo "Raw HII source: ${RAW_HII_SOURCE}"
+echo "Raw electron source: ${RAW_ELECTRON_SOURCE}"
 echo "Output: ${OUTPUT}"
 
 clumping-compute \

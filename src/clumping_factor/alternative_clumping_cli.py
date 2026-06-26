@@ -70,7 +70,15 @@ def build_alternative_clumping_parser() -> argparse.ArgumentParser:
     parser.add_argument("--alpha-hii-cm3-s", type=float, default=2.59e-13, help="Case B HII recombination coefficient.")
     parser.add_argument("--chi-e", type=float, default=1.08, help="Constant chi_e used when --chi-e-source=constant.")
     parser.add_argument("--chi-e-source", choices=["constant", "electron-abundance"], default="constant")
-    parser.add_argument("--n-h-source", choices=["simulation-volume-mean", "cosmic-mean"], default="simulation-volume-mean")
+    parser.add_argument(
+        "--n-h-source",
+        choices=["cosmic-mean", "simulation-volume-mean", "selected-igm-mean"],
+        default="cosmic-mean",
+        help=(
+            "Hydrogen density used in the Eq. 13 denominator. cosmic-mean matches the Davies definition; "
+            "simulation-volume-mean uses the full snapshot gas volume mean; selected-igm-mean reproduces the old threshold-dependent diagnostic behavior."
+        ),
+    )
     parser.add_argument(
         "--igm-overdensity-threshold",
         type=float,
@@ -95,7 +103,14 @@ def build_alternative_clumping_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mas", choices=["CIC", "TSC"], default="CIC")
     parser.add_argument("--filter-type", default="Top-Hat")
     parser.add_argument("--threads", type=int, default=1)
-    parser.add_argument("--fully-ionized", action="store_true", help="Set (1 - x_HI)^2 to 1 in Eq. 13.")
+    parser.set_defaults(fully_ionized=True)
+    parser.add_argument("--fully-ionized", dest="fully_ionized", action="store_true", help="Set (1 - x_HI)^2 to 1 in Eq. 13.")
+    parser.add_argument(
+        "--use-neutral-fraction",
+        dest="fully_ionized",
+        action="store_false",
+        help="Use the measured selected-IGM x_HI term instead of the Davies fully ionized approximation.",
+    )
     parser.add_argument("--verbose", action="store_true", help="Print progress, processing rate, and ETA.")
     parser.add_argument("--progress-interval", type=int, default=10, help="When --verbose is set, report every N chunks.")
     return parser
@@ -202,7 +217,8 @@ def plot_alternative_quantities(
     for key, label, logy in [
         ("clumping_factor_eq13", "Eq. 13 clumping factor", True),
         ("n_gamma_cm3", "n_gamma [cm^-3]", True),
-        ("n_h_cm3", "n_H [cm^-3]", True),
+        ("n_h_cm3", "Eq. 13 n_H [cm^-3]", True),
+        ("n_h_selected_igm_volume_mean_cm3", "selected IGM n_H [cm^-3]", True),
         ("x_hi_volume_weighted", "volume-weighted x_HI", False),
         ("x_hii_volume_weighted", "volume-weighted x_HII", False),
         ("ionized_fraction_factor", "(1 - x_HI)^2", True),

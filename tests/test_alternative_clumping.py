@@ -137,8 +137,12 @@ def test_alternative_clumping_raw_volume_sweeps_igm_thresholds(tmp_path):
     assert result["diagnostics"]["clumping"]["selected_cell_counts"] == [1, 3]
     assert np.isclose(result["quantities"]["x_hi_volume_weighted"][0], 1e-4)
     assert len(result["clumping_factors"]) == 2
-    assert result["parameters"]["averaging_domain"] == "IGM overdensity threshold sweep"
+    assert result["parameters"]["averaging_domain"].startswith("IGM overdensity threshold sweep")
     assert result["parameters"]["backend"] == "raw-volume"
+    assert result["parameters"]["n_h_source"] == "cosmic-mean"
+    assert result["parameters"]["fully_ionized_approximation"] is True
+    assert "n_h_selected_igm_volume_mean_cm3" in result["quantities"]
+    assert "n_h_simulation_volume_mean_cm3" in result["quantities"]
 
 
 def test_alternative_clumping_cli_writes_json(tmp_path):
@@ -246,6 +250,7 @@ def test_alternative_quantity_diagnostic_plot(tmp_path):
                     "clumping_factor_eq13": [1.0, 2.0, 3.0],
                     "n_gamma_cm3": [1e-6, 2e-6, 3e-6],
                     "n_h_cm3": [1e-5, 2e-5, 3e-5],
+                    "n_h_selected_igm_volume_mean_cm3": [8e-6, 1.5e-5, 2.5e-5],
                     "x_hi_volume_weighted": [0.1, 0.2, 0.3],
                     "x_hii_volume_weighted": [0.9, 0.8, 0.7],
                     "ionized_fraction_factor": [0.81, 0.64, 0.49],

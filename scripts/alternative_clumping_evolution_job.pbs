@@ -47,7 +47,7 @@ HYDROGEN_MASS_FRACTION="${HYDROGEN_MASS_FRACTION:-0.76}"
 ALPHA_HII_CM3_S="${ALPHA_HII_CM3_S:-2.59e-13}"
 CHI_E="${CHI_E:-1.08}"
 CHI_E_SOURCE="${CHI_E_SOURCE:-constant}"
-N_H_SOURCE="${N_H_SOURCE:-simulation-volume-mean}"
+N_H_SOURCE="${N_H_SOURCE:-cosmic-mean}"
 BACKEND="${BACKEND:-raw-volume}"
 THRESHOLD_MIN="${THRESHOLD_MIN:--1}"
 THRESHOLD_MAX="${THRESHOLD_MAX:-25}"
@@ -60,7 +60,7 @@ MAS="${MAS^^}"
 MASK_PARTICLE_TYPE="${MASK_PARTICLE_TYPE:-}"
 MASK_BACKEND="${MASK_BACKEND:-sphere}"
 MASK_RADIUS_MODE="${MASK_RADIUS_MODE:-sphere}"
-FULLY_IONIZED="${FULLY_IONIZED:-0}"
+FULLY_IONIZED="${FULLY_IONIZED:-1}"
 PROGRESS_INTERVAL="${PROGRESS_INTERVAL:-5}"
 VERBOSE="${VERBOSE:-1}"
 
@@ -88,6 +88,8 @@ if [[ "${VERBOSE}" == "1" ]]; then
 fi
 if [[ "${FULLY_IONIZED}" == "1" ]]; then
   EXTRA_ARGS+=(--fully-ionized)
+else
+  EXTRA_ARGS+=(--use-neutral-fraction)
 fi
 if [[ -n "${MEMORY_LIMIT}" ]]; then
   EXTRA_ARGS+=(--memory-limit "${MEMORY_LIMIT}" --memory-safety-fraction "${MEMORY_SAFETY_FRACTION}")

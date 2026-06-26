@@ -103,6 +103,29 @@ def build_compute_parser() -> argparse.ArgumentParser:
     parser.add_argument("--threshold-max", type=float, default=25.0)
     parser.add_argument("--threshold-count", type=int, default=200)
     parser.add_argument(
+        "--raw-clumping-mode",
+        choices=["density", "hii-density", "electron-hii"],
+        default="density",
+        help=(
+            "Quantity used by raw/raw-volume clumping. density is the historical gas-density clumping; "
+            "hii-density computes clumping of n_HII; electron-hii computes Eq. 5-style <n_e n_HII>/(<n_e><n_HII>)."
+        ),
+    )
+    parser.add_argument(
+        "--raw-hii-source",
+        choices=["auto", "hii-fraction", "hi-fraction", "fully-ionized"],
+        default="auto",
+        help="How raw-clumping modes obtain the ionized hydrogen fraction.",
+    )
+    parser.add_argument(
+        "--raw-electron-source",
+        choices=["constant", "electron-abundance"],
+        default="constant",
+        help="Use a constant electron abundance or PartType0/ElectronAbundance for --raw-clumping-mode electron-hii.",
+    )
+    parser.add_argument("--raw-constant-electron-abundance", type=float, default=1.08)
+    parser.add_argument("--raw-hydrogen-mass-fraction", type=float, default=0.76)
+    parser.add_argument(
         "--sigma-bar-ion-cm2",
         type=float,
         help="Effective HI photoionization cross-section in cm^2; required by --backend raw-transmission.",
@@ -392,6 +415,10 @@ def _validate_compute_args(args: argparse.Namespace) -> None:
         raise ValueError("--progress-interval must be at least 1.")
     if getattr(args, "max_file_readers", 1) < 1:
         raise ValueError("--max-file-readers must be at least 1.")
+    if getattr(args, "raw_constant_electron_abundance", 1.08) <= 0:
+        raise ValueError("--raw-constant-electron-abundance must be positive.")
+    if getattr(args, "raw_hydrogen_mass_fraction", 0.76) <= 0:
+        raise ValueError("--raw-hydrogen-mass-fraction must be positive.")
     if args.backend not in {"raw", "raw-volume"}:
         if args.grid_size < 1:
             raise ValueError("--grid-size must be at least 1.")
@@ -401,6 +428,8 @@ def _validate_compute_args(args: argparse.Namespace) -> None:
         raise ValueError("raw backends are only valid with --particle-type gas.")
     if getattr(args, "mas", "CIC") != "CIC" and args.backend in {"raw", "raw-volume"}:
         raise ValueError("--mas TSC is only valid for gridded backends.")
+    if args.backend not in {"raw", "raw-volume"} and getattr(args, "raw_clumping_mode", "density") != "density":
+        raise ValueError("--raw-clumping-mode other than density is only valid for --backend raw or raw-volume.")
     if args.backend in {"raw", "raw-volume", "raw-transmission"} and (
         getattr(args, "target_particle_type", None)
         or getattr(args, "target_backend", None)
@@ -440,6 +469,7 @@ def _chunk_factory(args: argparse.Namespace, particle_type: str, radius_mode: st
         particle_type,
         radius_mode,
         getattr(args, "chunk_size", 1_000_000),
+        include_chemistry=particle_type == "gas" and getattr(args, "raw_clumping_mode", "density") != "density",
     )
 
 
@@ -678,6 +708,8 @@ def run_compute(args: argparse.Namespace) -> Path:
     if args.backend in {"raw", "raw-volume"}:
         thresholds = np.linspace(args.threshold_min, args.threshold_max, args.threshold_count)
         selected_load_mode, estimated_gb = _select_load_mode(args, "gas")
+        if args.raw_clumping_mode != "density" and selected_load_mode != "chunked":
+            selected_load_mode = "chunked"
         progress = _progress_callback(args)
         if progress:
             estimated_text = "unknown" if estimated_gb is None else f"{estimated_gb:.2f} GiB"
@@ -690,6 +722,11 @@ def run_compute(args: argparse.Namespace) -> Path:
                 metadata.lbox,
                 getattr(args, "chunk_size", 1_000_000),
                 volume_weighted=args.backend == "raw-volume",
+                clumping_mode=args.raw_clumping_mode,
+                hii_source=args.raw_hii_source,
+                electron_source=args.raw_electron_source,
+                constant_electron_abundance=args.raw_constant_electron_abundance,
+                hydrogen_mass_fraction=args.raw_hydrogen_mass_fraction,
                 progress=progress,
                 progress_interval=getattr(args, "progress_interval", 25),
             )
@@ -718,6 +755,8 @@ def run_compute(args: argparse.Namespace) -> Path:
                 )
             particle_metadata = {**gas_cells["metadata"], "load_mode": "full", "estimated_full_load_gb": estimated_gb}
         method = "legacy raw gas-cell density, cell weighted" if args.backend == "raw" else "raw gas-cell density, volume weighted"
+        if args.raw_clumping_mode != "density":
+            method = f"{method}; clumping target={args.raw_clumping_mode}"
         timings = {**load_timings, **{f"clumping_{key}": value for key, value in clumping_timings.items()}}
         timings["total"] = perf_counter() - total_t0
         parameters = {
@@ -736,6 +775,11 @@ def run_compute(args: argparse.Namespace) -> Path:
             "source_campaign": getattr(args, "source_campaign", None),
             "run_label": getattr(args, "run_label", None),
             "resource_size": getattr(args, "resource_size", None),
+            "raw_clumping_mode": args.raw_clumping_mode,
+            "raw_hii_source": args.raw_hii_source,
+            "raw_electron_source": args.raw_electron_source,
+            "raw_constant_electron_abundance": args.raw_constant_electron_abundance,
+            "raw_hydrogen_mass_fraction": args.raw_hydrogen_mass_fraction,
         }
         document = {
             "schema_version": 1,
