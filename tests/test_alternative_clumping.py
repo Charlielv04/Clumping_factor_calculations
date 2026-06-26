@@ -12,6 +12,7 @@ from clumping_factor.alternative_clumping import (
 from clumping_factor.alternative_clumping_cli import (
     build_alternative_clumping_parser,
     canonical_alternative_clumping_output_path,
+    plot_alternative_quantities,
     run_alternative_clumping,
 )
 from clumping_factor.cli import plot_main
@@ -231,3 +232,37 @@ def test_alternative_clumping_output_is_plot_compatible(tmp_path):
     plot_output = tmp_path / "plot.png"
     plot_main([str(output), "--output", str(plot_output)])
     assert plot_output.exists()
+
+
+def test_alternative_quantity_diagnostic_plot(tmp_path):
+    result = tmp_path / "eq13.json"
+    result.write_text(
+        json.dumps(
+            {
+                "calculation": "alternative_clumping_eq13_davies_2024",
+                "simulation": {"name": "Thesan-2", "snapshot": 80, "redshift": 5.5},
+                "thresholds": [-1.0, 0.0, 20.0],
+                "quantities": {
+                    "clumping_factor_eq13": [1.0, 2.0, 3.0],
+                    "n_gamma_cm3": [1e-6, 2e-6, 3e-6],
+                    "n_h_cm3": [1e-5, 2e-5, 3e-5],
+                    "x_hi_volume_weighted": [0.1, 0.2, 0.3],
+                    "x_hii_volume_weighted": [0.9, 0.8, 0.7],
+                    "ionized_fraction_factor": [0.81, 0.64, 0.49],
+                    "chi_e": [1.08, 1.08, 1.08],
+                    "lambda_mfp_pMpc_h": 5.0,
+                },
+                "diagnostics": {
+                    "clumping": {
+                        "selected_cell_fractions": [0.0, 0.5, 1.0],
+                        "selected_volume_fractions": [0.0, 0.4, 1.0],
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp_path / "diagnostics.png"
+    written = plot_alternative_quantities(result, output)
+    assert written == output
+    assert output.exists()

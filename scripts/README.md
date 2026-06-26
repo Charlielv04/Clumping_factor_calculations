@@ -121,6 +121,14 @@ GRID_SIZE=256 RADIUS_BINS=10 NCPUS=8 THREADS=8 MEM=32gb WALLTIME=08:00:00 QUEUE=
 bash scripts/submit_alternative_clumping_evolution_jobs.sh
 ```
 
+To inspect why an Eq. 13 curve rises or falls with overdensity, plot the individual equation inputs:
+
+```bash
+clumping-factor-alternative-plot \
+  results/thesan/Thesan-2/gas/alternative-grid-masked-gas-sphere/snapshot080_grid256/threads8_batch1_run001.json \
+  --output results/analysis/clumping/thesan/Thesan-2/snapshot080/gas/alternative-grid-masked-gas-sphere/eq13_inputs_vs_overdensity.png
+```
+
 ```bash
 GRIDS=512 MEM_512=8gb WALLTIME_512=08:00:00 NCPUS=2 \
 bash scripts/submit_clumping_jobs.sh

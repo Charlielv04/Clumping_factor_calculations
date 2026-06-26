@@ -162,3 +162,122 @@ def alternative_clumping_main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     output = run_alternative_clumping(args)
     print(f"Wrote alternative clumping result: {output}")
+
+
+def _quantity_array(document: dict, name: str) -> tuple[list[float], list[float]]:
+    import numpy as np
+
+    thresholds = np.asarray(document["thresholds"], dtype=np.float64)
+    raw = document["quantities"][name]
+    if isinstance(raw, (int, float)):
+        values = np.full(thresholds.shape, float(raw), dtype=np.float64)
+    else:
+        values = np.asarray([np.nan if value is None else value for value in raw], dtype=np.float64)
+    if values.shape != thresholds.shape:
+        raise ValueError(f"Quantity {name!r} must be scalar or match the threshold array length.")
+    return thresholds, values
+
+
+def plot_alternative_quantities(
+    result_path: str | Path,
+    output_path: str | Path,
+    x_min: float = -0.9,
+) -> Path:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    from .results import read_json_result
+
+    document = read_json_result(result_path)
+    if document.get("calculation") != "alternative_clumping_eq13_davies_2024":
+        raise ValueError("This diagnostic plot expects an alternative Eq. 13 clumping JSON result.")
+    thresholds = np.asarray(document["thresholds"], dtype=np.float64)
+    quantities = document.get("quantities", {})
+    diagnostics = document.get("diagnostics", {}).get("clumping", {})
+
+    panels: list[tuple[str, np.ndarray, str, bool]] = []
+    for key, label, logy in [
+        ("clumping_factor_eq13", "Eq. 13 clumping factor", True),
+        ("n_gamma_cm3", "n_gamma [cm^-3]", True),
+        ("n_h_cm3", "n_H [cm^-3]", True),
+        ("x_hi_volume_weighted", "volume-weighted x_HI", False),
+        ("x_hii_volume_weighted", "volume-weighted x_HII", False),
+        ("ionized_fraction_factor", "(1 - x_HI)^2", True),
+        ("chi_e", "chi_e", False),
+    ]:
+        if key in quantities:
+            _, values = _quantity_array(document, key)
+            panels.append((key, values, label, logy))
+    if "n_h_cm3" in quantities:
+        _, n_h = _quantity_array(document, "n_h_cm3")
+        panels.insert(3, ("n_h_cm3_squared", n_h**2, "n_H^2 [cm^-6]", True))
+    if "selected_cell_fractions" in diagnostics:
+        panels.append(
+            (
+                "selected_cell_fractions",
+                np.asarray(diagnostics["selected_cell_fractions"], dtype=np.float64),
+                "selected IGM cell fraction",
+                False,
+            )
+        )
+    if "selected_volume_fractions" in diagnostics:
+        panels.append(
+            (
+                "selected_volume_fractions",
+                np.asarray(diagnostics["selected_volume_fractions"], dtype=np.float64),
+                "selected IGM volume fraction",
+                False,
+            )
+        )
+
+    if not panels:
+        raise ValueError("No plottable Eq. 13 quantities found in result file.")
+
+    columns = 2
+    rows = int(np.ceil(len(panels) / columns))
+    fig, axes = plt.subplots(rows, columns, figsize=(12, max(3.2 * rows, 5)), squeeze=False)
+    axes_flat = axes.ravel()
+    for ax, (_key, values, label, logy) in zip(axes_flat, panels):
+        finite = np.isfinite(values)
+        ax.plot(thresholds[finite], values[finite], color="#1f77b4")
+        ax.set_xlim(left=x_min)
+        ax.set_xlabel("Overdensity threshold")
+        ax.set_ylabel(label)
+        if logy and np.any(values[finite] > 0):
+            ax.set_yscale("log")
+        ax.grid(True, alpha=0.35)
+    for ax in axes_flat[len(panels):]:
+        ax.axis("off")
+
+    sim = document.get("simulation", {}).get("name", "simulation")
+    snapshot = document.get("simulation", {}).get("snapshot", "?")
+    redshift = document.get("simulation", {}).get("redshift")
+    z_text = "" if redshift is None else f", z={float(redshift):.3f}"
+    mfp = quantities.get("lambda_mfp_pMpc_h")
+    mfp_text = "" if mfp is None else f", lambda_mfp={float(mfp):.3g} pMpc/h"
+    fig.suptitle(f"{sim} snapshot {int(snapshot):03d}{z_text}: Eq. 13 inputs vs overdensity{mfp_text}")
+    fig.tight_layout(rect=(0, 0, 1, 0.97))
+
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    return output
+
+
+def build_alternative_quantity_plot_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Plot Eq. 13 alternative-clumping input quantities versus overdensity.")
+    parser.add_argument("result", help="Alternative Eq. 13 JSON result.")
+    parser.add_argument("--output", required=True, help="PNG/PDF/etc. output path.")
+    parser.add_argument("--x-min", type=float, default=-0.9)
+    return parser
+
+
+def alternative_quantity_plot_main(argv: list[str] | None = None) -> None:
+    parser = build_alternative_quantity_plot_parser()
+    args = parser.parse_args(argv)
+    output = plot_alternative_quantities(args.result, args.output, x_min=args.x_min)
+    print(f"Wrote alternative quantity diagnostic plot: {output}")
