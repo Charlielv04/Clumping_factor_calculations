@@ -1,11 +1,20 @@
+"""One-pass diagnostics for the Davies THESAN clumping equations.
+
+This module streams native THESAN gas cells once and evaluates several
+volume-weighted equation checks for a set of simple raw-volume masks.  The
+calculation is intentionally separate from the production clumping-factor
+pipeline because it is a diagnostic tool: its job is to expose every quantity
+entering the Eq. 5 to Eq. 13 chain in one output table.
+"""
+
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
 from typing import Callable, Sequence
-import csv
 
 import numpy as np
 
@@ -23,15 +32,34 @@ from .results import resolve_simulation_name, write_json_result
 
 @dataclass(frozen=True)
 class EquationTestResult:
+    """Container for the complete machine-readable diagnostic document."""
+
     document: dict
 
 
-def read_redshift_table(path: str | Path, value_name: str) -> tuple[np.ndarray, np.ndarray]:
+def read_redshift_table(
+    path: str | Path,
+    value_name: str,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Read a two-column redshift table and return sorted finite values.
+
+    Parameters
+    ----------
+    path
+        ASCII table with redshift in the first column and the requested value
+        in the second column.
+    value_name
+        Human-readable name used in validation errors and metadata keys.
+    """
+
     rows = np.loadtxt(path, comments="#", dtype=np.float64)
     if rows.ndim == 1:
         rows = rows[None, :]
     if rows.shape[1] < 2:
-        raise ValueError(f"{value_name} table must contain at least two columns: redshift and value.")
+        raise ValueError(
+            f"{value_name} table must contain at least two columns: "
+            "redshift and value."
+        )
     z = np.asarray(rows[:, 0], dtype=np.float64)
     values = np.asarray(rows[:, 1], dtype=np.float64)
     valid = np.isfinite(z) & np.isfinite(values) & (values > 0)
@@ -41,7 +69,18 @@ def read_redshift_table(path: str | Path, value_name: str) -> tuple[np.ndarray, 
     return z[valid][order], values[valid][order]
 
 
-def interpolate_redshift_value(redshift: float, path: str | Path, value_name: str) -> tuple[float, dict]:
+def interpolate_redshift_value(
+    redshift: float,
+    path: str | Path,
+    value_name: str,
+) -> tuple[float, dict]:
+    """Interpolate a tabulated redshift-dependent scalar.
+
+    Values inside the table range are linearly interpolated in redshift.  Values
+    outside the table range are clamped to the nearest edge so late or early
+    snapshots still run with explicit provenance in the output metadata.
+    """
+
     z, values = read_redshift_table(path, value_name)
     if redshift < z[0]:
         value = float(values[0])
@@ -66,6 +105,12 @@ def interpolate_redshift_value(redshift: float, path: str | Path, value_name: st
 
 
 def alpha_b_hii_cm3_s(temperature_k: np.ndarray) -> np.ndarray:
+    """Return the case-B HII recombination coefficient in cgs units.
+
+    The approximation follows the same temperature scaling used in the Davies
+    equation tests, normalized at ``10^4 K``.
+    """
+
     temperature = np.asarray(temperature_k, dtype=np.float64)
     with np.errstate(divide="ignore", invalid="ignore"):
         alpha = ALPHA_B_HII_10000K_CM3_S * (temperature / 1.0e4) ** -0.7
@@ -74,18 +119,61 @@ def alpha_b_hii_cm3_s(temperature_k: np.ndarray) -> np.ndarray:
 
 
 def _finite_or_none(value: float) -> float | None:
+    """Convert non-finite floats to ``None`` for JSON output."""
+
     value = float(value)
     return value if np.isfinite(value) else None
 
 
-def _mask_names(overdensity_cuts: Sequence[float], ionized_cuts: Sequence[float]) -> list[str]:
+def _mask_names(
+    thresholds: Sequence[float],
+    ionized_cuts: Sequence[float],
+) -> list[str]:
+    """Build stable output names for each raw-volume selection."""
+
     names = ["all-gas"]
-    names.extend(f"Delta_lt_{float(cut):g}" for cut in overdensity_cuts)
+    names.extend(f"overdensity_lt_{float(threshold):g}" for threshold in thresholds)
     names.extend(f"xHII_gt_{float(cut):g}" for cut in ionized_cuts)
     return names
 
 
-def _empty_accumulators(mask_names: Sequence[str]) -> dict[str, dict[str, float | int]]:
+def _build_thresholds(
+    thresholds: Sequence[float] | None,
+    threshold_min: float,
+    threshold_max: float,
+    threshold_count: int,
+) -> np.ndarray:
+    """Return the overdensity-contrast thresholds used for the raw sweep."""
+
+    if thresholds is not None:
+        threshold_array = np.asarray(thresholds, dtype=np.float64)
+        if (
+            threshold_array.ndim != 1
+            or threshold_array.size == 0
+            or not np.all(np.isfinite(threshold_array))
+        ):
+            raise ValueError(
+                "thresholds must be a non-empty one-dimensional finite array."
+            )
+        return threshold_array
+
+    if threshold_count < 1:
+        raise ValueError("threshold_count must be at least 1.")
+    if threshold_min >= threshold_max:
+        raise ValueError("threshold_min must be less than threshold_max.")
+    return np.linspace(
+        float(threshold_min),
+        float(threshold_max),
+        int(threshold_count),
+        dtype=np.float64,
+    )
+
+
+def _empty_accumulators(
+    mask_names: Sequence[str],
+) -> dict[str, dict[str, float | int]]:
+    """Initialize volume-weighted running sums for every requested mask."""
+
     return {
         name: {
             "selected_cells": 0,
@@ -103,7 +191,14 @@ def _empty_accumulators(mask_names: Sequence[str]) -> dict[str, dict[str, float 
     }
 
 
-def _add_mask_values(acc: dict[str, float | int], selected: np.ndarray, values: dict[str, np.ndarray], volume: np.ndarray) -> None:
+def _add_mask_values(
+    acc: dict[str, float | int],
+    selected: np.ndarray,
+    values: dict[str, np.ndarray],
+    volume: np.ndarray,
+) -> None:
+    """Add one chunk of volume-weighted quantities to a mask accumulator."""
+
     if not np.any(selected):
         return
     selected_volume = volume[selected]
@@ -111,21 +206,71 @@ def _add_mask_values(acc: dict[str, float | int], selected: np.ndarray, values: 
     acc["selected_cells"] = int(acc["selected_cells"]) + int(np.count_nonzero(selected))
     acc["volume"] = float(acc["volume"]) + volume_sum
     for key, array in values.items():
-        acc[key] = float(acc[key]) + float(np.sum(array[selected] * selected_volume, dtype=np.float64))
+        acc[key] = float(acc[key]) + float(
+            np.sum(array[selected] * selected_volume, dtype=np.float64)
+        )
+
+
+def _add_threshold_sweep_values(
+    accumulators: dict[str, dict[str, float | int]],
+    thresholds: np.ndarray,
+    overdensity: np.ndarray,
+    values: dict[str, np.ndarray],
+    volume: np.ndarray,
+) -> None:
+    """Add one chunk to every overdensity threshold using cumulative sums."""
+
+    if thresholds.size == 0 or overdensity.size == 0:
+        return
+
+    order = np.argsort(overdensity)
+    overdensity_sorted = overdensity[order]
+    volume_sorted = volume[order]
+    volume_cumsum = np.cumsum(volume_sorted, dtype=np.float64)
+    value_cumsums = {
+        key: np.cumsum(array[order] * volume_sorted, dtype=np.float64)
+        for key, array in values.items()
+    }
+    indices = np.searchsorted(overdensity_sorted, thresholds, side="left")
+
+    for threshold, index in zip(thresholds, indices, strict=True):
+        if index == 0:
+            continue
+        name = f"overdensity_lt_{float(threshold):g}"
+        acc = accumulators[name]
+        acc["selected_cells"] = int(acc["selected_cells"]) + int(index)
+        acc["volume"] = float(acc["volume"]) + float(volume_cumsum[index - 1])
+        for key, cumsum in value_cumsums.items():
+            acc[key] = float(acc[key]) + float(cumsum[index - 1])
 
 
 def _require_positive(value: float | None, name: str) -> float:
+    """Validate that a required scalar is positive and finite."""
+
     if value is None or not np.isfinite(value) or value <= 0:
         raise ValueError(f"{name} must be positive and finite.")
     return float(value)
 
 
-def _resolve_gamma_hi(redshift: float, gamma_hi_s_1: float | None, gamma_hi_file: str | Path | None) -> tuple[float, dict, list[str]]:
+def _resolve_gamma_hi(
+    redshift: float,
+    gamma_hi_s_1: float | None,
+    gamma_hi_file: str | Path | None,
+) -> tuple[float, dict, list[str]]:
+    """Resolve ``Gamma_HI`` from either a scalar value or redshift table."""
+
     if gamma_hi_s_1 is not None and gamma_hi_file is not None:
         raise ValueError("Use either --gamma-hi-s-1 or --gamma-hi-file, not both.")
-    warnings = ["global scalar/table Gamma_HI was used; Eq. 6/7 are not cell-level local ionization tests"]
+    warnings = [
+        "global scalar/table Gamma_HI was used; Eq. 6/7 are not "
+        "cell-level local ionization tests"
+    ]
     if gamma_hi_s_1 is not None:
-        return _require_positive(gamma_hi_s_1, "gamma_hi_s_1"), {"GammaHI_source": "scalar"}, warnings
+        return (
+            _require_positive(gamma_hi_s_1, "gamma_hi_s_1"),
+            {"GammaHI_source": "scalar"},
+            warnings,
+        )
     if gamma_hi_file is not None:
         value, metadata = interpolate_redshift_value(redshift, gamma_hi_file, "GammaHI")
         metadata["GammaHI_source"] = "redshift_table"
@@ -133,16 +278,41 @@ def _resolve_gamma_hi(redshift: float, gamma_hi_s_1: float | None, gamma_hi_file
     raise ValueError("Either --gamma-hi-s-1 or --gamma-hi-file is required.")
 
 
-def _resolve_c_tilde(c_tilde_cm_s: float | None, reduced_speed_of_light_fraction: float | None) -> tuple[float, dict, list[str]]:
+def _resolve_c_tilde(
+    c_tilde_cm_s: float | None,
+    reduced_speed_of_light_fraction: float | None,
+) -> tuple[float, dict, list[str]]:
+    """Resolve the reduced speed of light used in the ``c_tilde`` tests."""
+
     if c_tilde_cm_s is not None and reduced_speed_of_light_fraction is not None:
-        raise ValueError("Use either --c-tilde-cm-s or --reduced-speed-of-light-fraction, not both.")
+        raise ValueError(
+            "Use either --c-tilde-cm-s or "
+            "--reduced-speed-of-light-fraction, not both."
+        )
     warnings = ["reduced speed of light was used for c_tilde outputs"]
     if c_tilde_cm_s is not None:
-        return _require_positive(c_tilde_cm_s, "c_tilde_cm_s"), {"c_tilde_source": "scalar_cm_s"}, warnings
+        return (
+            _require_positive(c_tilde_cm_s, "c_tilde_cm_s"),
+            {"c_tilde_source": "scalar_cm_s"},
+            warnings,
+        )
     if reduced_speed_of_light_fraction is not None:
-        fraction = _require_positive(reduced_speed_of_light_fraction, "reduced_speed_of_light_fraction")
-        return fraction * SPEED_OF_LIGHT_CM_S, {"c_tilde_source": "fraction_of_c", "reduced_speed_of_light_fraction": fraction}, warnings
-    raise ValueError("Either --reduced-speed-of-light-fraction or --c-tilde-cm-s is required.")
+        fraction = _require_positive(
+            reduced_speed_of_light_fraction,
+            "reduced_speed_of_light_fraction",
+        )
+        return (
+            fraction * SPEED_OF_LIGHT_CM_S,
+            {
+                "c_tilde_source": "fraction_of_c",
+                "reduced_speed_of_light_fraction": fraction,
+            },
+            warnings,
+        )
+    raise ValueError(
+        "Either --reduced-speed-of-light-fraction or --c-tilde-cm-s is "
+        "required."
+    )
 
 
 def compute_equation_tests(
@@ -156,7 +326,10 @@ def compute_equation_tests(
     c_tilde_cm_s: float | None = None,
     reduced_speed_of_light_fraction: float | None = None,
     photon_groups: Sequence[int] = (0,),
-    overdensity_cuts: Sequence[float] = (100.0,),
+    thresholds: Sequence[float] | None = None,
+    threshold_min: float = -1.0,
+    threshold_max: float = 25.0,
+    threshold_count: int = 200,
     ionized_cuts: Sequence[float] = (),
     chunk_size: int = 1_000_000,
     hydrogen_mass_fraction: float = 0.76,
@@ -165,6 +338,40 @@ def compute_equation_tests(
     progress: Callable[[str], None] | None = None,
     progress_interval: int = 10,
 ) -> EquationTestResult:
+    """Compute all raw-volume equation diagnostics in a single snapshot pass.
+
+    Parameters
+    ----------
+    base_path
+        Root directory containing the THESAN snapshot outputs.
+    snapshot
+        Snapshot number to inspect.
+    mfp_file
+        Redshift table for the mean free path in proper ``pMpc/h``.
+    sigma_hi_cm2
+        Hydrogen ionization cross section used to connect the mean free path
+        to a neutral hydrogen density.
+    temperature_file
+        Redshift table for the IGM temperature, used for the recombination
+        coefficient in the Eq. 5 recombination rate.
+    gamma_hi_s_1, gamma_hi_file
+        Mutually exclusive sources for the photoionization rate.
+    c_tilde_cm_s, reduced_speed_of_light_fraction
+        Mutually exclusive sources for the reduced-speed-of-light comparison.
+    photon_groups
+        THESAN ``PhotonDensity`` group indices to include in ``n_gamma``.
+    thresholds
+        Explicit overdensity-contrast thresholds.  If omitted, thresholds are
+        linearly spaced from ``threshold_min`` to ``threshold_max``.
+    threshold_min, threshold_max, threshold_count
+        Default overdensity-contrast sweep configuration.  The selected cells
+        satisfy ``Density / mean(Density) - 1 < threshold``.
+    ionized_cuts
+        Native gas-cell masks of the form ``x_HII > cut``.
+    progress
+        Optional callback for verbose status messages.
+    """
+
     import h5py
 
     if chunk_size < 1:
@@ -177,6 +384,12 @@ def compute_equation_tests(
     sigma_hi_cm2 = _require_positive(sigma_hi_cm2, "sigma_hi_cm2")
     if progress_interval < 1:
         raise ValueError("progress_interval must be at least 1.")
+    threshold_array = _build_thresholds(
+        thresholds,
+        threshold_min,
+        threshold_max,
+        threshold_count,
+    )
 
     total_t0 = perf_counter()
     warnings: list[str] = []
@@ -185,43 +398,88 @@ def compute_equation_tests(
 
     if progress:
         progress(f"inspecting snapshot {snapshot}")
+
+    # Snapshot metadata supplies the cosmology and unit conversions needed to
+    # express all equation terms in physical cgs units.
     metadata = read_snapshot_metadata(base_path, snapshot)
     if metadata.redshift is None or metadata.hubble_param is None:
-        raise ValueError("Equation tests require snapshot Redshift and HubbleParam metadata.")
+        raise ValueError(
+            "Equation tests require snapshot Redshift and HubbleParam "
+            "metadata."
+        )
     header = _read_header_cosmology(metadata.header_path)
     units = _snapshot_units(header, metadata)
     redshift = float(metadata.redshift)
     hubble_param = float(metadata.hubble_param)
     omega_baryon = float(header["omega_baryon"])
-    n_h_cosmic = _cosmic_mean_hydrogen_density_cm3(redshift, hubble_param, omega_baryon, hydrogen_mass_fraction)
+    n_h_cosmic = _cosmic_mean_hydrogen_density_cm3(
+        redshift,
+        hubble_param,
+        omega_baryon,
+        hydrogen_mass_fraction,
+    )
 
-    gamma_hi, gamma_metadata, gamma_warnings = _resolve_gamma_hi(redshift, gamma_hi_s_1, gamma_hi_file)
+    gamma_hi, gamma_metadata, gamma_warnings = _resolve_gamma_hi(
+        redshift,
+        gamma_hi_s_1,
+        gamma_hi_file,
+    )
     warnings.extend(gamma_warnings)
-    c_tilde, c_metadata, c_warnings = _resolve_c_tilde(c_tilde_cm_s, reduced_speed_of_light_fraction)
+    c_tilde, c_metadata, c_warnings = _resolve_c_tilde(
+        c_tilde_cm_s,
+        reduced_speed_of_light_fraction,
+    )
     warnings.extend(c_warnings)
-    temperature_igm_k, temperature_metadata = interpolate_redshift_value(redshift, temperature_file, "Tigm")
-    alpha_b_igm = float(alpha_b_hii_cm3_s(np.array([temperature_igm_k], dtype=np.float64))[0])
+
+    # The diagnostic now uses the tabulated IGM temperature rather than a
+    # per-cell gas temperature.  This keeps alpha_B fixed for a snapshot and
+    # matches the available THESAN post-processing products.
+    temperature_igm_k, temperature_metadata = interpolate_redshift_value(
+        redshift,
+        temperature_file,
+        "Tigm",
+    )
+    alpha_b_igm = float(
+        alpha_b_hii_cm3_s(np.array([temperature_igm_k], dtype=np.float64))[0]
+    )
     mfp_pmpc_h, mfp_metadata = interpolate_mfp(redshift, mfp_file)
     lambda_mfp_cm = mfp_pmpc_h / hubble_param * MPC_CM
-    warnings.append(f"MFP value was selected with {mfp_metadata['mfp_interpolation']} from the input table")
-    warnings.append(f"Tigm value was selected with {temperature_metadata['Tigm_interpolation']} from the input table")
+    warnings.append(
+        f"MFP value was selected with {mfp_metadata['mfp_interpolation']} "
+        "from the input table"
+    )
+    warnings.append(
+        "Tigm value was selected with "
+        f"{temperature_metadata['Tigm_interpolation']} from the input table"
+    )
     if gamma_metadata.get("GammaHI_source") == "redshift_table":
-        warnings.append(f"Gamma_HI value was selected with {gamma_metadata['GammaHI_interpolation']} from the input table")
+        warnings.append(
+            "Gamma_HI value was selected with "
+            f"{gamma_metadata['GammaHI_interpolation']} from the input table"
+        )
 
-    mask_names = _mask_names(overdensity_cuts, ionized_cuts)
+    mask_names = _mask_names(threshold_array, ionized_cuts)
     accumulators = _empty_accumulators(mask_names)
     expected_count = 0
     for path in snapshot_file_paths(base_path, snapshot):
         with h5py.File(path, "r") as handle:
-            expected_count += int(handle["PartType0"]["Density"].shape[0]) if "PartType0" in handle else 0
+            if "PartType0" in handle:
+                expected_count += int(handle["PartType0"]["Density"].shape[0])
 
     if progress:
         progress(
             f"streaming {expected_count:,} gas cells once; masks={len(mask_names)}, "
-            f"photon_groups={list(groups)}, lambda_mfp={mfp_pmpc_h:.6g} pMpc/h"
+            f"thresholds={threshold_array.size}, photon_groups={list(groups)}, "
+            f"lambda_mfp={mfp_pmpc_h:.6g} pMpc/h"
         )
 
-    required = {"Density", "Masses", "HI_Fraction", "ElectronAbundance", "PhotonDensity"}
+    required = {
+        "Density",
+        "Masses",
+        "HI_Fraction",
+        "ElectronAbundance",
+        "PhotonDensity",
+    }
     input_count = valid_count = dropped_count = chunk_count = 0
     total_volume = 0.0
     missing_hydrogen_abundance = False
@@ -234,9 +492,18 @@ def compute_equation_tests(
             gas = handle["PartType0"]
             missing = sorted(required.difference(gas.keys()))
             if missing:
-                raise ValueError(f"{path} is missing required PartType0 datasets: {', '.join(missing)}.")
-            if gas["PhotonDensity"].ndim != 2 or gas["PhotonDensity"].shape[1] <= max(groups):
-                raise ValueError("PhotonDensity must be two-dimensional with the requested photon groups.")
+                raise ValueError(
+                    f"{path} is missing required PartType0 datasets: "
+                    f"{', '.join(missing)}."
+                )
+            if (
+                gas["PhotonDensity"].ndim != 2
+                or gas["PhotonDensity"].shape[1] <= max(groups)
+            ):
+                raise ValueError(
+                    "PhotonDensity must be two-dimensional with the requested "
+                    "photon groups."
+                )
             count = int(gas["Density"].shape[0])
             if progress:
                 progress(f"file {file_index + 1}: {path.name}, {count:,} gas cells")
@@ -247,10 +514,23 @@ def compute_equation_tests(
                 density_code = np.asarray(gas["Density"][start:stop], dtype=np.float64)
                 masses_code = np.asarray(gas["Masses"][start:stop], dtype=np.float64)
                 x_hi = np.asarray(gas["HI_Fraction"][start:stop], dtype=np.float64)
-                electron_abundance = np.asarray(gas["ElectronAbundance"][start:stop], dtype=np.float64)
-                photon_density_code = np.asarray(gas["PhotonDensity"][start:stop, groups], dtype=np.float64)
-                if "GFM_Metals" in gas and gas["GFM_Metals"].ndim == 2 and gas["GFM_Metals"].shape[1] >= 1:
-                    hydrogen_fraction = np.asarray(gas["GFM_Metals"][start:stop, 0], dtype=np.float64)
+                electron_abundance = np.asarray(
+                    gas["ElectronAbundance"][start:stop],
+                    dtype=np.float64,
+                )
+                photon_density_code = np.asarray(
+                    gas["PhotonDensity"][start:stop, groups],
+                    dtype=np.float64,
+                )
+                if (
+                    "GFM_Metals" in gas
+                    and gas["GFM_Metals"].ndim == 2
+                    and gas["GFM_Metals"].shape[1] >= 1
+                ):
+                    hydrogen_fraction = np.asarray(
+                        gas["GFM_Metals"][start:stop, 0],
+                        dtype=np.float64,
+                    )
                 else:
                     hydrogen_fraction = np.full_like(density_code, float(hydrogen_mass_fraction))
                     missing_hydrogen_abundance = True
@@ -274,6 +554,8 @@ def compute_equation_tests(
                 if not np.any(valid):
                     continue
 
+                # Apply validation before unit conversion so corrupted cells do
+                # not enter any mask-specific volume-weighted average.
                 density_code = density_code[valid]
                 masses_code = masses_code[valid]
                 x_hi = x_hi[valid]
@@ -281,6 +563,9 @@ def compute_equation_tests(
                 photon_density_code = photon_density_code[valid]
                 hydrogen_fraction = hydrogen_fraction[valid]
 
+                # Native cell volumes are used only as weights.  Densities and
+                # photon densities are converted to physical cgs units before
+                # the equation terms are accumulated.
                 volume = masses_code / density_code
                 total_volume += float(np.sum(volume, dtype=np.float64))
                 density_g_cm3 = density_code * units["density_unit_g_cm3"]
@@ -290,8 +575,11 @@ def compute_equation_tests(
                 n_hii = x_hii * n_h
                 n_e = electron_abundance * n_h
                 n_gamma = np.sum(photon_density_code, axis=1) * units["photon_density_unit_cm3"]
-                delta = n_h / n_h_cosmic
+                overdensity = n_h / n_h_cosmic - 1.0
 
+                # Store the integrands needed by every equation.  The helper
+                # below multiplies each array by the cell volume and adds it to
+                # the chosen mask accumulator.
                 values = {
                     "n_h": n_h,
                     "n_hi": n_hi,
@@ -302,29 +590,58 @@ def compute_equation_tests(
                     "n_hi_gamma": n_hi * gamma_hi,
                     "alpha_ne_nhii": alpha_b_igm * n_e * n_hii,
                 }
-                _add_mask_values(accumulators["all-gas"], np.ones_like(n_h, dtype=bool), values, volume)
-                for cut in overdensity_cuts:
-                    _add_mask_values(accumulators[f"Delta_lt_{float(cut):g}"], delta < float(cut), values, volume)
+                _add_mask_values(
+                    accumulators["all-gas"],
+                    np.ones_like(n_h, dtype=bool),
+                    values,
+                    volume,
+                )
+                _add_threshold_sweep_values(
+                    accumulators,
+                    threshold_array,
+                    overdensity,
+                    values,
+                    volume,
+                )
                 for cut in ionized_cuts:
-                    _add_mask_values(accumulators[f"xHII_gt_{float(cut):g}"], x_hii > float(cut), values, volume)
+                    _add_mask_values(
+                        accumulators[f"xHII_gt_{float(cut):g}"],
+                        x_hii > float(cut),
+                        values,
+                        volume,
+                    )
 
-                if progress and (chunk_count % progress_interval == 0 or input_count >= expected_count):
+                if progress and (
+                    chunk_count % progress_interval == 0
+                    or input_count >= expected_count
+                ):
                     elapsed = perf_counter() - total_t0
                     rate = input_count / elapsed if elapsed > 0 else 0.0
                     remaining = max(expected_count - input_count, 0)
                     eta = remaining / rate if rate > 0 else np.nan
-                    eta_text = "unknown" if not np.isfinite(eta) else f"{eta / 60.0:.1f} min"
+                    eta_text = (
+                        "unknown"
+                        if not np.isfinite(eta)
+                        else f"{eta / 60.0:.1f} min"
+                    )
                     progress(
                         f"processed {input_count:,}/{expected_count:,} cells "
-                        f"({100.0 * input_count / expected_count:.1f}%), valid {valid_count:,}, ETA {eta_text}"
+                        f"({100.0 * input_count / expected_count:.1f}%), "
+                        f"valid {valid_count:,}, ETA {eta_text}"
                     )
         if progress:
-            progress(f"finished file {file_index + 1} in {perf_counter() - file_t0:.1f}s")
+            progress(
+                f"finished file {file_index + 1} in "
+                f"{perf_counter() - file_t0:.1f}s"
+            )
     stream_seconds = perf_counter() - field_validate_t0
     if valid_count == 0 or total_volume <= 0:
         raise ValueError("No valid gas cells were found.")
     if missing_hydrogen_abundance:
-        warnings.append("GFM_Metals[:,0] was missing for at least one chunk; fallback hydrogen mass fraction was used")
+        warnings.append(
+            "GFM_Metals[:,0] was missing for at least one chunk; fallback "
+            "hydrogen mass fraction was used"
+        )
 
     rows = []
     alpha_b4 = ALPHA_B_HII_10000K_CM3_S
@@ -350,25 +667,103 @@ def compute_equation_tests(
         if volume <= 0:
             for key in [
                 "nH_V", "nHI_V", "nHII_V", "ne_V", "nGamma_V", "R_rec", "R_ion", "R_gamma_c",
-                "R_gamma_ctilde", "C5", "C5_neHII", "C7", "C8", "C13_c", "C13_ctilde",
-                "Q6", "Q12_c", "Q12_ctilde", "C7_over_C5", "C8_over_C7", "C13c_over_C5",
+                "R_gamma_ctilde", "C5", "C5_paper_actual", "C5_chi_nH2",
+                "C5_neHII", "C7", "C7_paper_actual", "C7_chi_nH2", "C8",
+                "C8_corrected_actual", "C8_corrected_chi_nH2",
+                "C8_paper_literal_actual", "C8_paper_literal_chi_nH2",
+                "C13_c", "C13_ctilde", "C13_c_actual", "C13_ctilde_actual",
+                "C13_c_chi_nH2", "C13_ctilde_chi_nH2", "Q6", "Q12_c",
+                "Q12_ctilde", "C7_over_C5", "C8_over_C7", "C13c_over_C5",
                 "C13ctilde_over_C5", "nHI_mfp_over_nHI_V",
             ]:
                 row[key] = np.nan
             rows.append(row)
             continue
-        means = {key: float(acc[key]) / volume for key in ["n_h", "n_hi", "n_hii", "n_e", "n_gamma", "n_e_n_hii", "n_hi_gamma", "alpha_ne_nhii"]}
+
+        # Convert the accumulated volume integrals into volume-weighted means.
+        # We keep two denominator families:
+        #   actual: alpha_B(T) * <n_e> * <n_HII>, the Eq. 5 definition;
+        #   chi_nH2: alpha_B(10^4 K) * chi_e * <n_H>^2, the older shortcut.
+        mean_keys = [
+            "n_h",
+            "n_hi",
+            "n_hii",
+            "n_e",
+            "n_gamma",
+            "n_e_n_hii",
+            "n_hi_gamma",
+            "alpha_ne_nhii",
+        ]
+        means = {key: float(acc[key]) / volume for key in mean_keys}
         r_rec = means["alpha_ne_nhii"]
         r_ion = means["n_hi_gamma"]
         r_gamma_c = means["n_gamma"] * SPEED_OF_LIGHT_CM_S / lambda_mfp_cm
         r_gamma_ctilde = means["n_gamma"] * c_tilde / lambda_mfp_cm
-        denominator = alpha_b4 * chi_e * means["n_h"] ** 2
-        c5 = r_rec / denominator if denominator > 0 else np.nan
-        c7 = r_ion / denominator if denominator > 0 else np.nan
-        c8 = gamma_hi / (lambda_mfp_cm * sigma_hi_cm2 * denominator) if denominator > 0 else np.nan
-        c13_c = r_gamma_c / denominator if denominator > 0 else np.nan
-        c13_ctilde = r_gamma_ctilde / denominator if denominator > 0 else np.nan
-        c5_nehii = means["n_e_n_hii"] / (means["n_e"] * means["n_hii"]) if means["n_e"] > 0 and means["n_hii"] > 0 else np.nan
+        denominator_actual = alpha_b_igm * means["n_e"] * means["n_hii"]
+        denominator_chi_nh2 = alpha_b4 * chi_e * means["n_h"] ** 2
+
+        c5_paper_actual = (
+            r_rec / denominator_actual
+            if denominator_actual > 0
+            else np.nan
+        )
+        c5_chi_nh2 = (
+            r_rec / denominator_chi_nh2
+            if denominator_chi_nh2 > 0
+            else np.nan
+        )
+        c7_paper_actual = (
+            r_ion / denominator_actual
+            if denominator_actual > 0
+            else np.nan
+        )
+        c7_chi_nh2 = (
+            r_ion / denominator_chi_nh2
+            if denominator_chi_nh2 > 0
+            else np.nan
+        )
+        r_mfp_corrected = gamma_hi / (lambda_mfp_cm * sigma_hi_cm2)
+        r_mfp_paper_literal = gamma_hi * lambda_mfp_cm * sigma_hi_cm2
+        c8_corrected_actual = (
+            r_mfp_corrected / denominator_actual
+            if denominator_actual > 0
+            else np.nan
+        )
+        c8_corrected_chi_nh2 = (
+            r_mfp_corrected / denominator_chi_nh2
+            if denominator_chi_nh2 > 0
+            else np.nan
+        )
+        c8_paper_literal_actual = (
+            r_mfp_paper_literal / denominator_actual
+            if denominator_actual > 0
+            else np.nan
+        )
+        c8_paper_literal_chi_nh2 = (
+            r_mfp_paper_literal / denominator_chi_nh2
+            if denominator_chi_nh2 > 0
+            else np.nan
+        )
+        c13_c_actual = (
+            r_gamma_c / denominator_actual
+            if denominator_actual > 0
+            else np.nan
+        )
+        c13_ctilde_actual = (
+            r_gamma_ctilde / denominator_actual
+            if denominator_actual > 0
+            else np.nan
+        )
+        c13_c_chi_nh2 = (
+            r_gamma_c / denominator_chi_nh2
+            if denominator_chi_nh2 > 0
+            else np.nan
+        )
+        c13_ctilde_chi_nh2 = (
+            r_gamma_ctilde / denominator_chi_nh2
+            if denominator_chi_nh2 > 0
+            else np.nan
+        )
         row.update(
             {
                 "nH_V": means["n_h"],
@@ -380,21 +775,53 @@ def compute_equation_tests(
                 "R_ion": r_ion,
                 "R_gamma_c": r_gamma_c,
                 "R_gamma_ctilde": r_gamma_ctilde,
-                "C5": c5,
-                "C5_neHII": c5_nehii,
-                "C7": c7,
-                "C8": c8,
-                "C13_c": c13_c,
-                "C13_ctilde": c13_ctilde,
+                "C5": c5_paper_actual,
+                "C5_paper_actual": c5_paper_actual,
+                "C5_chi_nH2": c5_chi_nh2,
+                "C5_neHII": c5_paper_actual,
+                "C7": c7_paper_actual,
+                "C7_paper_actual": c7_paper_actual,
+                "C7_chi_nH2": c7_chi_nh2,
+                "C8": c8_corrected_actual,
+                "C8_corrected_actual": c8_corrected_actual,
+                "C8_corrected_chi_nH2": c8_corrected_chi_nh2,
+                "C8_paper_literal_actual": c8_paper_literal_actual,
+                "C8_paper_literal_chi_nH2": c8_paper_literal_chi_nh2,
+                "C13_c": c13_c_actual,
+                "C13_ctilde": c13_ctilde_actual,
+                "C13_c_actual": c13_c_actual,
+                "C13_ctilde_actual": c13_ctilde_actual,
+                "C13_c_chi_nH2": c13_c_chi_nh2,
+                "C13_ctilde_chi_nH2": c13_ctilde_chi_nh2,
                 "Q6": r_ion / r_rec if r_rec > 0 else np.nan,
                 "Q12_c": r_gamma_c / r_rec if r_rec > 0 else np.nan,
                 "Q12_ctilde": r_gamma_ctilde / r_rec if r_rec > 0 else np.nan,
-                "C7_over_C5": c7 / c5 if c5 > 0 else np.nan,
-                "C8_over_C7": c8 / c7 if c7 > 0 else np.nan,
-                "C13c_over_C5": c13_c / c5 if c5 > 0 else np.nan,
-                "C13ctilde_over_C5": c13_ctilde / c5 if c5 > 0 else np.nan,
+                "C7_over_C5": (
+                    c7_paper_actual / c5_paper_actual
+                    if c5_paper_actual > 0
+                    else np.nan
+                ),
+                "C8_over_C7": (
+                    c8_corrected_actual / c7_paper_actual
+                    if c7_paper_actual > 0
+                    else np.nan
+                ),
+                "C13c_over_C5": (
+                    c13_c_actual / c5_paper_actual
+                    if c5_paper_actual > 0
+                    else np.nan
+                ),
+                "C13ctilde_over_C5": (
+                    c13_ctilde_actual / c5_paper_actual
+                    if c5_paper_actual > 0
+                    else np.nan
+                ),
                 "nHI_mfp": n_hi_mfp,
-                "nHI_mfp_over_nHI_V": n_hi_mfp / means["n_hi"] if means["n_hi"] > 0 else np.nan,
+                "nHI_mfp_over_nHI_V": (
+                    n_hi_mfp / means["n_hi"]
+                    if means["n_hi"] > 0
+                    else np.nan
+                ),
             }
         )
         rows.append(row)
@@ -406,6 +833,12 @@ def compute_equation_tests(
                 f"C5={row['C5']:.4g}, C13_c={row['C13_c']:.4g}, Q12_c={row['Q12_c']:.4g}"
             )
 
+    threshold_rows = [
+        row
+        for row in rows
+        if str(row["mask_name"]).startswith("overdensity_lt_")
+    ]
+
     document = {
         "schema_version": 1,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -415,16 +848,24 @@ def compute_equation_tests(
             "base_path": str(base_path),
             "snapshot": int(snapshot),
             "redshift": redshift,
-            "scale_factor": float(metadata.scale_factor) if metadata.scale_factor is not None else None,
+            "scale_factor": (
+                float(metadata.scale_factor)
+                if metadata.scale_factor is not None
+                else None
+            ),
             "hubble_param": hubble_param,
             "omega_baryon": float(omega_baryon),
         },
         "parameters": {
             "chunk_size": int(chunk_size),
             "photon_groups": list(groups),
-            "overdensity_cuts": [float(cut) for cut in overdensity_cuts],
+            "threshold_min": float(threshold_array[0]),
+            "threshold_max": float(threshold_array[-1]),
+            "threshold_count": int(threshold_array.size),
             "ionized_cuts": [float(cut) for cut in ionized_cuts],
-            "overdensity_definition": "Delta = n_H / cosmic_mean_n_H",
+            "overdensity_definition": "n_H / cosmic_mean_n_H - 1",
+            "threshold_selection": "raw gas cells below overdensity threshold",
+            "default_clumping_factor": "C5_paper_actual",
             "hydrogen_mass_fraction_fallback": float(hydrogen_mass_fraction),
             "chi_e_denominator": float(chi_e),
             "alpha_B_10000_cm3_s": float(alpha_b4),
@@ -441,10 +882,29 @@ def compute_equation_tests(
             "recombination_coefficient": "cm^3 s^-1",
             "rates": "cm^-3 s^-1",
             "length": "cm",
-            "volume_code": "(ckpc/h)^3 physical-converted only through density units; masks use cell volumes as weights",
+            "volume_code": (
+                "(ckpc/h)^3 physical-converted only through density units; "
+                "masks use cell volumes as weights"
+            ),
         },
+        "thresholds": threshold_array.tolist(),
+        "clumping_factors": [
+            _finite_or_none(row["C5_paper_actual"])
+            for row in threshold_rows
+        ],
+        "clumping_factor_quantity": "C5_paper_actual",
         "warnings": warnings,
-        "rows": [{key: _finite_or_none(value) if isinstance(value, (float, np.floating)) else value for key, value in row.items()} for row in rows],
+        "rows": [
+            {
+                key: (
+                    _finite_or_none(value)
+                    if isinstance(value, (float, np.floating))
+                    else value
+                )
+                for key, value in row.items()
+            }
+            for row in rows
+        ],
         "diagnostics": {
             "expected_gas_cell_count": int(expected_count),
             "input_count": int(input_count),
@@ -456,12 +916,20 @@ def compute_equation_tests(
             "photon_density_unit_cm3": float(units["photon_density_unit_cm3"]),
             "n_h_cosmic_mean_cm3": float(n_h_cosmic),
         },
-        "timings": {"stream_snapshot": stream_seconds, "total": perf_counter() - total_t0},
+        "timings": {
+            "stream_snapshot": stream_seconds,
+            "total": perf_counter() - total_t0,
+        },
     }
     return EquationTestResult(document=document)
 
 
-def write_equation_tests_result(result: EquationTestResult, output_path: str | Path) -> tuple[Path, Path]:
+def write_equation_tests_result(
+    result: EquationTestResult,
+    output_path: str | Path,
+) -> tuple[Path, Path]:
+    """Write the diagnostic document as JSON plus a flat CSV row table."""
+
     output = write_json_result(result.document, output_path)
     csv_output = output.with_suffix(".csv")
     rows = result.document["rows"]

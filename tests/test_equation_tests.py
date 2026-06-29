@@ -76,7 +76,7 @@ def test_equation_tests_compute_expected_formulas(tmp_path):
         temperature_file=_write_tigm(tmp_path / "Tigm_Thesan1.dat"),
         gamma_hi_s_1=1.0e-12,
         reduced_speed_of_light_fraction=0.1,
-        overdensity_cuts=[1e9],
+        thresholds=[1e9],
         ionized_cuts=[0.7],
         photon_groups=[0],
         chunk_size=2,
@@ -85,14 +85,26 @@ def test_equation_tests_compute_expected_formulas(tmp_path):
     rows = {row["mask_name"]: row for row in result["rows"]}
     all_gas = rows["all-gas"]
     assert all_gas["selected_cells"] == 3
-    assert rows["Delta_lt_1e+09"]["selected_cells"] == 3
+    assert rows["overdensity_lt_1e+09"]["selected_cells"] == 3
     assert rows["xHII_gt_0.7"]["selected_cells"] == 2
     assert np.isclose(all_gas["R_ion"], all_gas["nHI_V"] * 1.0e-12)
-    assert np.isclose(all_gas["R_gamma_c"], all_gas["nGamma_V"] * SPEED_OF_LIGHT_CM_S / all_gas["lambda_mfp_cm"])
-    denominator = ALPHA_B_HII_10000K_CM3_S * 1.08 * all_gas["nH_V"] ** 2
-    assert np.isclose(all_gas["C5"], all_gas["R_rec"] / denominator)
-    assert np.isclose(all_gas["C7"], all_gas["R_ion"] / denominator)
-    assert np.isclose(all_gas["C13_ctilde"], all_gas["R_gamma_ctilde"] / denominator)
+    assert np.isclose(
+        all_gas["R_gamma_c"],
+        all_gas["nGamma_V"] * SPEED_OF_LIGHT_CM_S / all_gas["lambda_mfp_cm"],
+    )
+    actual_denominator = (
+        ALPHA_B_HII_10000K_CM3_S * all_gas["ne_V"] * all_gas["nHII_V"]
+    )
+    shortcut_denominator = ALPHA_B_HII_10000K_CM3_S * 1.08 * all_gas["nH_V"] ** 2
+    assert np.isclose(all_gas["C5"], all_gas["R_rec"] / actual_denominator)
+    assert np.isclose(all_gas["C5_chi_nH2"], all_gas["R_rec"] / shortcut_denominator)
+    assert np.isclose(all_gas["C7"], all_gas["R_ion"] / actual_denominator)
+    assert np.isclose(
+        all_gas["C13_ctilde"],
+        all_gas["R_gamma_ctilde"] / actual_denominator,
+    )
+    assert result["thresholds"] == [1e9]
+    assert result["clumping_factors"] == [rows["overdensity_lt_1e+09"]["C5"]]
     assert "global scalar/table Gamma_HI" in result["warnings"][0]
 
 
@@ -169,7 +181,15 @@ def test_equation_tests_requires_gamma_and_temperature_table(tmp_path):
         raise AssertionError("missing Gamma_HI should fail")
 
     try:
-        compute_equation_tests(base, 80, mfp, sigma_hi_cm2=6.3e-18, temperature_file=tmp_path / "missing_tigm.dat", gamma_hi_s_1=1e-12, reduced_speed_of_light_fraction=0.1)
+        compute_equation_tests(
+            base,
+            80,
+            mfp,
+            sigma_hi_cm2=6.3e-18,
+            temperature_file=tmp_path / "missing_tigm.dat",
+            gamma_hi_s_1=1e-12,
+            reduced_speed_of_light_fraction=0.1,
+        )
     except OSError:
         pass
     else:
@@ -181,14 +201,29 @@ def test_equation_tests_requires_sigma_and_reduced_c(tmp_path):
     mfp = _write_mfp(tmp_path / "mfp.dat")
     tigm = _write_tigm(tmp_path / "Tigm_Thesan1.dat")
     try:
-        compute_equation_tests(base, 80, mfp, sigma_hi_cm2=0.0, temperature_file=tigm, gamma_hi_s_1=1e-12, reduced_speed_of_light_fraction=0.1)
+        compute_equation_tests(
+            base,
+            80,
+            mfp,
+            sigma_hi_cm2=0.0,
+            temperature_file=tigm,
+            gamma_hi_s_1=1e-12,
+            reduced_speed_of_light_fraction=0.1,
+        )
     except ValueError as exc:
         assert "sigma_hi_cm2" in str(exc)
     else:
         raise AssertionError("bad sigma should fail")
 
     try:
-        compute_equation_tests(base, 80, mfp, sigma_hi_cm2=6.3e-18, temperature_file=tigm, gamma_hi_s_1=1e-12)
+        compute_equation_tests(
+            base,
+            80,
+            mfp,
+            sigma_hi_cm2=6.3e-18,
+            temperature_file=tigm,
+            gamma_hi_s_1=1e-12,
+        )
     except ValueError as exc:
         assert "reduced-speed-of-light" in str(exc) or "c-tilde" in str(exc)
     else:
