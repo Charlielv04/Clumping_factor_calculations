@@ -151,6 +151,54 @@ def build_compute_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def build_eq5_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Compute Eq. 5 ionization-aware raw gas clumping curves.")
+    parser.add_argument("--base-path", default="./tng100-3/output")
+    parser.add_argument("--simulation-name")
+    parser.add_argument("--snapshot", type=int, default=98)
+    parser.add_argument("--backend", choices=["raw", "raw-volume"], default="raw-volume")
+    parser.add_argument(
+        "--mode",
+        "--raw-clumping-mode",
+        dest="raw_clumping_mode",
+        choices=["electron-hii", "hii-density"],
+        default="electron-hii",
+        help="electron-hii computes <n_e n_HII>/(<n_e><n_HII>); hii-density computes <n_HII^2>/<n_HII>^2.",
+    )
+    parser.add_argument(
+        "--hii-source",
+        "--raw-hii-source",
+        dest="raw_hii_source",
+        choices=["auto", "hii-fraction", "hi-fraction", "fully-ionized"],
+        default="auto",
+    )
+    parser.add_argument(
+        "--electron-source",
+        "--raw-electron-source",
+        dest="raw_electron_source",
+        choices=["constant", "electron-abundance"],
+        default="electron-abundance",
+    )
+    parser.add_argument("--constant-electron-abundance", "--raw-constant-electron-abundance", dest="raw_constant_electron_abundance", type=float, default=1.08)
+    parser.add_argument("--hydrogen-mass-fraction", "--raw-hydrogen-mass-fraction", dest="raw_hydrogen_mass_fraction", type=float, default=0.76)
+    parser.add_argument("--threshold-min", type=float, default=-1.0)
+    parser.add_argument("--threshold-max", type=float, default=25.0)
+    parser.add_argument("--threshold-count", type=int, default=200)
+    parser.add_argument("--load-mode", choices=["auto", "full", "chunked"], default="chunked")
+    parser.add_argument("--chunk-size", type=int, default=1_000_000)
+    parser.add_argument("--max-full-load-gb", type=float, default=16.0)
+    parser.add_argument("--radius-mode", choices=["sphere", "cube"], default="sphere")
+    parser.add_argument("--output")
+    parser.add_argument("--output-dir", default="results")
+    parser.add_argument("--threads", type=int, default=1)
+    parser.add_argument("--source-campaign")
+    parser.add_argument("--run-label")
+    parser.add_argument("--resource-size")
+    parser.add_argument("--progress-interval", type=int, default=25)
+    parser.add_argument("--verbose", action="store_true")
+    return parser
+
+
 def build_plot_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Plot clumping diagnostics from JSON result files.")
     parser.add_argument("results", nargs="+", help="JSON result files to plot.")
@@ -428,6 +476,12 @@ def _validate_compute_args(args: argparse.Namespace) -> None:
         raise ValueError("raw backends are only valid with --particle-type gas.")
     if getattr(args, "mas", "CIC") != "CIC" and args.backend in {"raw", "raw-volume"}:
         raise ValueError("--mas TSC is only valid for gridded backends.")
+    if (
+        args.backend in {"raw", "raw-volume"}
+        and getattr(args, "raw_clumping_mode", "density") != "density"
+        and not getattr(args, "_allow_raw_ionization_clumping", False)
+    ):
+        raise ValueError("Use clumping-eq5 for n_HII or electron-HII raw clumping modes.")
     if args.backend not in {"raw", "raw-volume"} and getattr(args, "raw_clumping_mode", "density") != "density":
         raise ValueError("--raw-clumping-mode other than density is only valid for --backend raw or raw-volume.")
     if args.backend in {"raw", "raw-volume", "raw-transmission"} and (
@@ -487,6 +541,172 @@ def _progress_callback(args: argparse.Namespace):
         print(f"[clumping {elapsed:8.1f}s] {message}", file=sys.stderr, flush=True)
 
     return progress
+
+
+def _raw_clumping_mode(args: argparse.Namespace) -> str:
+    return getattr(args, "raw_clumping_mode", "density")
+
+
+def _raw_hii_source(args: argparse.Namespace) -> str:
+    return getattr(args, "raw_hii_source", "auto")
+
+
+def _raw_electron_source(args: argparse.Namespace) -> str:
+    return getattr(args, "raw_electron_source", "constant")
+
+
+def _raw_constant_electron_abundance(args: argparse.Namespace) -> float:
+    return float(getattr(args, "raw_constant_electron_abundance", 1.08))
+
+
+def _raw_hydrogen_mass_fraction(args: argparse.Namespace) -> float:
+    return float(getattr(args, "raw_hydrogen_mass_fraction", 0.76))
+
+
+def _compute_raw_density_clumping(args, thresholds, selected_load_mode, estimated_gb, progress):
+    if selected_load_mode == "chunked":
+        metadata = _read_snapshot_metadata(args.base_path, args.snapshot)
+        clumping_factors, clumping_timings, clumping_diagnostics = _raw_gas_clumping_sweep_chunked(
+            thresholds,
+            _chunk_factory(args, "gas", args.radius_mode),
+            metadata.lbox,
+            getattr(args, "chunk_size", 1_000_000),
+            volume_weighted=args.backend == "raw-volume",
+            progress=progress,
+            progress_interval=getattr(args, "progress_interval", 25),
+        )
+        load_timings = {"load_data": clumping_timings.get("chunk_summary", 0.0)}
+        particle_metadata = {
+            "load_mode": "chunked",
+            "estimated_full_load_gb": estimated_gb,
+            "valid_count": clumping_diagnostics["valid_count"],
+            "dropped_count": clumping_diagnostics["dropped_count"],
+            "chunk_count": clumping_diagnostics["chunk_count"],
+        }
+        return selected_load_mode, clumping_factors, clumping_timings, clumping_diagnostics, particle_metadata, load_timings
+
+    gas_cells, load_timings = _load_tng_gas_cells(args.base_path, args.snapshot, verbose=args.verbose)
+    if args.backend == "raw":
+        clumping_factors, clumping_timings, clumping_diagnostics = _raw_gas_clumping_sweep(
+            thresholds,
+            gas_cells["density"],
+            gas_cells["rho_mean"],
+        )
+    else:
+        clumping_factors, clumping_timings, clumping_diagnostics = _raw_gas_volume_weighted_clumping_sweep(
+            thresholds,
+            gas_cells["density"],
+            gas_cells["cell_volume"],
+            gas_cells["rho_mean"],
+        )
+    particle_metadata = {**gas_cells["metadata"], "load_mode": "full", "estimated_full_load_gb": estimated_gb}
+    return selected_load_mode, clumping_factors, clumping_timings, clumping_diagnostics, particle_metadata, load_timings
+
+
+def _compute_raw_ionization_clumping(args, thresholds, estimated_gb, progress):
+    selected_load_mode = "chunked"
+    metadata = _read_snapshot_metadata(args.base_path, args.snapshot)
+    clumping_factors, clumping_timings, clumping_diagnostics = _raw_gas_clumping_sweep_chunked(
+        thresholds,
+        _chunk_factory(args, "gas", args.radius_mode),
+        metadata.lbox,
+        getattr(args, "chunk_size", 1_000_000),
+        volume_weighted=args.backend == "raw-volume",
+        clumping_mode=_raw_clumping_mode(args),
+        hii_source=_raw_hii_source(args),
+        electron_source=_raw_electron_source(args),
+        constant_electron_abundance=_raw_constant_electron_abundance(args),
+        hydrogen_mass_fraction=_raw_hydrogen_mass_fraction(args),
+        progress=progress,
+        progress_interval=getattr(args, "progress_interval", 25),
+    )
+    load_timings = {"load_data": clumping_timings.get("chunk_summary", 0.0)}
+    particle_metadata = {
+        "load_mode": "chunked",
+        "estimated_full_load_gb": estimated_gb,
+        "valid_count": clumping_diagnostics["valid_count"],
+        "dropped_count": clumping_diagnostics["dropped_count"],
+        "chunk_count": clumping_diagnostics["chunk_count"],
+    }
+    return selected_load_mode, clumping_factors, clumping_timings, clumping_diagnostics, particle_metadata, load_timings
+
+
+def _raw_clumping_method(args: argparse.Namespace) -> str:
+    method = "legacy raw gas-cell density, cell weighted" if args.backend == "raw" else "raw gas-cell density, volume weighted"
+    if _raw_clumping_mode(args) != "density":
+        method = f"{method}; clumping target={_raw_clumping_mode(args)}"
+    return method
+
+
+def _run_raw_clumping(args: argparse.Namespace, simulation_name: str, cosmology: dict, total_t0: float) -> Path:
+    thresholds = np.linspace(args.threshold_min, args.threshold_max, args.threshold_count)
+    selected_load_mode, estimated_gb = _select_load_mode(args, "gas")
+    progress = _progress_callback(args)
+    mode = _raw_clumping_mode(args)
+    if mode != "density":
+        selected_load_mode = "chunked"
+    if progress:
+        estimated_text = "unknown" if estimated_gb is None else f"{estimated_gb:.2f} GiB"
+        progress(f"computing {args.backend} gas clumping with load_mode={selected_load_mode}; estimated full load={estimated_text}")
+
+    if mode == "density":
+        selected_load_mode, clumping_factors, clumping_timings, clumping_diagnostics, particle_metadata, load_timings = (
+            _compute_raw_density_clumping(args, thresholds, selected_load_mode, estimated_gb, progress)
+        )
+    else:
+        selected_load_mode, clumping_factors, clumping_timings, clumping_diagnostics, particle_metadata, load_timings = (
+            _compute_raw_ionization_clumping(args, thresholds, estimated_gb, progress)
+        )
+
+    timings = {**load_timings, **{f"clumping_{key}": value for key, value in clumping_timings.items()}}
+    timings["total"] = perf_counter() - total_t0
+    parameters = {
+        "base_path": args.base_path,
+        "simulation_name": simulation_name,
+        "snapshot": args.snapshot,
+        "grid_size": None,
+        "radius_bins": None,
+        "threshold_min": args.threshold_min,
+        "threshold_max": args.threshold_max,
+        "threshold_count": args.threshold_count,
+        "load_mode": selected_load_mode,
+        "chunk_size": getattr(args, "chunk_size", 1_000_000) if selected_load_mode == "chunked" else None,
+        "estimated_full_load_gb": estimated_gb,
+        "threads": getattr(args, "threads", 1),
+        "source_campaign": getattr(args, "source_campaign", None),
+        "run_label": getattr(args, "run_label", None),
+        "resource_size": getattr(args, "resource_size", None),
+        "raw_clumping_mode": mode,
+        "raw_hii_source": _raw_hii_source(args),
+        "raw_electron_source": _raw_electron_source(args),
+        "raw_constant_electron_abundance": _raw_constant_electron_abundance(args),
+        "raw_hydrogen_mass_fraction": _raw_hydrogen_mass_fraction(args),
+    }
+    document = {
+        "schema_version": 1,
+        "simulation": {
+            "name": simulation_name,
+            "base_path": args.base_path,
+            **cosmology,
+        },
+        "particle_type": "gas",
+        "parameters": parameters,
+        "particle_metadata": particle_metadata,
+        "backend": {"backend": args.backend, "method": _raw_clumping_method(args), "load_mode": selected_load_mode},
+        "thresholds": thresholds.tolist(),
+        "clumping_factors": [None if not np.isfinite(value) else float(value) for value in clumping_factors],
+        "diagnostics": {"clumping": clumping_diagnostics},
+        "timings": timings,
+    }
+    output_path = Path(args.output) if args.output else _default_output_path(
+        args.output_dir,
+        args.particle_type,
+        args.backend,
+        args.snapshot,
+        None,
+        simulation_name,
+    )
+    return _write_json_result(document, output_path)
 
 
 def _build_single_density_grid(args: argparse.Namespace, particle_type: str, backend: str, radius_mode: str) -> tuple:
@@ -706,106 +926,7 @@ def run_compute(args: argparse.Namespace) -> Path:
         return _write_json_result(document, output_path)
 
     if args.backend in {"raw", "raw-volume"}:
-        thresholds = np.linspace(args.threshold_min, args.threshold_max, args.threshold_count)
-        selected_load_mode, estimated_gb = _select_load_mode(args, "gas")
-        if args.raw_clumping_mode != "density" and selected_load_mode != "chunked":
-            selected_load_mode = "chunked"
-        progress = _progress_callback(args)
-        if progress:
-            estimated_text = "unknown" if estimated_gb is None else f"{estimated_gb:.2f} GiB"
-            progress(f"computing {args.backend} gas clumping with load_mode={selected_load_mode}; estimated full load={estimated_text}")
-        if selected_load_mode == "chunked":
-            metadata = _read_snapshot_metadata(args.base_path, args.snapshot)
-            clumping_factors, clumping_timings, clumping_diagnostics = _raw_gas_clumping_sweep_chunked(
-                thresholds,
-                _chunk_factory(args, "gas", args.radius_mode),
-                metadata.lbox,
-                getattr(args, "chunk_size", 1_000_000),
-                volume_weighted=args.backend == "raw-volume",
-                clumping_mode=args.raw_clumping_mode,
-                hii_source=args.raw_hii_source,
-                electron_source=args.raw_electron_source,
-                constant_electron_abundance=args.raw_constant_electron_abundance,
-                hydrogen_mass_fraction=args.raw_hydrogen_mass_fraction,
-                progress=progress,
-                progress_interval=getattr(args, "progress_interval", 25),
-            )
-            load_timings = {"load_data": clumping_timings.get("chunk_summary", 0.0)}
-            particle_metadata = {
-                "load_mode": "chunked",
-                "estimated_full_load_gb": estimated_gb,
-                "valid_count": clumping_diagnostics["valid_count"],
-                "dropped_count": clumping_diagnostics["dropped_count"],
-                "chunk_count": clumping_diagnostics["chunk_count"],
-            }
-        else:
-            gas_cells, load_timings = _load_tng_gas_cells(args.base_path, args.snapshot, verbose=args.verbose)
-            if args.backend == "raw":
-                clumping_factors, clumping_timings, clumping_diagnostics = _raw_gas_clumping_sweep(
-                    thresholds,
-                    gas_cells["density"],
-                    gas_cells["rho_mean"],
-                )
-            else:
-                clumping_factors, clumping_timings, clumping_diagnostics = _raw_gas_volume_weighted_clumping_sweep(
-                    thresholds,
-                    gas_cells["density"],
-                    gas_cells["cell_volume"],
-                    gas_cells["rho_mean"],
-                )
-            particle_metadata = {**gas_cells["metadata"], "load_mode": "full", "estimated_full_load_gb": estimated_gb}
-        method = "legacy raw gas-cell density, cell weighted" if args.backend == "raw" else "raw gas-cell density, volume weighted"
-        if args.raw_clumping_mode != "density":
-            method = f"{method}; clumping target={args.raw_clumping_mode}"
-        timings = {**load_timings, **{f"clumping_{key}": value for key, value in clumping_timings.items()}}
-        timings["total"] = perf_counter() - total_t0
-        parameters = {
-            "base_path": args.base_path,
-            "simulation_name": simulation_name,
-            "snapshot": args.snapshot,
-            "grid_size": None,
-            "radius_bins": None,
-            "threshold_min": args.threshold_min,
-            "threshold_max": args.threshold_max,
-            "threshold_count": args.threshold_count,
-            "load_mode": selected_load_mode,
-            "chunk_size": getattr(args, "chunk_size", 1_000_000) if selected_load_mode == "chunked" else None,
-            "estimated_full_load_gb": estimated_gb,
-            "threads": getattr(args, "threads", 1),
-            "source_campaign": getattr(args, "source_campaign", None),
-            "run_label": getattr(args, "run_label", None),
-            "resource_size": getattr(args, "resource_size", None),
-            "raw_clumping_mode": args.raw_clumping_mode,
-            "raw_hii_source": args.raw_hii_source,
-            "raw_electron_source": args.raw_electron_source,
-            "raw_constant_electron_abundance": args.raw_constant_electron_abundance,
-            "raw_hydrogen_mass_fraction": args.raw_hydrogen_mass_fraction,
-        }
-        document = {
-            "schema_version": 1,
-            "simulation": {
-                "name": simulation_name,
-                "base_path": args.base_path,
-                **cosmology,
-            },
-            "particle_type": "gas",
-            "parameters": parameters,
-            "particle_metadata": particle_metadata,
-            "backend": {"backend": args.backend, "method": method, "load_mode": selected_load_mode},
-            "thresholds": thresholds.tolist(),
-            "clumping_factors": [None if not np.isfinite(value) else float(value) for value in clumping_factors],
-            "diagnostics": {"clumping": clumping_diagnostics},
-            "timings": timings,
-        }
-        output_path = Path(args.output) if args.output else _default_output_path(
-            args.output_dir,
-            args.particle_type,
-            args.backend,
-            args.snapshot,
-            None,
-            simulation_name,
-        )
-        return _write_json_result(document, output_path)
+        return _run_raw_clumping(args, simulation_name, cosmology, total_t0)
 
     target_particle_type = getattr(args, "target_particle_type", None) or args.particle_type
     target_backend = getattr(args, "target_backend", None) or args.backend
@@ -917,6 +1038,48 @@ def compute_main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     output_path = run_compute(args)
     print(f"Wrote JSON result: {output_path}")
+
+
+def _eq5_default_output_path(args: argparse.Namespace) -> Path:
+    from .results import resolve_simulation_name, sanitize_simulation_name
+
+    simulation = resolve_simulation_name(args.base_path, args.simulation_name)
+    return (
+        Path(args.output_dir)
+        / sanitize_simulation_name(simulation)
+        / f"gas_eq5-{args.raw_clumping_mode}_{args.backend}_snapshot{int(args.snapshot):03d}.json"
+    )
+
+
+def eq5_main(argv: list[str] | None = None) -> None:
+    parser = build_eq5_parser()
+    args = parser.parse_args(argv)
+    args.particle_type = "gas"
+    args.grid_size = 256
+    args.radius_bins = 10
+    args.radius_bin_batch_size = 1
+    args.memory_limit = None
+    args.memory_safety_fraction = 0.1
+    args.temp_dir = None
+    args.summary_cache = "auto"
+    args.summary_cache_dir = "results/.cache/summaries"
+    args.work_partition = "auto"
+    args.max_file_readers = 2
+    args.mas = "CIC"
+    args.filter_type = "Top-Hat"
+    args.target_particle_type = None
+    args.target_backend = None
+    args.mask_particle_type = None
+    args.mask_backend = None
+    args.target_radius_mode = None
+    args.mask_radius_mode = None
+    args.sigma_bar_ion_cm2 = None
+    args.sigma_bar_ion_source = None
+    args._allow_raw_ionization_clumping = True
+    if args.output is None:
+        args.output = str(_eq5_default_output_path(args))
+    output_path = run_compute(args)
+    print(f"Wrote Eq. 5 JSON result: {output_path}")
 
 
 def plot_main(argv: list[str] | None = None) -> None:

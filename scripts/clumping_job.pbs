@@ -150,6 +150,10 @@ if [[ -n "${MASK_RADIUS_MODE:-}" ]]; then
   EXTRA_ARGS+=(--mask-radius-mode "${MASK_RADIUS_MODE}")
   OUTPUT_STEM="${OUTPUT_STEM}-maskradius-${MASK_RADIUS_MODE}"
 fi
+EQ5_EXTRA_ARGS=()
+if [[ "${VERBOSE}" == "1" ]]; then
+  EQ5_EXTRA_ARGS+=(--verbose)
+fi
 OUTPUT="${OUTPUT_STEM}.json"
 
 echo "Started: $(date)"
@@ -176,30 +180,54 @@ echo "Raw HII source: ${RAW_HII_SOURCE}"
 echo "Raw electron source: ${RAW_ELECTRON_SOURCE}"
 echo "Output: ${OUTPUT}"
 
-clumping-compute \
-  --base-path "${BASE_PATH}" \
-  --simulation-name "${PHYSICAL_SIMULATION_NAME}" \
-  --snapshot "${SNAPSHOT}" \
-  --particle-type "${PARTICLE}" \
-  --backend "${BACKEND}" \
-  --radius-mode "${RADIUS_MODE}" \
-  --load-mode "${LOAD_MODE}" \
-  --chunk-size "${CHUNK_SIZE}" \
-  --max-full-load-gb "${MAX_FULL_LOAD_GB}" \
-  --progress-interval "${PROGRESS_INTERVAL}" \
-  --grid-size "${GRID}" \
-  --radius-bins "${RADIUS_BINS}" \
-  --radius-bin-batch-size "${RADIUS_BIN_BATCH_SIZE}" \
-  --mas "${MAS}" \
-  --threads "${THREADS}" \
-  --summary-cache "${SUMMARY_CACHE}" \
-  --summary-cache-dir "${SUMMARY_CACHE_DIR}" \
-  --work-partition "${WORK_PARTITION}" \
-  --max-file-readers "${MAX_FILE_READERS}" \
-  --source-campaign "${SOURCE_CAMPAIGN}" \
-  --run-label "${RUN_LABEL:-1}" \
-  --resource-size "${RESOURCE_SIZE}" \
-  "${EXTRA_ARGS[@]}" \
-  --output "${OUTPUT}"
+if [[ "${BACKEND}" =~ ^raw && "${RAW_CLUMPING_MODE}" != "density" ]]; then
+  clumping-eq5 \
+    --base-path "${BASE_PATH}" \
+    --simulation-name "${PHYSICAL_SIMULATION_NAME}" \
+    --snapshot "${SNAPSHOT}" \
+    --backend "${BACKEND}" \
+    --mode "${RAW_CLUMPING_MODE}" \
+    --hii-source "${RAW_HII_SOURCE}" \
+    --electron-source "${RAW_ELECTRON_SOURCE}" \
+    --constant-electron-abundance "${RAW_CONSTANT_ELECTRON_ABUNDANCE}" \
+    --hydrogen-mass-fraction "${RAW_HYDROGEN_MASS_FRACTION}" \
+    --radius-mode "${RADIUS_MODE}" \
+    --load-mode "${LOAD_MODE}" \
+    --chunk-size "${CHUNK_SIZE}" \
+    --max-full-load-gb "${MAX_FULL_LOAD_GB}" \
+    --progress-interval "${PROGRESS_INTERVAL}" \
+    --threads "${THREADS}" \
+    --source-campaign "${SOURCE_CAMPAIGN}" \
+    --run-label "${RUN_LABEL:-1}" \
+    --resource-size "${RESOURCE_SIZE}" \
+    "${EQ5_EXTRA_ARGS[@]}" \
+    --output "${OUTPUT}"
+else
+  clumping-compute \
+    --base-path "${BASE_PATH}" \
+    --simulation-name "${PHYSICAL_SIMULATION_NAME}" \
+    --snapshot "${SNAPSHOT}" \
+    --particle-type "${PARTICLE}" \
+    --backend "${BACKEND}" \
+    --radius-mode "${RADIUS_MODE}" \
+    --load-mode "${LOAD_MODE}" \
+    --chunk-size "${CHUNK_SIZE}" \
+    --max-full-load-gb "${MAX_FULL_LOAD_GB}" \
+    --progress-interval "${PROGRESS_INTERVAL}" \
+    --grid-size "${GRID}" \
+    --radius-bins "${RADIUS_BINS}" \
+    --radius-bin-batch-size "${RADIUS_BIN_BATCH_SIZE}" \
+    --mas "${MAS}" \
+    --threads "${THREADS}" \
+    --summary-cache "${SUMMARY_CACHE}" \
+    --summary-cache-dir "${SUMMARY_CACHE_DIR}" \
+    --work-partition "${WORK_PARTITION}" \
+    --max-file-readers "${MAX_FILE_READERS}" \
+    --source-campaign "${SOURCE_CAMPAIGN}" \
+    --run-label "${RUN_LABEL:-1}" \
+    --resource-size "${RESOURCE_SIZE}" \
+    "${EXTRA_ARGS[@]}" \
+    --output "${OUTPUT}"
+fi
 
 echo "Finished: $(date)"
