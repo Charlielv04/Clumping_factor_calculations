@@ -86,7 +86,8 @@ def test_equation_tests_compute_expected_formulas(tmp_path):
     all_gas = rows["all-gas"]
     assert all_gas["selected_cells"] == 3
     assert rows["overdensity_lt_1e+09"]["selected_cells"] == 3
-    assert rows["xHII_gt_0.7"]["selected_cells"] == 2
+    assert rows["overdensity_lt_1e+09__xHII_gt_0.7"]["selected_cells"] == 2
+    assert "xHII_gt_0.7" not in rows
     assert np.isclose(all_gas["R_ion"], all_gas["nHI_V"] * 1.0e-12)
     assert np.isclose(
         all_gas["R_gamma_c"],

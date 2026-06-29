@@ -133,7 +133,11 @@ def _mask_names(
 
     names = ["all-gas"]
     names.extend(f"overdensity_lt_{float(threshold):g}" for threshold in thresholds)
-    names.extend(f"xHII_gt_{float(cut):g}" for cut in ionized_cuts)
+    for threshold in thresholds:
+        for cut in ionized_cuts:
+            names.append(
+                f"overdensity_lt_{float(threshold):g}__xHII_gt_{float(cut):g}"
+            )
     return names
 
 
@@ -217,6 +221,7 @@ def _add_threshold_sweep_values(
     overdensity: np.ndarray,
     values: dict[str, np.ndarray],
     volume: np.ndarray,
+    suffix: str = "",
 ) -> None:
     """Add one chunk to every overdensity threshold using cumulative sums."""
 
@@ -236,7 +241,7 @@ def _add_threshold_sweep_values(
     for threshold, index in zip(thresholds, indices, strict=True):
         if index == 0:
             continue
-        name = f"overdensity_lt_{float(threshold):g}"
+        name = f"overdensity_lt_{float(threshold):g}{suffix}"
         acc = accumulators[name]
         acc["selected_cells"] = int(acc["selected_cells"]) + int(index)
         acc["volume"] = float(acc["volume"]) + float(volume_cumsum[index - 1])
@@ -367,7 +372,8 @@ def compute_equation_tests(
         Default overdensity-contrast sweep configuration.  The selected cells
         satisfy ``Density / mean(Density) - 1 < threshold``.
     ionized_cuts
-        Native gas-cell masks of the form ``x_HII > cut``.
+        Optional ionized cuts combined with every overdensity threshold as
+        ``overdensity < threshold`` and ``x_HII > cut``.
     progress
         Optional callback for verbose status messages.
     """
@@ -604,11 +610,16 @@ def compute_equation_tests(
                     volume,
                 )
                 for cut in ionized_cuts:
-                    _add_mask_values(
-                        accumulators[f"xHII_gt_{float(cut):g}"],
-                        x_hii > float(cut),
-                        values,
-                        volume,
+                    ionized = x_hii > float(cut)
+                    if not np.any(ionized):
+                        continue
+                    _add_threshold_sweep_values(
+                        accumulators,
+                        threshold_array,
+                        overdensity[ionized],
+                        {key: array[ionized] for key, array in values.items()},
+                        volume[ionized],
+                        suffix=f"__xHII_gt_{float(cut):g}",
                     )
 
                 if progress and (
@@ -837,6 +848,7 @@ def compute_equation_tests(
         row
         for row in rows
         if str(row["mask_name"]).startswith("overdensity_lt_")
+        and "__" not in str(row["mask_name"])
     ]
 
     document = {
@@ -865,6 +877,11 @@ def compute_equation_tests(
             "ionized_cuts": [float(cut) for cut in ionized_cuts],
             "overdensity_definition": "n_H / cosmic_mean_n_H - 1",
             "threshold_selection": "raw gas cells below overdensity threshold",
+            "ionized_selection": (
+                "combined with overdensity threshold as x_HII > cut"
+                if ionized_cuts
+                else None
+            ),
             "default_clumping_factor": "C5_paper_actual",
             "hydrogen_mass_fraction_fallback": float(hydrogen_mass_fraction),
             "chi_e_denominator": float(chi_e),

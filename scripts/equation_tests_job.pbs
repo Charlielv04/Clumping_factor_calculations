@@ -1,0 +1,113 @@
+#!/bin/bash
+
+set -euo pipefail
+
+set +u
+source ~/.bashrc
+set -u
+conda activate "${CONDA_ENV:-clumping-factor}"
+
+cd "${PROJECT_DIR:-$PBS_O_WORKDIR}"
+mkdir -p results logs
+
+SNAPSHOT="${SNAPSHOT:?SNAPSHOT must be set.}"
+BASE_PATH="${BASE_PATH:?BASE_PATH must point to the simulation output directory.}"
+MFP_FILE="${MFP_FILE:?MFP_FILE must point to a THESAN mfp table.}"
+SIGMA_HI_CM2="${SIGMA_HI_CM2:?SIGMA_HI_CM2 must be set.}"
+SIMULATION_NAME="${SIMULATION_NAME:-}"
+OUTPUT_DIR="${OUTPUT_DIR:-results}"
+OUTPUT="${OUTPUT:-}"
+CONDA_ENV="${CONDA_ENV:-clumping-factor}"
+GAMMA_HI_FILE="${GAMMA_HI_FILE:-}"
+TEMPERATURE_FILE="${TEMPERATURE_FILE:-}"
+REDUCED_SPEED_OF_LIGHT_FRACTION="${REDUCED_SPEED_OF_LIGHT_FRACTION:-0.2}"
+C_TILDE_CM_S="${C_TILDE_CM_S:-}"
+PHOTON_GROUPS_CSV="${PHOTON_GROUPS_CSV:-0}"
+THRESHOLDS_CSV="${THRESHOLDS_CSV:-}"
+THRESHOLD_MIN="${THRESHOLD_MIN:--1}"
+THRESHOLD_MAX="${THRESHOLD_MAX:-25}"
+THRESHOLD_COUNT="${THRESHOLD_COUNT:-200}"
+IONIZED_CUTS_CSV="${IONIZED_CUTS_CSV:-}"
+CHUNK_SIZE="${CHUNK_SIZE:-1000000}"
+HYDROGEN_MASS_FRACTION="${HYDROGEN_MASS_FRACTION:-0.76}"
+CHI_E="${CHI_E:-1.08}"
+PROGRESS_INTERVAL="${PROGRESS_INTERVAL:-5}"
+VERBOSE="${VERBOSE:-1}"
+
+if [[ -z "${SIMULATION_NAME}" ]]; then
+  base_trimmed="${BASE_PATH%/}"
+  SIMULATION_NAME="$(basename "${base_trimmed}")"
+  if [[ "${SIMULATION_NAME}" == "output" ]]; then
+    SIMULATION_NAME="$(basename "$(dirname "${base_trimmed}")")"
+  fi
+fi
+
+snapshot_padded="$(printf "%03d" "${SNAPSHOT}")"
+if [[ -z "${OUTPUT}" ]]; then
+  OUTPUT="${OUTPUT_DIR}/${SIMULATION_NAME}/gas/equation-tests/snapshot${snapshot_padded}.json"
+fi
+mkdir -p "$(dirname "${OUTPUT}")"
+
+EXTRA_ARGS=()
+if [[ "${VERBOSE}" == "1" ]]; then
+  EXTRA_ARGS+=(--verbose --progress-interval "${PROGRESS_INTERVAL}")
+fi
+if [[ -n "${GAMMA_HI_FILE}" ]]; then
+  EXTRA_ARGS+=(--gamma-hi-file "${GAMMA_HI_FILE}")
+fi
+if [[ -n "${TEMPERATURE_FILE}" ]]; then
+  EXTRA_ARGS+=(--temperature-file "${TEMPERATURE_FILE}")
+fi
+if [[ -n "${C_TILDE_CM_S}" ]]; then
+  EXTRA_ARGS+=(--c-tilde-cm-s "${C_TILDE_CM_S}")
+else
+  EXTRA_ARGS+=(--reduced-speed-of-light-fraction "${REDUCED_SPEED_OF_LIGHT_FRACTION}")
+fi
+IFS=':' read -r -a photon_group_array <<< "${PHOTON_GROUPS_CSV}"
+if [[ -n "${THRESHOLDS_CSV}" ]]; then
+  IFS=':' read -r -a threshold_array <<< "${THRESHOLDS_CSV}"
+  EXTRA_ARGS+=(--thresholds "${threshold_array[@]}")
+else
+  EXTRA_ARGS+=(
+    --threshold-min "${THRESHOLD_MIN}"
+    --threshold-max "${THRESHOLD_MAX}"
+    --threshold-count "${THRESHOLD_COUNT}"
+  )
+fi
+if [[ -n "${IONIZED_CUTS_CSV}" ]]; then
+  IFS=':' read -r -a ionized_cut_array <<< "${IONIZED_CUTS_CSV}"
+  EXTRA_ARGS+=(--ionized-cuts "${ionized_cut_array[@]}")
+fi
+
+echo "Started: $(date)"
+echo "Host: $(hostname)"
+echo "Simulation: ${SIMULATION_NAME}"
+echo "Snapshot: ${SNAPSHOT}"
+echo "Base path: ${BASE_PATH}"
+echo "MFP file: ${MFP_FILE}"
+echo "Sigma_HI: ${SIGMA_HI_CM2} cm^2"
+echo "Photon groups: ${PHOTON_GROUPS_CSV//:/ }"
+echo "Thresholds: ${THRESHOLDS_CSV//:/ }"
+if [[ -z "${THRESHOLDS_CSV}" ]]; then
+  echo "Threshold sweep: ${THRESHOLD_MIN} to ${THRESHOLD_MAX} (${THRESHOLD_COUNT})"
+fi
+echo "Ionized cuts: ${IONIZED_CUTS_CSV//:/ }"
+if [[ -z "${IONIZED_CUTS_CSV}" ]]; then
+  echo "Ionized cuts: none"
+fi
+echo "Output: ${OUTPUT}"
+
+clumping-equation-tests \
+  --base-path "${BASE_PATH}" \
+  --simulation-name "${SIMULATION_NAME}" \
+  --snapshot "${SNAPSHOT}" \
+  --mfp-file "${MFP_FILE}" \
+  --sigma-hi-cm2 "${SIGMA_HI_CM2}" \
+  --photon-groups "${photon_group_array[@]}" \
+  --chunk-size "${CHUNK_SIZE}" \
+  --hydrogen-mass-fraction "${HYDROGEN_MASS_FRACTION}" \
+  --chi-e "${CHI_E}" \
+  --output "${OUTPUT}" \
+  "${EXTRA_ARGS[@]}"
+
+echo "Finished: $(date)"

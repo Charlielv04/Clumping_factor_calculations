@@ -177,6 +177,7 @@ def _equation_quantity_array(
             row
             for row in document.get("rows", [])
             if str(row.get("mask_name", "")).startswith("overdensity_lt_")
+            and "__" not in str(row.get("mask_name", ""))
         ]
         if len(threshold_rows) != thresholds.size:
             raise ValueError(
