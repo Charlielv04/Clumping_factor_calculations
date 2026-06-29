@@ -12,6 +12,7 @@ def build_equation_tests_parser() -> argparse.ArgumentParser:
     parser.add_argument("--snapshot", type=int, required=True)
     parser.add_argument("--gamma-hi-s-1", type=float)
     parser.add_argument("--gamma-hi-file", help="Gamma_HI redshift table. Defaults to Gamma_HI_Thesan1.dat next to --mfp-file.")
+    parser.add_argument("--temperature-file", help="IGM temperature redshift table. Defaults to Tigm_Thesan1.dat next to --mfp-file.")
     parser.add_argument("--mfp-file", required=True)
     parser.add_argument("--sigma-hi-cm2", type=float, required=True)
     parser.add_argument("--reduced-speed-of-light-fraction", type=float, default=0.2)
@@ -42,6 +43,11 @@ def run_equation_tests(args: argparse.Namespace) -> tuple[Path, Path]:
         gamma_hi_file = str(Path(args.mfp_file).parent / "Gamma_HI_Thesan1.dat")
         if args.verbose:
             progress(f"using default Gamma_HI table next to MFP file: {gamma_hi_file}")
+    temperature_file = args.temperature_file
+    if temperature_file is None:
+        temperature_file = str(Path(args.mfp_file).parent / "Tigm_Thesan1.dat")
+        if args.verbose:
+            progress(f"using default Tigm table next to MFP file: {temperature_file}")
     if args.c_tilde_cm_s is None and args.reduced_speed_of_light_fraction == 0.2 and args.verbose:
         progress("using default reduced speed of light fraction: 0.2")
 
@@ -50,6 +56,7 @@ def run_equation_tests(args: argparse.Namespace) -> tuple[Path, Path]:
         snapshot=args.snapshot,
         mfp_file=args.mfp_file,
         sigma_hi_cm2=args.sigma_hi_cm2,
+        temperature_file=temperature_file,
         gamma_hi_s_1=args.gamma_hi_s_1,
         gamma_hi_file=gamma_hi_file,
         c_tilde_cm_s=args.c_tilde_cm_s,

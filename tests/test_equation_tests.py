@@ -12,7 +12,7 @@ from clumping_factor.equation_tests import (
 from clumping_factor.equation_tests_cli import build_equation_tests_parser, run_equation_tests
 
 
-def _write_snapshot(base_path, include_temperature=True):
+def _write_snapshot(base_path):
     snapdir = base_path / "snapdir_080"
     snapdir.mkdir(parents=True)
     path = snapdir / "snap_080.0.hdf5"
@@ -33,8 +33,6 @@ def _write_snapshot(base_path, include_temperature=True):
         gas = handle.create_group("PartType0")
         gas.create_dataset("Density", data=np.array([1e-7, 2e-7, 4e-7], dtype=np.float64))
         gas.create_dataset("Masses", data=np.array([1.0, 2.0, 4.0], dtype=np.float64))
-        if include_temperature:
-            gas.create_dataset("Temperature", data=np.array([1e4, 1e4, 1e4], dtype=np.float64))
         gas.create_dataset("HI_Fraction", data=np.array([0.1, 0.2, 0.4], dtype=np.float64))
         gas.create_dataset("ElectronAbundance", data=np.array([1.0, 1.1, 1.2], dtype=np.float64))
         gas.create_dataset(
@@ -64,12 +62,18 @@ def _write_gamma(path):
     return path
 
 
+def _write_tigm(path):
+    path.write_text("# z Tigm [K]\n3.0 10000\n5.0 10000\n", encoding="utf-8")
+    return path
+
+
 def test_equation_tests_compute_expected_formulas(tmp_path):
     result = compute_equation_tests(
         _write_snapshot(tmp_path / "snapshot"),
         80,
         _write_mfp(tmp_path / "mfp.dat"),
         sigma_hi_cm2=6.3e-18,
+        temperature_file=_write_tigm(tmp_path / "Tigm_Thesan1.dat"),
         gamma_hi_s_1=1.0e-12,
         reduced_speed_of_light_fraction=0.1,
         overdensity_cuts=[1e9],
@@ -95,6 +99,7 @@ def test_equation_tests_compute_expected_formulas(tmp_path):
 def test_equation_tests_writes_json_and_csv(tmp_path):
     output = tmp_path / "equations.json"
     mfp = _write_mfp(tmp_path / "mfp.dat")
+    _write_tigm(tmp_path / "Tigm_Thesan1.dat")
     args = build_equation_tests_parser().parse_args(
         [
             "--base-path",
@@ -117,6 +122,7 @@ def test_equation_tests_writes_json_and_csv(tmp_path):
     document = json.loads(output.read_text())
     assert document["calculation"] == "thesan_clumping_equation_tests"
     assert document["parameters"]["reduced_speed_of_light_fraction"] == 0.2
+    assert document["parameters"]["Tigm_K"] == 10000.0
     assert csv_output.read_text().splitlines()[0].startswith("snapshot,redshift,mask_name")
 
 
@@ -124,6 +130,7 @@ def test_equation_tests_cli_defaults_gamma_file_next_to_mfp(tmp_path):
     output = tmp_path / "equations.json"
     mfp = _write_mfp(tmp_path / "mfp.dat")
     _write_gamma(tmp_path / "Gamma_HI_Thesan1.dat")
+    _write_tigm(tmp_path / "Tigm_Thesan1.dat")
     args = build_equation_tests_parser().parse_args(
         [
             "--base-path",
@@ -144,37 +151,44 @@ def test_equation_tests_cli_defaults_gamma_file_next_to_mfp(tmp_path):
     assert document["parameters"]["GammaHI_table"].endswith("Gamma_HI_Thesan1.dat")
 
 
-def test_equation_tests_requires_gamma_and_temperature(tmp_path):
+def test_equation_tests_requires_gamma_and_temperature_table(tmp_path):
     base = _write_snapshot(tmp_path / "snapshot")
     mfp = _write_mfp(tmp_path / "mfp.dat")
     try:
-        compute_equation_tests(base, 80, mfp, sigma_hi_cm2=6.3e-18, reduced_speed_of_light_fraction=0.1)
+        compute_equation_tests(
+            base,
+            80,
+            mfp,
+            sigma_hi_cm2=6.3e-18,
+            temperature_file=_write_tigm(tmp_path / "Tigm_Thesan1.dat"),
+            reduced_speed_of_light_fraction=0.1,
+        )
     except ValueError as exc:
         assert "gamma" in str(exc).lower()
     else:
         raise AssertionError("missing Gamma_HI should fail")
 
-    no_temp = _write_snapshot(tmp_path / "no_temp", include_temperature=False)
     try:
-        compute_equation_tests(no_temp, 80, mfp, sigma_hi_cm2=6.3e-18, gamma_hi_s_1=1e-12, reduced_speed_of_light_fraction=0.1)
-    except ValueError as exc:
-        assert "Temperature" in str(exc)
+        compute_equation_tests(base, 80, mfp, sigma_hi_cm2=6.3e-18, temperature_file=tmp_path / "missing_tigm.dat", gamma_hi_s_1=1e-12, reduced_speed_of_light_fraction=0.1)
+    except OSError:
+        pass
     else:
-        raise AssertionError("missing Temperature should fail")
+        raise AssertionError("missing Tigm table should fail")
 
 
 def test_equation_tests_requires_sigma_and_reduced_c(tmp_path):
     base = _write_snapshot(tmp_path / "snapshot")
     mfp = _write_mfp(tmp_path / "mfp.dat")
+    tigm = _write_tigm(tmp_path / "Tigm_Thesan1.dat")
     try:
-        compute_equation_tests(base, 80, mfp, sigma_hi_cm2=0.0, gamma_hi_s_1=1e-12, reduced_speed_of_light_fraction=0.1)
+        compute_equation_tests(base, 80, mfp, sigma_hi_cm2=0.0, temperature_file=tigm, gamma_hi_s_1=1e-12, reduced_speed_of_light_fraction=0.1)
     except ValueError as exc:
         assert "sigma_hi_cm2" in str(exc)
     else:
         raise AssertionError("bad sigma should fail")
 
     try:
-        compute_equation_tests(base, 80, mfp, sigma_hi_cm2=6.3e-18, gamma_hi_s_1=1e-12)
+        compute_equation_tests(base, 80, mfp, sigma_hi_cm2=6.3e-18, temperature_file=tigm, gamma_hi_s_1=1e-12)
     except ValueError as exc:
         assert "reduced-speed-of-light" in str(exc) or "c-tilde" in str(exc)
     else:
@@ -187,6 +201,7 @@ def test_write_equation_tests_result_returns_json_and_csv(tmp_path):
         80,
         _write_mfp(tmp_path / "mfp.dat"),
         sigma_hi_cm2=6.3e-18,
+        temperature_file=_write_tigm(tmp_path / "Tigm_Thesan1.dat"),
         gamma_hi_s_1=1.0e-12,
         reduced_speed_of_light_fraction=0.1,
     )

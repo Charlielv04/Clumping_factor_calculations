@@ -150,6 +150,7 @@ def compute_equation_tests(
     snapshot: int,
     mfp_file: str | Path,
     sigma_hi_cm2: float,
+    temperature_file: str | Path,
     gamma_hi_s_1: float | None = None,
     gamma_hi_file: str | Path | None = None,
     c_tilde_cm_s: float | None = None,
@@ -198,9 +199,12 @@ def compute_equation_tests(
     warnings.extend(gamma_warnings)
     c_tilde, c_metadata, c_warnings = _resolve_c_tilde(c_tilde_cm_s, reduced_speed_of_light_fraction)
     warnings.extend(c_warnings)
+    temperature_igm_k, temperature_metadata = interpolate_redshift_value(redshift, temperature_file, "Tigm")
+    alpha_b_igm = float(alpha_b_hii_cm3_s(np.array([temperature_igm_k], dtype=np.float64))[0])
     mfp_pmpc_h, mfp_metadata = interpolate_mfp(redshift, mfp_file)
     lambda_mfp_cm = mfp_pmpc_h / hubble_param * MPC_CM
     warnings.append(f"MFP value was selected with {mfp_metadata['mfp_interpolation']} from the input table")
+    warnings.append(f"Tigm value was selected with {temperature_metadata['Tigm_interpolation']} from the input table")
     if gamma_metadata.get("GammaHI_source") == "redshift_table":
         warnings.append(f"Gamma_HI value was selected with {gamma_metadata['GammaHI_interpolation']} from the input table")
 
@@ -217,7 +221,7 @@ def compute_equation_tests(
             f"photon_groups={list(groups)}, lambda_mfp={mfp_pmpc_h:.6g} pMpc/h"
         )
 
-    required = {"Density", "Masses", "Temperature", "HI_Fraction", "ElectronAbundance", "PhotonDensity"}
+    required = {"Density", "Masses", "HI_Fraction", "ElectronAbundance", "PhotonDensity"}
     input_count = valid_count = dropped_count = chunk_count = 0
     total_volume = 0.0
     missing_hydrogen_abundance = False
@@ -242,7 +246,6 @@ def compute_equation_tests(
                 input_count += stop - start
                 density_code = np.asarray(gas["Density"][start:stop], dtype=np.float64)
                 masses_code = np.asarray(gas["Masses"][start:stop], dtype=np.float64)
-                temperature = np.asarray(gas["Temperature"][start:stop], dtype=np.float64)
                 x_hi = np.asarray(gas["HI_Fraction"][start:stop], dtype=np.float64)
                 electron_abundance = np.asarray(gas["ElectronAbundance"][start:stop], dtype=np.float64)
                 photon_density_code = np.asarray(gas["PhotonDensity"][start:stop, groups], dtype=np.float64)
@@ -254,14 +257,12 @@ def compute_equation_tests(
                 valid = (
                     np.isfinite(density_code)
                     & np.isfinite(masses_code)
-                    & np.isfinite(temperature)
                     & np.isfinite(x_hi)
                     & np.isfinite(electron_abundance)
                     & np.isfinite(hydrogen_fraction)
                     & np.all(np.isfinite(photon_density_code), axis=1)
                     & (density_code > 0)
                     & (masses_code > 0)
-                    & (temperature > 0)
                     & (x_hi >= 0)
                     & (x_hi <= 1)
                     & (electron_abundance >= 0)
@@ -275,7 +276,6 @@ def compute_equation_tests(
 
                 density_code = density_code[valid]
                 masses_code = masses_code[valid]
-                temperature = temperature[valid]
                 x_hi = x_hi[valid]
                 electron_abundance = electron_abundance[valid]
                 photon_density_code = photon_density_code[valid]
@@ -289,7 +289,6 @@ def compute_equation_tests(
                 n_hi = x_hi * n_h
                 n_hii = x_hii * n_h
                 n_e = electron_abundance * n_h
-                alpha_b = alpha_b_hii_cm3_s(temperature)
                 n_gamma = np.sum(photon_density_code, axis=1) * units["photon_density_unit_cm3"]
                 delta = n_h / n_h_cosmic
 
@@ -301,7 +300,7 @@ def compute_equation_tests(
                     "n_gamma": n_gamma,
                     "n_e_n_hii": n_e * n_hii,
                     "n_hi_gamma": n_hi * gamma_hi,
-                    "alpha_ne_nhii": alpha_b * n_e * n_hii,
+                    "alpha_ne_nhii": alpha_b_igm * n_e * n_hii,
                 }
                 _add_mask_values(accumulators["all-gas"], np.ones_like(n_h, dtype=bool), values, volume)
                 for cut in overdensity_cuts:
@@ -429,8 +428,11 @@ def compute_equation_tests(
             "hydrogen_mass_fraction_fallback": float(hydrogen_mass_fraction),
             "chi_e_denominator": float(chi_e),
             "alpha_B_10000_cm3_s": float(alpha_b4),
-            "alpha_B_T_model": "2.59e-13 * (T / 1e4 K)^-0.7",
+            "alpha_B_T_model": "2.59e-13 * (Tigm(z) / 1e4 K)^-0.7",
+            "Tigm_K": float(temperature_igm_k),
+            "alpha_B_Tigm_cm3_s": float(alpha_b_igm),
             **gamma_metadata,
+            **temperature_metadata,
             **mfp_metadata,
             **c_metadata,
         },
