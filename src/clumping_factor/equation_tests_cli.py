@@ -5,6 +5,17 @@ from pathlib import Path
 from time import perf_counter
 
 
+DEFAULT_PLOT_QUANTITIES = [
+    "C5_paper_actual",
+    "C5_chi_nH2",
+    "C7_paper_actual",
+    "C8_corrected_actual",
+    "C8_paper_literal_actual",
+    "C13_c_actual",
+    "C13_c_chi_nH2",
+]
+
+
 def build_equation_tests_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run one-pass THESAN clumping equation diagnostics."
@@ -122,3 +133,180 @@ def equation_tests_main(argv: list[str] | None = None) -> None:
     json_output, csv_output = run_equation_tests(args)
     print(f"Wrote equation-test JSON result: {json_output}")
     print(f"Wrote equation-test CSV table: {csv_output}")
+
+
+def _snapshot_label(document: dict, result_path: str | Path) -> str:
+    """Build a compact curve label from snapshot metadata."""
+
+    simulation = document.get("simulation", {})
+    snapshot = simulation.get("snapshot")
+    redshift = simulation.get("redshift")
+    if isinstance(snapshot, int) and isinstance(redshift, (int, float)):
+        return f"snap {snapshot:03d}, z={float(redshift):.3f}"
+    if isinstance(redshift, (int, float)):
+        return f"z={float(redshift):.3f}"
+    if isinstance(snapshot, int):
+        return f"snap {snapshot:03d}"
+    return Path(result_path).stem
+
+
+def _equation_quantity_array(
+    document: dict,
+    result_path: str | Path,
+    quantity: str,
+) -> tuple["np.ndarray", "np.ndarray"]:
+    """Read one equation-test quantity over the overdensity threshold sweep."""
+
+    import numpy as np
+
+    try:
+        thresholds = np.asarray(document["thresholds"], dtype=np.float64)
+    except KeyError as exc:
+        raise ValueError(f"{result_path} is missing thresholds.") from exc
+
+    if quantity == "clumping_factors":
+        values = np.asarray(
+            [
+                np.nan if value is None else value
+                for value in document["clumping_factors"]
+            ],
+            dtype=np.float64,
+        )
+    else:
+        threshold_rows = [
+            row
+            for row in document.get("rows", [])
+            if str(row.get("mask_name", "")).startswith("overdensity_lt_")
+        ]
+        if len(threshold_rows) != thresholds.size:
+            raise ValueError(
+                f"{result_path} has {thresholds.size} thresholds but "
+                f"{len(threshold_rows)} threshold rows."
+            )
+        if threshold_rows and quantity not in threshold_rows[0]:
+            raise ValueError(f"{result_path} does not contain quantity {quantity!r}.")
+        values = np.asarray(
+            [
+                np.nan if row.get(quantity) is None else row.get(quantity)
+                for row in threshold_rows
+            ],
+            dtype=np.float64,
+        )
+
+    if thresholds.ndim != 1 or values.ndim != 1:
+        raise ValueError(f"{result_path} threshold quantities must be 1D.")
+    if thresholds.shape != values.shape:
+        raise ValueError(f"{result_path} thresholds and {quantity} do not match.")
+    return thresholds, values
+
+
+def plot_equation_tests_overdensity(
+    result_paths: list[str | Path],
+    output_path: str | Path,
+    quantities: list[str] | None = None,
+    title: str | None = None,
+    x_min: float = -0.9,
+    log_y: bool = True,
+) -> Path:
+    """Plot equation-test quantities as functions of overdensity threshold."""
+
+    if not result_paths:
+        raise ValueError("At least one equation-test JSON result is required.")
+
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    from .results import read_json_result
+
+    selected_quantities = quantities or DEFAULT_PLOT_QUANTITIES
+    documents = [(path, read_json_result(path)) for path in result_paths]
+    for path, document in documents:
+        if document.get("calculation") != "thesan_clumping_equation_tests":
+            raise ValueError(f"{path} is not a clumping equation-test result.")
+
+    columns = 2 if len(selected_quantities) > 1 else 1
+    rows = int(np.ceil(len(selected_quantities) / columns))
+    fig, axes = plt.subplots(
+        rows,
+        columns,
+        figsize=(6.4 * columns, max(3.4 * rows, 4.8)),
+        squeeze=False,
+    )
+    axes_flat = axes.ravel()
+
+    for ax, quantity in zip(axes_flat, selected_quantities, strict=False):
+        plotted = 0
+        for path, document in documents:
+            thresholds, values = _equation_quantity_array(
+                document,
+                path,
+                quantity,
+            )
+            finite = np.isfinite(thresholds) & np.isfinite(values)
+            if not np.any(finite):
+                continue
+            ax.plot(thresholds[finite], values[finite], label=_snapshot_label(document, path))
+            plotted += 1
+        ax.set_xlabel("Overdensity threshold")
+        ax.set_ylabel(quantity)
+        ax.set_xlim(left=x_min)
+        if log_y:
+            ymin, ymax = ax.get_ylim()
+            if plotted and ymax > 0:
+                ax.set_yscale("log")
+        ax.grid(True, alpha=0.35)
+        if len(documents) > 1:
+            ax.legend(title="Snapshot")
+
+    for ax in axes_flat[len(selected_quantities):]:
+        ax.axis("off")
+
+    if title is None:
+        first_document = documents[0][1]
+        simulation = first_document.get("simulation", {}).get("name", "simulation")
+        title = f"{simulation}: equation diagnostics vs overdensity"
+    fig.suptitle(title)
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
+
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    return output
+
+
+def build_equation_tests_plot_parser() -> argparse.ArgumentParser:
+    """Build the parser for equation-test overdensity plots."""
+
+    parser = argparse.ArgumentParser(
+        description="Plot clumping equation-test quantities versus overdensity."
+    )
+    parser.add_argument("results", nargs="+", help="Equation-test JSON results.")
+    parser.add_argument("--output", required=True, help="PNG/PDF/etc. output path.")
+    parser.add_argument(
+        "--quantities",
+        nargs="+",
+        default=DEFAULT_PLOT_QUANTITIES,
+        help="Row quantities to plot.",
+    )
+    parser.add_argument("--title")
+    parser.add_argument("--x-min", type=float, default=-0.9)
+    parser.add_argument("--linear-y", action="store_true")
+    return parser
+
+
+def equation_tests_plot_main(argv: list[str] | None = None) -> None:
+    parser = build_equation_tests_plot_parser()
+    args = parser.parse_args(argv)
+    output = plot_equation_tests_overdensity(
+        args.results,
+        args.output,
+        quantities=args.quantities,
+        title=args.title,
+        x_min=args.x_min,
+        log_y=not args.linear_y,
+    )
+    print(f"Wrote equation-test overdensity plot: {output}")
