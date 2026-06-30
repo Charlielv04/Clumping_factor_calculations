@@ -60,6 +60,15 @@ def build_equation_tests_parser() -> argparse.ArgumentParser:
         type=float,
         help="Explicit overdensity-contrast thresholds; overrides min/max/count.",
     )
+    parser.add_argument(
+        "--ionized-density-thresholds",
+        nargs="+",
+        type=float,
+        help=(
+            "Density thresholds combined with ionized cuts. Defaults to all "
+            "pure-density thresholds."
+        ),
+    )
     parser.add_argument("--ionized-cuts", nargs="*", type=float, default=[])
     parser.add_argument(
         "--ionized-sweep",
@@ -127,6 +136,11 @@ def run_equation_tests(args: argparse.Namespace) -> tuple[Path, Path]:
                 f"{args.ionized_cut_min:g}..{args.ionized_cut_max:g} "
                 f"with {args.ionized_cut_count} cuts"
             )
+        if args.ionized_density_thresholds:
+            progress(
+                "combining ionized cuts with density thresholds: "
+                f"{args.ionized_density_thresholds}"
+            )
 
     result = compute_equation_tests(
         base_path=args.base_path,
@@ -144,6 +158,7 @@ def run_equation_tests(args: argparse.Namespace) -> tuple[Path, Path]:
         threshold_min=args.threshold_min,
         threshold_max=args.threshold_max,
         threshold_count=args.threshold_count,
+        ionized_density_thresholds=args.ionized_density_thresholds,
         ionized_cuts=args.ionized_cuts,
         ionized_sweep=args.ionized_sweep,
         ionized_cut_min=args.ionized_cut_min,

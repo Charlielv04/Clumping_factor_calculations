@@ -28,6 +28,7 @@ THRESHOLDS_CSV="${THRESHOLDS_CSV:-}"
 THRESHOLD_MIN="${THRESHOLD_MIN:--1}"
 THRESHOLD_MAX="${THRESHOLD_MAX:-25}"
 THRESHOLD_COUNT="${THRESHOLD_COUNT:-200}"
+IONIZED_DENSITY_THRESHOLDS_CSV="${IONIZED_DENSITY_THRESHOLDS_CSV:-}"
 IONIZED_CUTS_CSV="${IONIZED_CUTS_CSV:-}"
 IONIZED_SWEEP="${IONIZED_SWEEP:-0}"
 IONIZED_CUT_MIN="${IONIZED_CUT_MIN:-0.9}"
@@ -49,7 +50,7 @@ fi
 
 snapshot_padded="$(printf "%03d" "${SNAPSHOT}")"
 if [[ -z "${OUTPUT}" ]]; then
-  OUTPUT="${OUTPUT_DIR}/${SIMULATION_NAME}/gas/equation-tests/snapshot${snapshot_padded}.json"
+  OUTPUT="${OUTPUT_DIR}/${SIMULATION_NAME}/gas/equation-tests/snapshot${snapshot_padded}_full_diagnostics.json"
 fi
 mkdir -p "$(dirname "${OUTPUT}")"
 
@@ -94,6 +95,13 @@ elif [[ "${IONIZED_SWEEP}" == "1" ]]; then
     --ionized-cut-count "${IONIZED_CUT_COUNT}"
   )
 fi
+if [[ -n "${IONIZED_DENSITY_THRESHOLDS_CSV}" ]]; then
+  IFS=':' read -r -a ionized_density_threshold_array \
+    <<< "${IONIZED_DENSITY_THRESHOLDS_CSV}"
+  EXTRA_ARGS+=(
+    --ionized-density-thresholds "${ionized_density_threshold_array[@]}"
+  )
+fi
 
 echo "Started: $(date)"
 echo "Host: $(hostname)"
@@ -116,6 +124,7 @@ if [[ -z "${IONIZED_CUTS_CSV}" && "${IONIZED_SWEEP}" == "1" ]]; then
 elif [[ -z "${IONIZED_CUTS_CSV}" ]]; then
   echo "Ionized cuts: none"
 fi
+echo "Ionized density thresholds: ${IONIZED_DENSITY_THRESHOLDS_CSV//:/ }"
 echo "Output: ${OUTPUT}"
 
 clumping-equation-tests \

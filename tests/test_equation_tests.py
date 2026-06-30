@@ -95,6 +95,7 @@ def test_equation_tests_compute_expected_formulas(tmp_path):
         gamma_hi_s_1=1.0e-12,
         reduced_speed_of_light_fraction=0.1,
         thresholds=[1e9],
+        ionized_density_thresholds=[1e9],
         ionized_cuts=[0.7],
         photon_group_tests=["0", "1", "0+1"],
         chunk_size=2,
@@ -117,6 +118,22 @@ def test_equation_tests_compute_expected_formulas(tmp_path):
         all_gas["nGamma_V_g0"] + all_gas["nGamma_V_g1"],
     )
     assert np.isclose(all_gas["C13_c_actual"], all_gas["C13_c_actual_g0"])
+    assert np.isclose(all_gas["C_standard_raw_volume"], 9.0 / 7.0)
+    assert np.isclose(all_gas["C_raw_volume_nH"], 9.0 / 7.0)
+    expected_photon_parameter = (
+        all_gas["nGamma_V_g0"]
+        * all_gas["c_tilde_cm_s"]
+        * all_gas["sigma_hi_cm2"]
+        / all_gas["GammaHI_s_1"]
+    )
+    assert np.isclose(
+        all_gas["nGamma_ctilde_sigma_over_Gamma_g0"],
+        expected_photon_parameter,
+    )
+    assert np.isclose(
+        all_gas["nGamma_ctilde_sigma_over_Gamma"],
+        expected_photon_parameter,
+    )
     actual_denominator = (
         ALPHA_B_HII_10000K_CM3_S * all_gas["ne_V"] * all_gas["nHII_V"]
     )
@@ -130,6 +147,10 @@ def test_equation_tests_compute_expected_formulas(tmp_path):
     )
     assert result["thresholds"] == [1e9]
     assert result["clumping_factors"] == [rows["overdensity_lt_1e+09"]["C5"]]
+    assert result["raw_volume_clumping_factors"] == [
+        rows["overdensity_lt_1e+09"]["C_standard_raw_volume"]
+    ]
+    assert result["parameters"]["ionized_density_thresholds"] == [1e9]
     assert any(
         "global scalar/table Gamma_HI" in warning
         for warning in result["warnings"]

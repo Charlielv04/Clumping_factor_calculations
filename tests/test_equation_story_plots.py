@@ -1,7 +1,9 @@
 from clumping_factor.equation_story_plots import (
+    _combined_rows_for_density,
     _nearest_combined_row,
     _parse_mask_rows,
     _photon_test_metadata,
+    _resolve_parameter_field,
 )
 
 
@@ -51,3 +53,24 @@ def test_photon_test_metadata_uses_recorded_suffixes():
         "0": "g0",
         "0+1": "g0p1",
     }
+
+
+def test_combined_rows_require_requested_density_threshold():
+    density, rows = _combined_rows_for_density(_document(), 24.0)
+    assert density == 24.0
+    assert len(rows) == 2
+
+    try:
+        _combined_rows_for_density(_document(), 10.0)
+    except ValueError as exc:
+        assert "unavailable" in str(exc)
+    else:
+        raise AssertionError("missing density threshold should fail")
+
+
+def test_resolve_parameter_field_applies_photon_suffix():
+    assert (
+        _resolve_parameter_field(_document(), "Q12_ctilde", "0+1")
+        == "Q12_ctilde_g0p1"
+    )
+    assert _resolve_parameter_field(_document(), "Q6", "0+1") == "Q6"

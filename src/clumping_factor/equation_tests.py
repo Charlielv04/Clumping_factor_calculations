@@ -133,6 +133,7 @@ def _format_mask_value(value: float) -> str:
 
 def _mask_names(
     thresholds: Sequence[float],
+    ionized_density_thresholds: Sequence[float],
     ionized_cuts: Sequence[float],
 ) -> list[str]:
     """Build stable output names for each raw-volume selection."""
@@ -142,7 +143,7 @@ def _mask_names(
         f"overdensity_lt_{_format_mask_value(threshold)}"
         for threshold in thresholds
     )
-    for threshold in thresholds:
+    for threshold in ionized_density_thresholds:
         for cut in ionized_cuts:
             names.append(
                 f"overdensity_lt_{_format_mask_value(threshold)}"
@@ -271,9 +272,12 @@ def _empty_accumulators(
             [
                 "volume",
                 "n_h",
+                "n_h_squared",
                 "n_hi",
                 "n_hii",
                 "n_e",
+                "gas_density",
+                "gas_density_squared",
                 "n_e_n_hii",
                 "n_hi_gamma",
                 "alpha_ne_nhii",
@@ -480,6 +484,7 @@ def compute_equation_tests(
     threshold_min: float = -1.0,
     threshold_max: float = 25.0,
     threshold_count: int = 200,
+    ionized_density_thresholds: Sequence[float] | None = None,
     ionized_cuts: Sequence[float] | None = None,
     ionized_sweep: bool = False,
     ionized_cut_min: float = 0.9,
@@ -522,6 +527,9 @@ def compute_equation_tests(
     threshold_min, threshold_max, threshold_count
         Default overdensity-contrast sweep configuration.  The selected cells
         satisfy ``Density / mean(Density) - 1 < threshold``.
+    ionized_density_thresholds
+        Density thresholds combined with the ionization sweep.  If omitted,
+        every pure-overdensity threshold is combined for backward compatibility.
     ionized_cuts
         Optional ionized cuts combined with every overdensity threshold as
         ``overdensity < threshold`` and ``x_HII > cut``.
@@ -562,6 +570,21 @@ def compute_equation_tests(
         ionized_cut_max,
         ionized_cut_count,
     )
+    if ionized_density_thresholds is None:
+        combined_threshold_array = threshold_array
+    else:
+        combined_threshold_array = np.asarray(
+            ionized_density_thresholds,
+            dtype=np.float64,
+        )
+        if (
+            combined_threshold_array.ndim != 1
+            or combined_threshold_array.size == 0
+            or not np.all(np.isfinite(combined_threshold_array))
+        ):
+            raise ValueError(
+                "ionized_density_thresholds must be a non-empty finite array."
+            )
 
     total_t0 = perf_counter()
     warnings: list[str] = []
@@ -632,7 +655,11 @@ def compute_equation_tests(
             f"{gamma_metadata['GammaHI_interpolation']} from the input table"
         )
 
-    mask_names = _mask_names(threshold_array, ionized_cut_array)
+    mask_names = _mask_names(
+        threshold_array,
+        combined_threshold_array,
+        ionized_cut_array,
+    )
     accumulators = _empty_accumulators(mask_names, photon_value_keys)
     expected_count = 0
     for path in snapshot_file_paths(base_path, snapshot):
@@ -652,6 +679,10 @@ def compute_equation_tests(
                 f"combined ionized sweep has {ionized_cut_array.size} cuts "
                 f"from {ionized_cut_array[0]:.8g} to "
                 f"{ionized_cut_array[-1]:.8g}"
+            )
+            progress(
+                "ionized sweep density thresholds: "
+                f"{combined_threshold_array.tolist()}"
             )
 
     required = {
@@ -773,9 +804,12 @@ def compute_equation_tests(
                 # the chosen mask accumulator.
                 values = {
                     "n_h": n_h,
+                    "n_h_squared": n_h**2,
                     "n_hi": n_hi,
                     "n_hii": n_hii,
                     "n_e": n_e,
+                    "gas_density": density_g_cm3,
+                    "gas_density_squared": density_g_cm3**2,
                     "n_e_n_hii": n_e * n_hii,
                     "n_hi_gamma": n_hi * gamma_hi,
                     "alpha_ne_nhii": alpha_b_igm * n_e * n_hii,
@@ -799,7 +833,7 @@ def compute_equation_tests(
                 )
                 _add_combined_sweep_values(
                     accumulators,
-                    threshold_array,
+                    combined_threshold_array,
                     ionized_cut_array,
                     overdensity,
                     x_hii,
@@ -866,7 +900,10 @@ def compute_equation_tests(
         }
         if volume <= 0:
             for key in [
-                "nH_V", "nHI_V", "nHII_V", "ne_V", "nGamma_V", "R_rec", "R_ion", "R_gamma_c",
+                "nH_V", "nH2_V", "nHI_V", "nHII_V", "ne_V",
+                "gas_density_V_g_cm3", "gas_density_squared_V_g2_cm6",
+                "C_standard_raw_volume", "C_raw_volume_nH", "nGamma_V",
+                "R_rec", "R_ion", "R_gamma_c",
                 "R_gamma_ctilde", "C5", "C5_paper_actual", "C5_chi_nH2",
                 "C5_neHII", "C7", "C7_paper_actual", "C7_chi_nH2", "C8",
                 "C8_corrected_actual", "C8_corrected_chi_nH2",
@@ -888,6 +925,7 @@ def compute_equation_tests(
                     "C13_ctilde_chi_nH2",
                     "Q12_c",
                     "Q12_ctilde",
+                    "nGamma_ctilde_sigma_over_Gamma",
                 ]:
                     row[f"{key}_{suffix}"] = np.nan
             rows.append(row)
@@ -899,15 +937,28 @@ def compute_equation_tests(
         #   chi_nH2: alpha_B(10^4 K) * chi_e * <n_H>^2, the older shortcut.
         mean_keys = [
             "n_h",
+            "n_h_squared",
             "n_hi",
             "n_hii",
             "n_e",
+            "gas_density",
+            "gas_density_squared",
             "n_e_n_hii",
             "n_hi_gamma",
             "alpha_ne_nhii",
             *photon_value_keys,
         ]
         means = {key: float(acc[key]) / volume for key in mean_keys}
+        c_standard_raw_volume = (
+            means["gas_density_squared"] / means["gas_density"] ** 2
+            if means["gas_density"] > 0
+            else np.nan
+        )
+        c_raw_volume_nh = (
+            means["n_h_squared"] / means["n_h"] ** 2
+            if means["n_h"] > 0
+            else np.nan
+        )
         r_rec = means["alpha_ne_nhii"]
         r_ion = means["n_hi_gamma"]
         denominator_actual = alpha_b_igm * means["n_e"] * means["n_hii"]
@@ -984,6 +1035,9 @@ def compute_equation_tests(
                 "nGamma_V": n_gamma,
                 "R_gamma_c": r_gamma_c,
                 "R_gamma_ctilde": r_gamma_ctilde,
+                "nGamma_ctilde_sigma_over_Gamma": (
+                    n_gamma * c_tilde * sigma_hi_cm2 / gamma_hi
+                ),
                 "C13_c_actual": c13_c_actual,
                 "C13_ctilde_actual": c13_ctilde_actual,
                 "C13_c_chi_nH2": c13_c_chi_nh2,
@@ -999,10 +1053,20 @@ def compute_equation_tests(
         row.update(
             {
                 "nH_V": means["n_h"],
+                "nH2_V": means["n_h_squared"],
                 "nHI_V": means["n_hi"],
                 "nHII_V": means["n_hii"],
                 "ne_V": means["n_e"],
+                "gas_density_V_g_cm3": means["gas_density"],
+                "gas_density_squared_V_g2_cm6": means[
+                    "gas_density_squared"
+                ],
+                "C_standard_raw_volume": c_standard_raw_volume,
+                "C_raw_volume_nH": c_raw_volume_nh,
                 "nGamma_V": primary_photon["nGamma_V"],
+                "nGamma_ctilde_sigma_over_Gamma": primary_photon[
+                    "nGamma_ctilde_sigma_over_Gamma"
+                ],
                 "R_rec": r_rec,
                 "R_ion": r_ion,
                 "R_gamma_c": primary_photon["R_gamma_c"],
@@ -1113,6 +1177,7 @@ def compute_equation_tests(
             "threshold_min": float(threshold_array[0]),
             "threshold_max": float(threshold_array[-1]),
             "threshold_count": int(threshold_array.size),
+            "ionized_density_thresholds": combined_threshold_array.tolist(),
             "ionized_cuts": ionized_cut_array.tolist(),
             "ionized_sweep": bool(
                 ionized_sweep
@@ -1131,6 +1196,13 @@ def compute_equation_tests(
             "ionized_cut_count": int(ionized_cut_array.size),
             "overdensity_definition": "n_H / cosmic_mean_n_H - 1",
             "threshold_selection": "raw gas cells below overdensity threshold",
+            "standard_raw_volume_clumping_definition": (
+                "<rho_gas^2>_V / <rho_gas>_V^2"
+            ),
+            "standard_raw_volume_mask_note": (
+                "evaluated over the same equation-test overdensity and "
+                "ionization masks"
+            ),
             "ionized_selection": (
                 "combined with overdensity threshold as x_HII > cut"
                 if ionized_cut_array.size
@@ -1153,6 +1225,8 @@ def compute_equation_tests(
             "recombination_coefficient": "cm^3 s^-1",
             "rates": "cm^-3 s^-1",
             "length": "cm",
+            "clumping_factors": "dimensionless",
+            "nGamma_ctilde_sigma_over_Gamma": "dimensionless",
             "volume_code": (
                 "(ckpc/h)^3 physical-converted only through density units; "
                 "masks use cell volumes as weights"
@@ -1164,6 +1238,11 @@ def compute_equation_tests(
             for row in threshold_rows
         ],
         "clumping_factor_quantity": "C5_paper_actual",
+        "raw_volume_clumping_factors": [
+            _finite_or_none(row["C_standard_raw_volume"])
+            for row in threshold_rows
+        ],
+        "raw_volume_clumping_factor_quantity": "C_standard_raw_volume",
         "warnings": warnings,
         "rows": [
             {

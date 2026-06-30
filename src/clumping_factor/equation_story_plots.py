@@ -19,6 +19,49 @@ MASK_PATTERN = re.compile(
 )
 DEFAULT_BEST_MASKS = [(24.0, 0.99), (24.0, 0.999), (49.0, 0.999)]
 DEFAULT_PHOTON_GROUPS = ["0", "1", "2", "0+1", "1+2", "0+1+2"]
+DEFAULT_DENSITY_CUTOFFS = [1.0, 5.0, 10.0, 15.0, 20.0, 25.0]
+DEFAULT_DIAGNOSTIC_PARAMETERS = [
+    "nH_V",
+    "nHI_V",
+    "nHII_V",
+    "ne_V",
+    "nGamma_V",
+    "R_rec",
+    "R_ion",
+    "R_gamma_ctilde",
+    "Q6",
+    "nHI_mfp_over_nHI_V",
+    "Q12_ctilde",
+    "nGamma_ctilde_sigma_over_Gamma",
+]
+PHOTON_DEPENDENT_PARAMETERS = {
+    "nGamma_V",
+    "R_gamma_c",
+    "R_gamma_ctilde",
+    "C13_c_actual",
+    "C13_ctilde_actual",
+    "C13_c_chi_nH2",
+    "C13_ctilde_chi_nH2",
+    "Q12_c",
+    "Q12_ctilde",
+    "nGamma_ctilde_sigma_over_Gamma",
+}
+PARAMETER_LABELS = {
+    "nH_V": r"$\langle n_{\rm H}\rangle_V$ [cm$^{-3}$]",
+    "nHI_V": r"$\langle n_{\rm HI}\rangle_V$ [cm$^{-3}$]",
+    "nHII_V": r"$\langle n_{\rm HII}\rangle_V$ [cm$^{-3}$]",
+    "ne_V": r"$\langle n_e\rangle_V$ [cm$^{-3}$]",
+    "nGamma_V": r"$\langle n_\gamma\rangle_V$ [cm$^{-3}$]",
+    "R_rec": r"$R_{\rm rec}$ [cm$^{-3}$ s$^{-1}$]",
+    "R_ion": r"$R_{\rm ion}$ [cm$^{-3}$ s$^{-1}$]",
+    "R_gamma_ctilde": r"$R_{\gamma,\tilde c}$ [cm$^{-3}$ s$^{-1}$]",
+    "Q6": r"$Q6=R_{\rm ion}/R_{\rm rec}$",
+    "nHI_mfp_over_nHI_V": r"$n_{\rm HI,mfp}/\langle n_{\rm HI}\rangle$",
+    "Q12_ctilde": r"$Q12_{\tilde c}=R_{\gamma,\tilde c}/R_{\rm rec}$",
+    "nGamma_ctilde_sigma_over_Gamma": (
+        r"$\langle n_\gamma\rangle\tilde c\sigma_{\rm HI}/\Gamma_{\rm HI}$"
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -118,18 +161,37 @@ def plot_c5_overdensity(document: dict, output: str | Path) -> Path:
         raise ValueError("No pure overdensity rows are available for plot 1.")
     delta_max = np.asarray([row.density_threshold for row in rows])
     c5 = np.asarray([_finite(row.values.get("C5_paper_actual")) for row in rows])
-    finite = np.isfinite(delta_max) & np.isfinite(c5) & (c5 > 0)
+    c_standard = np.asarray(
+        [_finite(row.values.get("C_standard_raw_volume")) for row in rows]
+    )
+    finite = np.isfinite(delta_max) & np.isfinite(c5)
     if not np.any(finite):
-        raise ValueError("No finite positive C5 values are available for plot 1.")
+        raise ValueError("No finite C5 values are available for plot 1.")
 
     fig, ax = plt.subplots(figsize=(7.2, 4.8))
-    ax.plot(delta_max[finite], c5[finite], color="#176B87", linewidth=2.2)
+    ax.plot(
+        delta_max[finite],
+        c5[finite],
+        color="#176B87",
+        linewidth=2.2,
+        label="C5",
+    )
+    standard_finite = np.isfinite(delta_max) & np.isfinite(c_standard)
+    if np.any(standard_finite):
+        ax.plot(
+            delta_max[standard_finite],
+            c_standard[standard_finite],
+            color="#4F772D",
+            linestyle="-.",
+            linewidth=2.0,
+            label="Standard raw-volume clumping",
+        )
     all_gas = next(
         (row for row in document["rows"] if row.get("mask_name") == "all-gas"),
         None,
     )
     all_gas_c5 = np.nan if all_gas is None else _finite(all_gas.get("C5_paper_actual"))
-    if np.isfinite(all_gas_c5) and all_gas_c5 > 0:
+    if np.isfinite(all_gas_c5):
         ax.axhline(
             all_gas_c5,
             color="#D1495B",
@@ -141,7 +203,6 @@ def plot_c5_overdensity(document: dict, output: str | Path) -> Path:
     ax.set_xlabel(r"Maximum overdensity contrast, $\delta_{\max}$")
     ax.set_ylabel(r"$C_5$")
     ax.set_xlim(left=-1.0)
-    ax.set_yscale("log")
     ax.grid(True, alpha=0.3)
     ax.legend()
     ax.set_title(f"{_context_title(document)}: Eq. 5 density-cut sweep")
@@ -185,7 +246,7 @@ def plot_ionization_sweep(
     fig, ax = plt.subplots(figsize=(7.2, 4.8))
     plotted = 0
     for index, (density, x, y) in enumerate(_combined_curves(document, quantity)):
-        finite = np.isfinite(x) & np.isfinite(y) & (y > 0)
+        finite = np.isfinite(x) & np.isfinite(y)
         if not np.any(finite):
             continue
         ax.plot(
@@ -198,12 +259,10 @@ def plot_ionization_sweep(
         plotted += 1
     if plotted == 0:
         plt.close(fig)
-        raise ValueError(f"No finite positive {quantity} values are available.")
+        raise ValueError(f"No finite {quantity} values are available.")
     ax.axhline(1.0, color="#222222", linestyle="--", linewidth=1.4)
     ax.set_xlabel(r"Minimum ionized fraction, $x_{\mathrm{HII,min}}$")
     ax.set_ylabel(ylabel)
-    ax.set_xscale("logit")
-    ax.set_yscale("log")
     ax.grid(True, alpha=0.3)
     ax.legend(title="Density mask")
     ax.set_title(f"{_context_title(document)}: {title}")
@@ -277,7 +336,6 @@ def plot_equation_comparison(
         ax.bar(x + (index - 1.5) * width, values, width, label=label, color=color)
     ax.set_xticks(x, [_mask_label(row) for row in rows])
     ax.set_ylabel("Clumping-factor estimate")
-    ax.set_yscale("log")
     ax.grid(True, axis="y", alpha=0.3)
     ax.legend(ncol=4)
     ax.set_title(f"{_context_title(document)}: equation comparison")
@@ -336,7 +394,6 @@ def plot_photon_groups(
     ax.axhline(1.0, color="#222222", linestyle="--", linewidth=1.4)
     ax.set_xlabel("Photon group combination")
     ax.set_ylabel(r"$Q12_{\tilde c}=R_{\gamma,\tilde c}/R_{\rm rec}$")
-    ax.set_yscale("log")
     ax.grid(True, axis="y", alpha=0.3)
     ax.set_title(f"{_context_title(document)}: photon test, {_mask_label(row)}")
     return _save_figure(fig, Path(output))
@@ -452,3 +509,250 @@ def equation_story_plots_main(argv: list[str] | None = None) -> None:
     )
     for output in outputs:
         print(f"Wrote equation story plot: {output}")
+
+
+def _combined_rows_for_density(
+    document: dict,
+    requested_density: float,
+) -> tuple[float, list[MaskRow]]:
+    """Return the ionization sweep nearest a requested density threshold."""
+
+    rows = [row for row in _parse_mask_rows(document) if row.ionized_cut is not None]
+    available = sorted({row.density_threshold for row in rows})
+    if not available:
+        raise ValueError("No combined overdensity and ionization rows are available.")
+    actual_density = min(available, key=lambda value: abs(value - requested_density))
+    if not np.isclose(actual_density, requested_density, rtol=0.0, atol=1.0e-10):
+        raise ValueError(
+            f"Requested density threshold {requested_density:g} is unavailable; "
+            f"available thresholds are {available}."
+        )
+    selected = sorted(
+        (row for row in rows if row.density_threshold == actual_density),
+        key=lambda row: float(row.ionized_cut),
+    )
+    return actual_density, selected
+
+
+def _resolve_parameter_field(
+    document: dict,
+    parameter: str,
+    photon_test: str | None,
+) -> str:
+    """Resolve a photon-dependent parameter to its requested group suffix."""
+
+    if parameter not in PHOTON_DEPENDENT_PARAMETERS or photon_test is None:
+        return parameter
+    suffixes = _photon_test_metadata(document)
+    if photon_test not in suffixes:
+        raise ValueError(f"Result is missing photon group test {photon_test!r}.")
+    return f"{parameter}_{suffixes[photon_test]}"
+
+
+def _parameter_label(parameter: str, photon_test: str | None) -> str:
+    """Return a readable y-axis label, including photon provenance."""
+
+    label = PARAMETER_LABELS.get(parameter, parameter)
+    if parameter in PHOTON_DEPENDENT_PARAMETERS and photon_test is not None:
+        label = f"{label} (groups {photon_test})"
+    return label
+
+
+def plot_clumping_ionization_panels(
+    document: dict,
+    density_cutoffs: Sequence[float],
+    output: str | Path,
+    photon_test: str | None = None,
+) -> Path:
+    """Plot five clumping estimates over ionization cuts for each density mask."""
+
+    import matplotlib.pyplot as plt
+
+    quantities = [
+        ("Raw volume", "C_standard_raw_volume"),
+        ("C5", "C5_paper_actual"),
+        ("C7", "C7_paper_actual"),
+        ("C8", "C8_corrected_actual"),
+        (r"C13$_{\tilde c}$", "C13_ctilde_actual"),
+    ]
+    colors = ["#4F772D", "#176B87", "#D1495B", "#E76F51", "#7B2CBF"]
+    columns = 3
+    panel_rows = int(np.ceil(len(density_cutoffs) / columns))
+    fig, axes = plt.subplots(
+        panel_rows,
+        columns,
+        figsize=(15.0, max(4.0 * panel_rows, 5.0)),
+        squeeze=False,
+        sharex=True,
+    )
+    for ax, requested_density in zip(
+        axes.ravel(),
+        density_cutoffs,
+        strict=False,
+    ):
+        actual_density, rows = _combined_rows_for_density(
+            document,
+            requested_density,
+        )
+        x = np.asarray([float(row.ionized_cut) for row in rows])
+        for (label, base_field), color in zip(quantities, colors, strict=True):
+            field = _resolve_parameter_field(document, base_field, photon_test)
+            plot_label = label
+            if base_field in PHOTON_DEPENDENT_PARAMETERS and photon_test:
+                plot_label = f"{label} ({photon_test})"
+            y = np.asarray([_finite(row.values.get(field)) for row in rows])
+            finite = np.isfinite(x) & np.isfinite(y)
+            if np.any(finite):
+                ax.plot(
+                    x[finite],
+                    y[finite],
+                    color=color,
+                    label=plot_label,
+                    linewidth=1.8,
+                )
+        ax.axhline(1.0, color="#333333", linestyle="--", linewidth=1.0)
+        ax.set_title(rf"$\delta < {actual_density:g}$")
+        ax.set_xlabel(r"$x_{\mathrm{HII,min}}$")
+        ax.set_ylabel("Clumping-factor estimate")
+        ax.grid(True, alpha=0.3)
+    for ax in axes.ravel()[len(density_cutoffs):]:
+        ax.axis("off")
+    handles, labels = axes.ravel()[0].get_legend_handles_labels()
+    if handles:
+        fig.legend(handles, labels, loc="upper center", ncol=5)
+    fig.suptitle(f"{_context_title(document)}: clumping vs ionization cut")
+    fig.tight_layout(rect=(0, 0, 1, 0.93))
+    return _save_figure(fig, Path(output))
+
+
+def plot_parameter_ionization_curves(
+    document: dict,
+    parameter: str,
+    density_cutoffs: Sequence[float],
+    output: str | Path,
+    photon_test: str | None = None,
+) -> Path:
+    """Plot one diagnostic parameter over ionization cuts for density masks."""
+
+    import matplotlib.pyplot as plt
+
+    field = _resolve_parameter_field(document, parameter, photon_test)
+    colors = ["#176B87", "#D1495B", "#4F772D", "#7B2CBF", "#E76F51", "#577590"]
+    fig, ax = plt.subplots(figsize=(8.0, 5.0))
+    plotted = 0
+    for index, requested_density in enumerate(density_cutoffs):
+        actual_density, rows = _combined_rows_for_density(
+            document,
+            requested_density,
+        )
+        x = np.asarray([float(row.ionized_cut) for row in rows])
+        y = np.asarray([_finite(row.values.get(field)) for row in rows])
+        finite = np.isfinite(x) & np.isfinite(y)
+        if not np.any(finite):
+            continue
+        ax.plot(
+            x[finite],
+            y[finite],
+            color=colors[index % len(colors)],
+            linewidth=1.9,
+            label=rf"$\delta < {actual_density:g}$",
+        )
+        plotted += 1
+    if plotted == 0:
+        plt.close(fig)
+        raise ValueError(f"No finite values found for parameter {field!r}.")
+    if parameter in {"Q6", "Q12_c", "Q12_ctilde", "nHI_mfp_over_nHI_V"}:
+        ax.axhline(1.0, color="#333333", linestyle="--", linewidth=1.2)
+    ax.set_xlabel(r"Minimum ionized fraction, $x_{\mathrm{HII,min}}$")
+    ax.set_ylabel(_parameter_label(parameter, photon_test))
+    ax.grid(True, alpha=0.3)
+    ax.legend(title="Density mask", ncol=2)
+    ax.set_title(f"{_context_title(document)}: {parameter} vs ionization cut")
+    return _save_figure(fig, Path(output))
+
+
+def _safe_filename(value: str) -> str:
+    """Convert a result-column name into a stable filename component."""
+
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("_")
+
+
+def build_extended_diagnostic_plots(
+    result_path: str | Path,
+    output_dir: str | Path,
+    density_cutoffs: Sequence[float] = DEFAULT_DENSITY_CUTOFFS,
+    parameters: Sequence[str] = DEFAULT_DIAGNOSTIC_PARAMETERS,
+    photon_test: str | None = None,
+) -> list[Path]:
+    """Build overdensity, clumping, and parameter ionization-sweep plots."""
+
+    document = _load_equation_document(result_path)
+    output_dir = Path(output_dir)
+    outputs = [
+        plot_c5_overdensity(
+            document,
+            _prepare_output(output_dir, "01_c5_raw_volume_overdensity.png"),
+        ),
+        plot_clumping_ionization_panels(
+            document,
+            density_cutoffs,
+            _prepare_output(output_dir, "02_clumping_ionization_panels.png"),
+            photon_test=photon_test,
+        ),
+    ]
+    for index, parameter in enumerate(parameters, start=3):
+        outputs.append(
+            plot_parameter_ionization_curves(
+                document,
+                parameter,
+                density_cutoffs,
+                _prepare_output(
+                    output_dir,
+                    f"{index:02d}_parameter_{_safe_filename(parameter)}.png",
+                ),
+                photon_test=photon_test,
+            )
+        )
+    return outputs
+
+
+def build_extended_plot_parser() -> argparse.ArgumentParser:
+    """Build the parser for extended equation diagnostic plots."""
+
+    parser = argparse.ArgumentParser(
+        description="Plot clumping and equation inputs over ionization masks."
+    )
+    parser.add_argument("result", help="Equation-test JSON result.")
+    parser.add_argument("--output-dir", required=True)
+    parser.add_argument(
+        "--density-cutoffs",
+        nargs="+",
+        type=float,
+        default=DEFAULT_DENSITY_CUTOFFS,
+    )
+    parser.add_argument(
+        "--parameters",
+        nargs="+",
+        default=DEFAULT_DIAGNOSTIC_PARAMETERS,
+    )
+    parser.add_argument(
+        "--photon-test",
+        help="Photon combination for group-dependent fields, for example 0+1.",
+    )
+    return parser
+
+
+def equation_diagnostic_plots_main(argv: list[str] | None = None) -> None:
+    """Run the extended diagnostic plotting workflow."""
+
+    parser = build_extended_plot_parser()
+    args = parser.parse_args(argv)
+    outputs = build_extended_diagnostic_plots(
+        args.result,
+        args.output_dir,
+        density_cutoffs=args.density_cutoffs,
+        parameters=args.parameters,
+        photon_test=args.photon_test,
+    )
+    for output in outputs:
+        print(f"Wrote equation diagnostic plot: {output}")
