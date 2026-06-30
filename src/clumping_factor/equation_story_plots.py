@@ -186,20 +186,6 @@ def plot_c5_overdensity(document: dict, output: str | Path) -> Path:
             linewidth=2.0,
             label="Standard raw-volume clumping",
         )
-    all_gas = next(
-        (row for row in document["rows"] if row.get("mask_name") == "all-gas"),
-        None,
-    )
-    all_gas_c5 = np.nan if all_gas is None else _finite(all_gas.get("C5_paper_actual"))
-    if np.isfinite(all_gas_c5):
-        ax.axhline(
-            all_gas_c5,
-            color="#D1495B",
-            linestyle="--",
-            linewidth=1.8,
-            label=f"All gas: C5={all_gas_c5:.3g}",
-        )
-    ax.axhspan(3.0, 4.0, color="#E9C46A", alpha=0.25, label="C5 = 3-4")
     ax.set_xlabel(r"Maximum overdensity contrast, $\delta_{\max}$")
     ax.set_ylabel(r"$C_5$")
     ax.set_xlim(left=-1.0)
@@ -263,6 +249,7 @@ def plot_ionization_sweep(
     ax.axhline(1.0, color="#222222", linestyle="--", linewidth=1.4)
     ax.set_xlabel(r"Minimum ionized fraction, $x_{\mathrm{HII,min}}$")
     ax.set_ylabel(ylabel)
+    ax.set_xscale("logit")
     ax.grid(True, alpha=0.3)
     ax.legend(title="Density mask")
     ax.set_title(f"{_context_title(document)}: {title}")
@@ -614,14 +601,87 @@ def plot_clumping_ionization_panels(
         ax.set_title(rf"$\delta < {actual_density:g}$")
         ax.set_xlabel(r"$x_{\mathrm{HII,min}}$")
         ax.set_ylabel("Clumping-factor estimate")
+        ax.set_xscale("logit")
         ax.grid(True, alpha=0.3)
     for ax in axes.ravel()[len(density_cutoffs):]:
         ax.axis("off")
     handles, labels = axes.ravel()[0].get_legend_handles_labels()
     if handles:
-        fig.legend(handles, labels, loc="upper center", ncol=5)
+        fig.legend(handles, labels, loc="lower center", ncol=5)
     fig.suptitle(f"{_context_title(document)}: clumping vs ionization cut")
-    fig.tight_layout(rect=(0, 0, 1, 0.93))
+    fig.tight_layout(rect=(0, 0.08, 1, 0.93))
+    return _save_figure(fig, Path(output))
+
+
+def plot_c13_photon_ionization_panels(
+    document: dict,
+    density_cutoffs: Sequence[float],
+    photon_groups: Sequence[str],
+    output: str | Path,
+) -> Path:
+    """Plot reduced-light C13 for photon combinations and density masks."""
+
+    import matplotlib.pyplot as plt
+
+    suffixes = _photon_test_metadata(document)
+    missing = [group for group in photon_groups if group not in suffixes]
+    if missing:
+        raise ValueError(
+            "Result is missing photon group tests: " + ", ".join(missing)
+        )
+    colors = ["#176B87", "#D1495B", "#4F772D", "#7B2CBF", "#E76F51", "#577590"]
+    linestyles = ["-", "--", "-.", ":", "-", "--"]
+    columns = 3
+    panel_rows = int(np.ceil(len(density_cutoffs) / columns))
+    fig, axes = plt.subplots(
+        panel_rows,
+        columns,
+        figsize=(15.0, max(4.0 * panel_rows, 5.0)),
+        squeeze=False,
+        sharex=True,
+    )
+    for ax, requested_density in zip(
+        axes.ravel(),
+        density_cutoffs,
+        strict=False,
+    ):
+        actual_density, rows = _combined_rows_for_density(
+            document,
+            requested_density,
+        )
+        x = np.asarray([float(row.ionized_cut) for row in rows])
+        for index, group in enumerate(photon_groups):
+            field = f"C13_ctilde_actual_{suffixes[group]}"
+            y = np.asarray([_finite(row.values.get(field)) for row in rows])
+            finite = np.isfinite(x) & np.isfinite(y)
+            if np.any(finite):
+                ax.plot(
+                    x[finite],
+                    y[finite],
+                    color=colors[index % len(colors)],
+                    linestyle=linestyles[index % len(linestyles)],
+                    linewidth=1.8,
+                    label=group,
+                )
+        ax.axhline(1.0, color="#333333", linestyle="--", linewidth=1.0)
+        ax.set_title(rf"$\delta < {actual_density:g}$")
+        ax.set_xlabel(r"$x_{\mathrm{HII,min}}$")
+        ax.set_ylabel(r"$C13_{\tilde c}$")
+        ax.set_xscale("logit")
+        ax.grid(True, alpha=0.3)
+    for ax in axes.ravel()[len(density_cutoffs):]:
+        ax.axis("off")
+    handles, labels = axes.ravel()[0].get_legend_handles_labels()
+    if handles:
+        fig.legend(
+            handles,
+            labels,
+            title="Photon groups",
+            loc="lower center",
+            ncol=min(len(photon_groups), 6),
+        )
+    fig.suptitle(f"{_context_title(document)}: C13 photon-group comparison")
+    fig.tight_layout(rect=(0, 0.08, 1, 0.93))
     return _save_figure(fig, Path(output))
 
 
@@ -665,6 +725,7 @@ def plot_parameter_ionization_curves(
         ax.axhline(1.0, color="#333333", linestyle="--", linewidth=1.2)
     ax.set_xlabel(r"Minimum ionized fraction, $x_{\mathrm{HII,min}}$")
     ax.set_ylabel(_parameter_label(parameter, photon_test))
+    ax.set_xscale("logit")
     ax.grid(True, alpha=0.3)
     ax.legend(title="Density mask", ncol=2)
     ax.set_title(f"{_context_title(document)}: {parameter} vs ionization cut")
@@ -683,6 +744,7 @@ def build_extended_diagnostic_plots(
     density_cutoffs: Sequence[float] = DEFAULT_DENSITY_CUTOFFS,
     parameters: Sequence[str] = DEFAULT_DIAGNOSTIC_PARAMETERS,
     photon_test: str | None = None,
+    photon_groups: Sequence[str] = DEFAULT_PHOTON_GROUPS,
 ) -> list[Path]:
     """Build overdensity, clumping, and parameter ionization-sweep plots."""
 
@@ -699,8 +761,14 @@ def build_extended_diagnostic_plots(
             _prepare_output(output_dir, "02_clumping_ionization_panels.png"),
             photon_test=photon_test,
         ),
+        plot_c13_photon_ionization_panels(
+            document,
+            density_cutoffs,
+            photon_groups,
+            _prepare_output(output_dir, "03_c13_photon_group_panels.png"),
+        ),
     ]
-    for index, parameter in enumerate(parameters, start=3):
+    for index, parameter in enumerate(parameters, start=4):
         outputs.append(
             plot_parameter_ionization_curves(
                 document,
@@ -739,6 +807,12 @@ def build_extended_plot_parser() -> argparse.ArgumentParser:
         "--photon-test",
         help="Photon combination for group-dependent fields, for example 0+1.",
     )
+    parser.add_argument(
+        "--photon-groups",
+        nargs="+",
+        default=DEFAULT_PHOTON_GROUPS,
+        help="Photon combinations shown together in the C13 panel figure.",
+    )
     return parser
 
 
@@ -753,6 +827,7 @@ def equation_diagnostic_plots_main(argv: list[str] | None = None) -> None:
         density_cutoffs=args.density_cutoffs,
         parameters=args.parameters,
         photon_test=args.photon_test,
+        photon_groups=args.photon_groups,
     )
     for output in outputs:
         print(f"Wrote equation diagnostic plot: {output}")
