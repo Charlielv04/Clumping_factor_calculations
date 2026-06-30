@@ -23,11 +23,16 @@ TEMPERATURE_FILE="${TEMPERATURE_FILE:-}"
 REDUCED_SPEED_OF_LIGHT_FRACTION="${REDUCED_SPEED_OF_LIGHT_FRACTION:-0.2}"
 C_TILDE_CM_S="${C_TILDE_CM_S:-}"
 PHOTON_GROUPS_CSV="${PHOTON_GROUPS_CSV:-0}"
+PHOTON_GROUP_TESTS_CSV="${PHOTON_GROUP_TESTS_CSV:-}"
 THRESHOLDS_CSV="${THRESHOLDS_CSV:-}"
 THRESHOLD_MIN="${THRESHOLD_MIN:--1}"
 THRESHOLD_MAX="${THRESHOLD_MAX:-25}"
 THRESHOLD_COUNT="${THRESHOLD_COUNT:-200}"
 IONIZED_CUTS_CSV="${IONIZED_CUTS_CSV:-}"
+IONIZED_SWEEP="${IONIZED_SWEEP:-0}"
+IONIZED_CUT_MIN="${IONIZED_CUT_MIN:-0.9}"
+IONIZED_CUT_MAX="${IONIZED_CUT_MAX:-0.9999}"
+IONIZED_CUT_COUNT="${IONIZED_CUT_COUNT:-200}"
 CHUNK_SIZE="${CHUNK_SIZE:-1000000}"
 HYDROGEN_MASS_FRACTION="${HYDROGEN_MASS_FRACTION:-0.76}"
 CHI_E="${CHI_E:-1.08}"
@@ -64,6 +69,10 @@ else
   EXTRA_ARGS+=(--reduced-speed-of-light-fraction "${REDUCED_SPEED_OF_LIGHT_FRACTION}")
 fi
 IFS=':' read -r -a photon_group_array <<< "${PHOTON_GROUPS_CSV}"
+if [[ -n "${PHOTON_GROUP_TESTS_CSV}" ]]; then
+  IFS=':' read -r -a photon_group_test_array <<< "${PHOTON_GROUP_TESTS_CSV}"
+  EXTRA_ARGS+=(--photon-group-tests "${photon_group_test_array[@]}")
+fi
 if [[ -n "${THRESHOLDS_CSV}" ]]; then
   IFS=':' read -r -a threshold_array <<< "${THRESHOLDS_CSV}"
   EXTRA_ARGS+=(--thresholds "${threshold_array[@]}")
@@ -77,6 +86,13 @@ fi
 if [[ -n "${IONIZED_CUTS_CSV}" ]]; then
   IFS=':' read -r -a ionized_cut_array <<< "${IONIZED_CUTS_CSV}"
   EXTRA_ARGS+=(--ionized-cuts "${ionized_cut_array[@]}")
+elif [[ "${IONIZED_SWEEP}" == "1" ]]; then
+  EXTRA_ARGS+=(
+    --ionized-sweep
+    --ionized-cut-min "${IONIZED_CUT_MIN}"
+    --ionized-cut-max "${IONIZED_CUT_MAX}"
+    --ionized-cut-count "${IONIZED_CUT_COUNT}"
+  )
 fi
 
 echo "Started: $(date)"
@@ -87,12 +103,17 @@ echo "Base path: ${BASE_PATH}"
 echo "MFP file: ${MFP_FILE}"
 echo "Sigma_HI: ${SIGMA_HI_CM2} cm^2"
 echo "Photon groups: ${PHOTON_GROUPS_CSV//:/ }"
+if [[ -n "${PHOTON_GROUP_TESTS_CSV}" ]]; then
+  echo "Photon group tests: ${PHOTON_GROUP_TESTS_CSV//:/ }"
+fi
 echo "Thresholds: ${THRESHOLDS_CSV//:/ }"
 if [[ -z "${THRESHOLDS_CSV}" ]]; then
   echo "Threshold sweep: ${THRESHOLD_MIN} to ${THRESHOLD_MAX} (${THRESHOLD_COUNT})"
 fi
 echo "Ionized cuts: ${IONIZED_CUTS_CSV//:/ }"
-if [[ -z "${IONIZED_CUTS_CSV}" ]]; then
+if [[ -z "${IONIZED_CUTS_CSV}" && "${IONIZED_SWEEP}" == "1" ]]; then
+  echo "Ionized sweep: ${IONIZED_CUT_MIN} to ${IONIZED_CUT_MAX} (${IONIZED_CUT_COUNT})"
+elif [[ -z "${IONIZED_CUTS_CSV}" ]]; then
   echo "Ionized cuts: none"
 fi
 echo "Output: ${OUTPUT}"

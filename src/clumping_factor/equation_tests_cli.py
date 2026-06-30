@@ -43,6 +43,14 @@ def build_equation_tests_parser() -> argparse.ArgumentParser:
     parser.add_argument("--reduced-speed-of-light-fraction", type=float, default=0.2)
     parser.add_argument("--c-tilde-cm-s", type=float)
     parser.add_argument("--photon-groups", nargs="+", type=int, default=[0])
+    parser.add_argument(
+        "--photon-group-tests",
+        nargs="+",
+        help=(
+            "Photon group combinations evaluated in one pass, for example "
+            "0 1 0+1. Overrides --photon-groups."
+        ),
+    )
     parser.add_argument("--threshold-min", type=float, default=-1.0)
     parser.add_argument("--threshold-max", type=float, default=25.0)
     parser.add_argument("--threshold-count", type=int, default=200)
@@ -53,6 +61,14 @@ def build_equation_tests_parser() -> argparse.ArgumentParser:
         help="Explicit overdensity-contrast thresholds; overrides min/max/count.",
     )
     parser.add_argument("--ionized-cuts", nargs="*", type=float, default=[])
+    parser.add_argument(
+        "--ionized-sweep",
+        action="store_true",
+        help="Generate logarithmically spaced cuts in 1 - x_HII.",
+    )
+    parser.add_argument("--ionized-cut-min", type=float, default=0.9)
+    parser.add_argument("--ionized-cut-max", type=float, default=0.9999)
+    parser.add_argument("--ionized-cut-count", type=int, default=200)
     parser.add_argument("--chunk-size", type=int, default=1_000_000)
     parser.add_argument("--hydrogen-mass-fraction", type=float, default=0.76)
     parser.add_argument("--chi-e", type=float, default=1.08)
@@ -88,6 +104,13 @@ def run_equation_tests(args: argparse.Namespace) -> tuple[Path, Path]:
     ):
         progress("using default reduced speed of light fraction: 0.2")
     if args.verbose:
+        if args.photon_group_tests:
+            progress(
+                "testing photon group combinations: "
+                f"{', '.join(args.photon_group_tests)}"
+            )
+        else:
+            progress(f"testing photon groups together: {args.photon_groups}")
         if args.thresholds is None:
             progress(
                 "using overdensity sweep "
@@ -96,6 +119,14 @@ def run_equation_tests(args: argparse.Namespace) -> tuple[Path, Path]:
             )
         else:
             progress(f"using {len(args.thresholds)} explicit overdensity thresholds")
+        if args.ionized_cuts:
+            progress(f"using {len(args.ionized_cuts)} explicit ionized cuts")
+        elif args.ionized_sweep:
+            progress(
+                "using logarithmic ionized sweep in 1 - x_HII: "
+                f"{args.ionized_cut_min:g}..{args.ionized_cut_max:g} "
+                f"with {args.ionized_cut_count} cuts"
+            )
 
     result = compute_equation_tests(
         base_path=args.base_path,
@@ -108,11 +139,16 @@ def run_equation_tests(args: argparse.Namespace) -> tuple[Path, Path]:
         c_tilde_cm_s=args.c_tilde_cm_s,
         reduced_speed_of_light_fraction=args.reduced_speed_of_light_fraction,
         photon_groups=args.photon_groups,
+        photon_group_tests=args.photon_group_tests,
         thresholds=args.thresholds,
         threshold_min=args.threshold_min,
         threshold_max=args.threshold_max,
         threshold_count=args.threshold_count,
         ionized_cuts=args.ionized_cuts,
+        ionized_sweep=args.ionized_sweep,
+        ionized_cut_min=args.ionized_cut_min,
+        ionized_cut_max=args.ionized_cut_max,
+        ionized_cut_count=args.ionized_cut_count,
         chunk_size=args.chunk_size,
         hydrogen_mass_fraction=args.hydrogen_mass_fraction,
         chi_e=args.chi_e,

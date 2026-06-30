@@ -125,6 +125,12 @@ def _finite_or_none(value: float) -> float | None:
     return value if np.isfinite(value) else None
 
 
+def _format_mask_value(value: float) -> str:
+    """Format a mask boundary precisely enough for a stable row name."""
+
+    return f"{float(value):.12g}"
+
+
 def _mask_names(
     thresholds: Sequence[float],
     ionized_cuts: Sequence[float],
@@ -132,11 +138,15 @@ def _mask_names(
     """Build stable output names for each raw-volume selection."""
 
     names = ["all-gas"]
-    names.extend(f"overdensity_lt_{float(threshold):g}" for threshold in thresholds)
+    names.extend(
+        f"overdensity_lt_{_format_mask_value(threshold)}"
+        for threshold in thresholds
+    )
     for threshold in thresholds:
         for cut in ionized_cuts:
             names.append(
-                f"overdensity_lt_{float(threshold):g}__xHII_gt_{float(cut):g}"
+                f"overdensity_lt_{_format_mask_value(threshold)}"
+                f"__xHII_gt_{_format_mask_value(cut)}"
             )
     return names
 
@@ -173,24 +183,105 @@ def _build_thresholds(
     )
 
 
+def _build_ionized_cuts(
+    ionized_cuts: Sequence[float] | None,
+    ionized_sweep: bool,
+    ionized_cut_min: float,
+    ionized_cut_max: float,
+    ionized_cut_count: int,
+) -> np.ndarray:
+    """Return explicit cuts or a logarithmic sweep in ``1 - x_HII``."""
+
+    has_explicit_cuts = ionized_cuts is not None and len(ionized_cuts) > 0
+    if has_explicit_cuts:
+        cuts = np.asarray(ionized_cuts, dtype=np.float64)
+    elif ionized_sweep:
+        if ionized_cut_count < 1:
+            raise ValueError("ionized_cut_count must be at least 1.")
+        if not 0.0 <= ionized_cut_min < ionized_cut_max < 1.0:
+            raise ValueError(
+                "ionized cut bounds must satisfy "
+                "0 <= ionized_cut_min < ionized_cut_max < 1."
+            )
+        neutral_residuals = np.logspace(
+            np.log10(1.0 - ionized_cut_min),
+            np.log10(1.0 - ionized_cut_max),
+            int(ionized_cut_count),
+            dtype=np.float64,
+        )
+        cuts = 1.0 - neutral_residuals
+    else:
+        return np.empty(0, dtype=np.float64)
+
+    if cuts.ndim != 1 or not np.all(np.isfinite(cuts)):
+        raise ValueError("ionized cuts must be a one-dimensional finite array.")
+    if np.any(cuts < 0.0) or np.any(cuts >= 1.0):
+        raise ValueError("ionized cuts must satisfy 0 <= x_HII cut < 1.")
+    return cuts
+
+
+def _normalize_photon_group_tests(
+    photon_groups: Sequence[int],
+    photon_group_tests: Sequence[str | Sequence[int]] | None,
+) -> list[tuple[str, tuple[int, ...]]]:
+    """Normalize photon group combinations such as ``0``, ``1``, or ``0+1``."""
+
+    raw_tests: Sequence[str | Sequence[int]]
+    if photon_group_tests is not None and len(photon_group_tests) > 0:
+        raw_tests = photon_group_tests
+    else:
+        raw_tests = [tuple(int(group) for group in photon_groups)]
+
+    normalized: list[tuple[str, tuple[int, ...]]] = []
+    seen: set[tuple[int, ...]] = set()
+    for raw_test in raw_tests:
+        if isinstance(raw_test, str):
+            pieces = raw_test.split("+")
+            if not pieces or any(not piece.strip() for piece in pieces):
+                raise ValueError(f"Invalid photon group test {raw_test!r}.")
+            groups = tuple(sorted({int(piece) for piece in pieces}))
+        else:
+            groups = tuple(sorted({int(group) for group in raw_test}))
+        if not groups:
+            raise ValueError("Photon group tests cannot be empty.")
+        if any(group < 0 or group > 2 for group in groups):
+            raise ValueError("THESAN PhotonDensity groups must be 0, 1, or 2.")
+        if groups in seen:
+            continue
+        seen.add(groups)
+        label = "+".join(str(group) for group in groups)
+        normalized.append((label, groups))
+    return normalized
+
+
+def _photon_field_suffix(label: str) -> str:
+    """Return a column-safe suffix for a photon group combination."""
+
+    return f"g{label.replace('+', 'p')}"
+
+
 def _empty_accumulators(
     mask_names: Sequence[str],
+    photon_value_keys: Sequence[str],
 ) -> dict[str, dict[str, float | int]]:
     """Initialize volume-weighted running sums for every requested mask."""
 
     return {
-        name: {
-            "selected_cells": 0,
-            "volume": 0.0,
-            "n_h": 0.0,
-            "n_hi": 0.0,
-            "n_hii": 0.0,
-            "n_e": 0.0,
-            "n_gamma": 0.0,
-            "n_e_n_hii": 0.0,
-            "n_hi_gamma": 0.0,
-            "alpha_ne_nhii": 0.0,
-        }
+        name: dict.fromkeys(
+            [
+                "volume",
+                "n_h",
+                "n_hi",
+                "n_hii",
+                "n_e",
+                "n_e_n_hii",
+                "n_hi_gamma",
+                "alpha_ne_nhii",
+                *photon_value_keys,
+            ],
+            0.0,
+        )
+        | {"selected_cells": 0}
         for name in mask_names
     }
 
@@ -241,12 +332,65 @@ def _add_threshold_sweep_values(
     for threshold, index in zip(thresholds, indices, strict=True):
         if index == 0:
             continue
-        name = f"overdensity_lt_{float(threshold):g}{suffix}"
+        name = f"overdensity_lt_{_format_mask_value(threshold)}{suffix}"
         acc = accumulators[name]
         acc["selected_cells"] = int(acc["selected_cells"]) + int(index)
         acc["volume"] = float(acc["volume"]) + float(volume_cumsum[index - 1])
         for key, cumsum in value_cumsums.items():
             acc[key] = float(acc[key]) + float(cumsum[index - 1])
+
+
+def _add_combined_sweep_values(
+    accumulators: dict[str, dict[str, float | int]],
+    thresholds: np.ndarray,
+    ionized_cuts: np.ndarray,
+    overdensity: np.ndarray,
+    x_hii: np.ndarray,
+    values: dict[str, np.ndarray],
+    volume: np.ndarray,
+) -> None:
+    """Accumulate combined density and ionization cuts efficiently.
+
+    For each density threshold, cells are sorted once by ionized fraction.
+    Reverse cumulative sums then evaluate every ``x_HII`` cut without another
+    full scan of the selected cells.
+    """
+
+    if thresholds.size == 0 or ionized_cuts.size == 0:
+        return
+
+    for threshold in thresholds:
+        density_selected = overdensity < threshold
+        if not np.any(density_selected):
+            continue
+
+        selected_x_hii = x_hii[density_selected]
+        order = np.argsort(selected_x_hii)
+        x_hii_sorted = selected_x_hii[order]
+        volume_sorted = volume[density_selected][order]
+        reverse_volume = np.cumsum(volume_sorted[::-1], dtype=np.float64)[::-1]
+        reverse_values = {
+            key: np.cumsum(
+                (array[density_selected][order] * volume_sorted)[::-1],
+                dtype=np.float64,
+            )[::-1]
+            for key, array in values.items()
+        }
+        indices = np.searchsorted(x_hii_sorted, ionized_cuts, side="right")
+
+        for cut, index in zip(ionized_cuts, indices, strict=True):
+            if index >= x_hii_sorted.size:
+                continue
+            name = (
+                f"overdensity_lt_{_format_mask_value(threshold)}"
+                f"__xHII_gt_{_format_mask_value(cut)}"
+            )
+            acc = accumulators[name]
+            count = int(x_hii_sorted.size - index)
+            acc["selected_cells"] = int(acc["selected_cells"]) + count
+            acc["volume"] = float(acc["volume"]) + float(reverse_volume[index])
+            for key, reverse_cumsum in reverse_values.items():
+                acc[key] = float(acc[key]) + float(reverse_cumsum[index])
 
 
 def _require_positive(value: float | None, name: str) -> float:
@@ -331,11 +475,16 @@ def compute_equation_tests(
     c_tilde_cm_s: float | None = None,
     reduced_speed_of_light_fraction: float | None = None,
     photon_groups: Sequence[int] = (0,),
+    photon_group_tests: Sequence[str | Sequence[int]] | None = None,
     thresholds: Sequence[float] | None = None,
     threshold_min: float = -1.0,
     threshold_max: float = 25.0,
     threshold_count: int = 200,
-    ionized_cuts: Sequence[float] = (),
+    ionized_cuts: Sequence[float] | None = None,
+    ionized_sweep: bool = False,
+    ionized_cut_min: float = 0.9,
+    ionized_cut_max: float = 0.9999,
+    ionized_cut_count: int = 200,
     chunk_size: int = 1_000_000,
     hydrogen_mass_fraction: float = 0.76,
     chi_e: float = 1.08,
@@ -364,7 +513,9 @@ def compute_equation_tests(
     c_tilde_cm_s, reduced_speed_of_light_fraction
         Mutually exclusive sources for the reduced-speed-of-light comparison.
     photon_groups
-        THESAN ``PhotonDensity`` group indices to include in ``n_gamma``.
+        Backward-compatible single THESAN ``PhotonDensity`` combination.
+    photon_group_tests
+        Combinations evaluated together, for example ``("0", "1", "0+1")``.
     thresholds
         Explicit overdensity-contrast thresholds.  If omitted, thresholds are
         linearly spaced from ``threshold_min`` to ``threshold_max``.
@@ -374,6 +525,9 @@ def compute_equation_tests(
     ionized_cuts
         Optional ionized cuts combined with every overdensity threshold as
         ``overdensity < threshold`` and ``x_HII > cut``.
+    ionized_sweep, ionized_cut_min, ionized_cut_max, ionized_cut_count
+        Generate logarithmically spaced cuts in the residual neutral fraction
+        ``1 - x_HII``.  Explicit ``ionized_cuts`` take precedence.
     progress
         Optional callback for verbose status messages.
     """
@@ -382,11 +536,16 @@ def compute_equation_tests(
 
     if chunk_size < 1:
         raise ValueError("chunk_size must be at least 1.")
-    groups = tuple(int(group) for group in photon_groups)
-    if not groups:
-        raise ValueError("At least one photon group is required.")
-    if any(group < 0 or group > 2 for group in groups):
-        raise ValueError("THESAN PhotonDensity groups must be 0, 1, or 2.")
+    group_tests = _normalize_photon_group_tests(
+        photon_groups,
+        photon_group_tests,
+    )
+    requested_groups = tuple(
+        sorted({group for _label, groups in group_tests for group in groups})
+    )
+    group_column = {group: index for index, group in enumerate(requested_groups)}
+    photon_value_keys = [f"n_gamma__{label}" for label, _groups in group_tests]
+    primary_photon_label, primary_groups = group_tests[0]
     sigma_hi_cm2 = _require_positive(sigma_hi_cm2, "sigma_hi_cm2")
     if progress_interval < 1:
         raise ValueError("progress_interval must be at least 1.")
@@ -396,11 +555,20 @@ def compute_equation_tests(
         threshold_max,
         threshold_count,
     )
+    ionized_cut_array = _build_ionized_cuts(
+        ionized_cuts,
+        ionized_sweep,
+        ionized_cut_min,
+        ionized_cut_max,
+        ionized_cut_count,
+    )
 
     total_t0 = perf_counter()
     warnings: list[str] = []
-    if len(groups) > 1:
-        warnings.append("photon density was summed over multiple PhotonDensity groups")
+    if any(len(groups) > 1 for _label, groups in group_tests):
+        warnings.append(
+            "at least one photon density test sums multiple PhotonDensity groups"
+        )
 
     if progress:
         progress(f"inspecting snapshot {snapshot}")
@@ -464,8 +632,8 @@ def compute_equation_tests(
             f"{gamma_metadata['GammaHI_interpolation']} from the input table"
         )
 
-    mask_names = _mask_names(threshold_array, ionized_cuts)
-    accumulators = _empty_accumulators(mask_names)
+    mask_names = _mask_names(threshold_array, ionized_cut_array)
+    accumulators = _empty_accumulators(mask_names, photon_value_keys)
     expected_count = 0
     for path in snapshot_file_paths(base_path, snapshot):
         with h5py.File(path, "r") as handle:
@@ -475,9 +643,16 @@ def compute_equation_tests(
     if progress:
         progress(
             f"streaming {expected_count:,} gas cells once; masks={len(mask_names)}, "
-            f"thresholds={threshold_array.size}, photon_groups={list(groups)}, "
+            f"thresholds={threshold_array.size}, "
+            f"photon_tests={[label for label, _groups in group_tests]}, "
             f"lambda_mfp={mfp_pmpc_h:.6g} pMpc/h"
         )
+        if ionized_cut_array.size:
+            progress(
+                f"combined ionized sweep has {ionized_cut_array.size} cuts "
+                f"from {ionized_cut_array[0]:.8g} to "
+                f"{ionized_cut_array[-1]:.8g}"
+            )
 
     required = {
         "Density",
@@ -504,7 +679,7 @@ def compute_equation_tests(
                 )
             if (
                 gas["PhotonDensity"].ndim != 2
-                or gas["PhotonDensity"].shape[1] <= max(groups)
+                or gas["PhotonDensity"].shape[1] <= max(requested_groups)
             ):
                 raise ValueError(
                     "PhotonDensity must be two-dimensional with the requested "
@@ -525,7 +700,7 @@ def compute_equation_tests(
                     dtype=np.float64,
                 )
                 photon_density_code = np.asarray(
-                    gas["PhotonDensity"][start:stop, groups],
+                    gas["PhotonDensity"][start:stop, list(requested_groups)],
                     dtype=np.float64,
                 )
                 if (
@@ -580,7 +755,17 @@ def compute_equation_tests(
                 n_hi = x_hi * n_h
                 n_hii = x_hii * n_h
                 n_e = electron_abundance * n_h
-                n_gamma = np.sum(photon_density_code, axis=1) * units["photon_density_unit_cm3"]
+                n_gamma_by_label = {
+                    label: np.sum(
+                        photon_density_code[
+                            :,
+                            [group_column[group] for group in test_groups],
+                        ],
+                        axis=1,
+                    )
+                    * units["photon_density_unit_cm3"]
+                    for label, test_groups in group_tests
+                }
                 overdensity = n_h / n_h_cosmic - 1.0
 
                 # Store the integrands needed by every equation.  The helper
@@ -591,10 +776,13 @@ def compute_equation_tests(
                     "n_hi": n_hi,
                     "n_hii": n_hii,
                     "n_e": n_e,
-                    "n_gamma": n_gamma,
                     "n_e_n_hii": n_e * n_hii,
                     "n_hi_gamma": n_hi * gamma_hi,
                     "alpha_ne_nhii": alpha_b_igm * n_e * n_hii,
+                    **{
+                        f"n_gamma__{label}": n_gamma
+                        for label, n_gamma in n_gamma_by_label.items()
+                    },
                 }
                 _add_mask_values(
                     accumulators["all-gas"],
@@ -609,18 +797,15 @@ def compute_equation_tests(
                     values,
                     volume,
                 )
-                for cut in ionized_cuts:
-                    ionized = x_hii > float(cut)
-                    if not np.any(ionized):
-                        continue
-                    _add_threshold_sweep_values(
-                        accumulators,
-                        threshold_array,
-                        overdensity[ionized],
-                        {key: array[ionized] for key, array in values.items()},
-                        volume[ionized],
-                        suffix=f"__xHII_gt_{float(cut):g}",
-                    )
+                _add_combined_sweep_values(
+                    accumulators,
+                    threshold_array,
+                    ionized_cut_array,
+                    overdensity,
+                    x_hii,
+                    values,
+                    volume,
+                )
 
                 if progress and (
                     chunk_count % progress_interval == 0
@@ -657,6 +842,10 @@ def compute_equation_tests(
     rows = []
     alpha_b4 = ALPHA_B_HII_10000K_CM3_S
     n_hi_mfp = 1.0 / (lambda_mfp_cm * sigma_hi_cm2)
+    photon_suffixes = [
+        (label, groups, _photon_field_suffix(label))
+        for label, groups in group_tests
+    ]
     for mask_name, acc in accumulators.items():
         volume = float(acc["volume"])
         row = {
@@ -672,7 +861,7 @@ def compute_equation_tests(
             "GammaHI_source": gamma_metadata.get("GammaHI_source"),
             "GammaHI_s_1": float(gamma_hi),
             "sigma_hi_cm2": float(sigma_hi_cm2),
-            "photon_band_used": " ".join(str(group) for group in groups),
+            "photon_band_used": primary_photon_label,
             "c_tilde_cm_s": float(c_tilde),
         }
         if volume <= 0:
@@ -688,6 +877,19 @@ def compute_equation_tests(
                 "C13ctilde_over_C5", "nHI_mfp_over_nHI_V",
             ]:
                 row[key] = np.nan
+            for _label, _groups, suffix in photon_suffixes:
+                for key in [
+                    "nGamma_V",
+                    "R_gamma_c",
+                    "R_gamma_ctilde",
+                    "C13_c_actual",
+                    "C13_ctilde_actual",
+                    "C13_c_chi_nH2",
+                    "C13_ctilde_chi_nH2",
+                    "Q12_c",
+                    "Q12_ctilde",
+                ]:
+                    row[f"{key}_{suffix}"] = np.nan
             rows.append(row)
             continue
 
@@ -700,16 +902,14 @@ def compute_equation_tests(
             "n_hi",
             "n_hii",
             "n_e",
-            "n_gamma",
             "n_e_n_hii",
             "n_hi_gamma",
             "alpha_ne_nhii",
+            *photon_value_keys,
         ]
         means = {key: float(acc[key]) / volume for key in mean_keys}
         r_rec = means["alpha_ne_nhii"]
         r_ion = means["n_hi_gamma"]
-        r_gamma_c = means["n_gamma"] * SPEED_OF_LIGHT_CM_S / lambda_mfp_cm
-        r_gamma_ctilde = means["n_gamma"] * c_tilde / lambda_mfp_cm
         denominator_actual = alpha_b_igm * means["n_e"] * means["n_hii"]
         denominator_chi_nh2 = alpha_b4 * chi_e * means["n_h"] ** 2
 
@@ -755,37 +955,58 @@ def compute_equation_tests(
             if denominator_chi_nh2 > 0
             else np.nan
         )
-        c13_c_actual = (
-            r_gamma_c / denominator_actual
-            if denominator_actual > 0
-            else np.nan
-        )
-        c13_ctilde_actual = (
-            r_gamma_ctilde / denominator_actual
-            if denominator_actual > 0
-            else np.nan
-        )
-        c13_c_chi_nh2 = (
-            r_gamma_c / denominator_chi_nh2
-            if denominator_chi_nh2 > 0
-            else np.nan
-        )
-        c13_ctilde_chi_nh2 = (
-            r_gamma_ctilde / denominator_chi_nh2
-            if denominator_chi_nh2 > 0
-            else np.nan
-        )
+        photon_results = {}
+        for label, _groups, suffix in photon_suffixes:
+            n_gamma = means[f"n_gamma__{label}"]
+            r_gamma_c = n_gamma * SPEED_OF_LIGHT_CM_S / lambda_mfp_cm
+            r_gamma_ctilde = n_gamma * c_tilde / lambda_mfp_cm
+            c13_c_actual = (
+                r_gamma_c / denominator_actual
+                if denominator_actual > 0
+                else np.nan
+            )
+            c13_ctilde_actual = (
+                r_gamma_ctilde / denominator_actual
+                if denominator_actual > 0
+                else np.nan
+            )
+            c13_c_chi_nh2 = (
+                r_gamma_c / denominator_chi_nh2
+                if denominator_chi_nh2 > 0
+                else np.nan
+            )
+            c13_ctilde_chi_nh2 = (
+                r_gamma_ctilde / denominator_chi_nh2
+                if denominator_chi_nh2 > 0
+                else np.nan
+            )
+            photon_results[suffix] = {
+                "nGamma_V": n_gamma,
+                "R_gamma_c": r_gamma_c,
+                "R_gamma_ctilde": r_gamma_ctilde,
+                "C13_c_actual": c13_c_actual,
+                "C13_ctilde_actual": c13_ctilde_actual,
+                "C13_c_chi_nH2": c13_c_chi_nh2,
+                "C13_ctilde_chi_nH2": c13_ctilde_chi_nh2,
+                "Q12_c": r_gamma_c / r_rec if r_rec > 0 else np.nan,
+                "Q12_ctilde": (
+                    r_gamma_ctilde / r_rec if r_rec > 0 else np.nan
+                ),
+            }
+
+        primary_suffix = _photon_field_suffix(primary_photon_label)
+        primary_photon = photon_results[primary_suffix]
         row.update(
             {
                 "nH_V": means["n_h"],
                 "nHI_V": means["n_hi"],
                 "nHII_V": means["n_hii"],
                 "ne_V": means["n_e"],
-                "nGamma_V": means["n_gamma"],
+                "nGamma_V": primary_photon["nGamma_V"],
                 "R_rec": r_rec,
                 "R_ion": r_ion,
-                "R_gamma_c": r_gamma_c,
-                "R_gamma_ctilde": r_gamma_ctilde,
+                "R_gamma_c": primary_photon["R_gamma_c"],
+                "R_gamma_ctilde": primary_photon["R_gamma_ctilde"],
                 "C5": c5_paper_actual,
                 "C5_paper_actual": c5_paper_actual,
                 "C5_chi_nH2": c5_chi_nh2,
@@ -798,15 +1019,17 @@ def compute_equation_tests(
                 "C8_corrected_chi_nH2": c8_corrected_chi_nh2,
                 "C8_paper_literal_actual": c8_paper_literal_actual,
                 "C8_paper_literal_chi_nH2": c8_paper_literal_chi_nh2,
-                "C13_c": c13_c_actual,
-                "C13_ctilde": c13_ctilde_actual,
-                "C13_c_actual": c13_c_actual,
-                "C13_ctilde_actual": c13_ctilde_actual,
-                "C13_c_chi_nH2": c13_c_chi_nh2,
-                "C13_ctilde_chi_nH2": c13_ctilde_chi_nh2,
+                "C13_c": primary_photon["C13_c_actual"],
+                "C13_ctilde": primary_photon["C13_ctilde_actual"],
+                "C13_c_actual": primary_photon["C13_c_actual"],
+                "C13_ctilde_actual": primary_photon["C13_ctilde_actual"],
+                "C13_c_chi_nH2": primary_photon["C13_c_chi_nH2"],
+                "C13_ctilde_chi_nH2": primary_photon[
+                    "C13_ctilde_chi_nH2"
+                ],
                 "Q6": r_ion / r_rec if r_rec > 0 else np.nan,
-                "Q12_c": r_gamma_c / r_rec if r_rec > 0 else np.nan,
-                "Q12_ctilde": r_gamma_ctilde / r_rec if r_rec > 0 else np.nan,
+                "Q12_c": primary_photon["Q12_c"],
+                "Q12_ctilde": primary_photon["Q12_ctilde"],
                 "C7_over_C5": (
                     c7_paper_actual / c5_paper_actual
                     if c5_paper_actual > 0
@@ -818,12 +1041,12 @@ def compute_equation_tests(
                     else np.nan
                 ),
                 "C13c_over_C5": (
-                    c13_c_actual / c5_paper_actual
+                    primary_photon["C13_c_actual"] / c5_paper_actual
                     if c5_paper_actual > 0
                     else np.nan
                 ),
                 "C13ctilde_over_C5": (
-                    c13_ctilde_actual / c5_paper_actual
+                    primary_photon["C13_ctilde_actual"] / c5_paper_actual
                     if c5_paper_actual > 0
                     else np.nan
                 ),
@@ -835,6 +1058,13 @@ def compute_equation_tests(
                 ),
             }
         )
+        for suffix, values_by_name in photon_results.items():
+            row.update(
+                {
+                    f"{name}_{suffix}": value
+                    for name, value in values_by_name.items()
+                }
+            )
         rows.append(row)
 
     if progress:
@@ -870,16 +1100,40 @@ def compute_equation_tests(
         },
         "parameters": {
             "chunk_size": int(chunk_size),
-            "photon_groups": list(groups),
+            "photon_groups": list(primary_groups),
+            "primary_photon_group_test": primary_photon_label,
+            "photon_group_tests": [
+                {
+                    "label": label,
+                    "suffix": _photon_field_suffix(label),
+                    "groups": list(test_groups),
+                }
+                for label, test_groups in group_tests
+            ],
             "threshold_min": float(threshold_array[0]),
             "threshold_max": float(threshold_array[-1]),
             "threshold_count": int(threshold_array.size),
-            "ionized_cuts": [float(cut) for cut in ionized_cuts],
+            "ionized_cuts": ionized_cut_array.tolist(),
+            "ionized_sweep": bool(
+                ionized_sweep
+                and (ionized_cuts is None or len(ionized_cuts) == 0)
+            ),
+            "ionized_cut_min": (
+                float(ionized_cut_array[0])
+                if ionized_cut_array.size
+                else None
+            ),
+            "ionized_cut_max": (
+                float(ionized_cut_array[-1])
+                if ionized_cut_array.size
+                else None
+            ),
+            "ionized_cut_count": int(ionized_cut_array.size),
             "overdensity_definition": "n_H / cosmic_mean_n_H - 1",
             "threshold_selection": "raw gas cells below overdensity threshold",
             "ionized_selection": (
                 "combined with overdensity threshold as x_HII > cut"
-                if ionized_cuts
+                if ionized_cut_array.size
                 else None
             ),
             "default_clumping_factor": "C5_paper_actual",

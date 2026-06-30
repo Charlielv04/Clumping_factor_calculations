@@ -6,6 +6,8 @@ import numpy as np
 from clumping_factor.equation_tests import (
     ALPHA_B_HII_10000K_CM3_S,
     SPEED_OF_LIGHT_CM_S,
+    _build_ionized_cuts,
+    _normalize_photon_group_tests,
     compute_equation_tests,
     write_equation_tests_result,
 )
@@ -67,6 +69,22 @@ def _write_tigm(path):
     return path
 
 
+def test_ionized_cut_sweep_is_logarithmic_in_neutral_fraction():
+    cuts = _build_ionized_cuts(None, True, 0.9, 0.9999, 4)
+    assert np.allclose(cuts, [0.9, 0.99, 0.999, 0.9999])
+    assert np.allclose(1.0 - cuts, np.logspace(-1, -4, 4))
+
+
+def test_explicit_ionized_cuts_override_sweep():
+    cuts = _build_ionized_cuts([0.8, 0.95], True, 0.9, 0.9999, 200)
+    assert np.array_equal(cuts, [0.8, 0.95])
+
+
+def test_photon_group_tests_normalize_combinations():
+    tests = _normalize_photon_group_tests([2], ["0", "1", "0+1", "1+0"])
+    assert tests == [("0", (0,)), ("1", (1,)), ("0+1", (0, 1))]
+
+
 def test_equation_tests_compute_expected_formulas(tmp_path):
     result = compute_equation_tests(
         _write_snapshot(tmp_path / "snapshot"),
@@ -78,7 +96,7 @@ def test_equation_tests_compute_expected_formulas(tmp_path):
         reduced_speed_of_light_fraction=0.1,
         thresholds=[1e9],
         ionized_cuts=[0.7],
-        photon_groups=[0],
+        photon_group_tests=["0", "1", "0+1"],
         chunk_size=2,
     ).document
 
@@ -93,6 +111,12 @@ def test_equation_tests_compute_expected_formulas(tmp_path):
         all_gas["R_gamma_c"],
         all_gas["nGamma_V"] * SPEED_OF_LIGHT_CM_S / all_gas["lambda_mfp_cm"],
     )
+    assert np.isclose(all_gas["nGamma_V"], all_gas["nGamma_V_g0"])
+    assert np.isclose(
+        all_gas["nGamma_V_g0p1"],
+        all_gas["nGamma_V_g0"] + all_gas["nGamma_V_g1"],
+    )
+    assert np.isclose(all_gas["C13_c_actual"], all_gas["C13_c_actual_g0"])
     actual_denominator = (
         ALPHA_B_HII_10000K_CM3_S * all_gas["ne_V"] * all_gas["nHII_V"]
     )
@@ -106,7 +130,10 @@ def test_equation_tests_compute_expected_formulas(tmp_path):
     )
     assert result["thresholds"] == [1e9]
     assert result["clumping_factors"] == [rows["overdensity_lt_1e+09"]["C5"]]
-    assert "global scalar/table Gamma_HI" in result["warnings"][0]
+    assert any(
+        "global scalar/table Gamma_HI" in warning
+        for warning in result["warnings"]
+    )
 
 
 def test_equation_tests_writes_json_and_csv(tmp_path):
