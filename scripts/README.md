@@ -1,5 +1,35 @@
 # PBS Runs On idark
 
+## AIDA-TNG campaign
+
+Discover and submit every available `snapdir_*` under the eight AIDA-TNG
+simulation outputs (currently snapshots 017 and/or 099):
+
+```bash
+DRY_RUN=1 bash scripts/submit_aida_tng_jobs.sh
+bash scripts/submit_aida_tng_jobs.sh
+```
+
+The wrapper calls the classic `submit_clumping_jobs.sh` once per discovered
+simulation/snapshot pair, so all of its options remain available as environment
+variables. For example:
+
+```bash
+PARTICLES=gas BACKENDS="sphere cube" GRIDS="256 512" \
+NCPUS=8 THREADS=8 LOAD_MODE=chunked \
+bash scripts/submit_aida_tng_jobs.sh
+```
+
+Use `SIMULATIONS="L35n1080_CDM L75n910_CDM"` to select a subset or
+`AIDA_ROOT=/other/path/AIDA-TNG` to override the data root. Outputs use the
+canonical layout:
+
+```text
+results/aida-tng/<simulation>/<particle>/<backend>/snapshot<SNAPSHOT>_grid<GRID>/threads<THREADS>_batch<BATCH>_run<RUN>.json
+```
+
+Logs remain outside the result tree under `logs/<simulation>/`.
+
 The IPMU idark documentation uses PBS resource requests of the form `select=1:ncpus=<n>:mem=<size>`. The submission helpers use `QUEUE=auto` by default:
 
 - one-CPU jobs are submitted to `tiny`;

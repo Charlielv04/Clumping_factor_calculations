@@ -111,7 +111,7 @@ clumping-compute \
 
 For PBS submissions, set `MAS=TSC`. Non-default mass assignment is included in job names and output filenames.
 
-For Thesan and TNG production runs, PBS helpers write to the canonical `results/thesan/...` or `results/tng/...` trees by default. Direct `clumping-compute` calls keep the legacy default path unless `--output` is supplied, so use an explicit canonical `--output` path for ad hoc production runs.
+For Thesan, TNG, and AIDA-TNG production runs, PBS helpers write to the canonical `results/<family>/...` tree by default. Direct `clumping-compute` calls keep the legacy default path unless `--output` is supplied, so use an explicit canonical `--output` path for ad hoc production runs.
 
 For large snapshots, `--load-mode auto` estimates whether a full particle load is safe and switches to chunked HDF5 reads when needed. Use `--load-mode chunked` to force streaming, `--chunk-size` to control particle/cell reads per chunk, and `--max-full-load-gb` to tune the automatic cutoff. Add `--verbose` for progress logs; `--progress-interval 10` reports every 10 chunks instead of the default 25.
 
@@ -269,6 +269,7 @@ The `results/` tree is organized by data product first, then by simulation famil
 results/
   thesan/
   tng/
+  aida-tng/
   forest/
   analysis/
 ```
@@ -285,6 +286,7 @@ Examples:
 results/thesan/Thesan-1/dm/pylians/snapshot081_grid512/threads16_batch10_run001.json
 results/tng/tng100-3/gas/cube/snapshot098_grid256/threads4_batch10_run002.json
 results/tng/tng100-3/gas/raw-volume/snapshot098_nogrid/threads1_batch1_run001.json
+results/aida-tng/L35n1080_CDM/gas/sphere/snapshot017_grid256/threads8_batch2_run001.json
 ```
 
 Forest spectra outputs use:
@@ -349,7 +351,7 @@ Cache files are generated data and are not part of the canonical scientific resu
 results/.cache/summaries/
 ```
 
-Future PBS clumping runs default to canonical layout for Thesan and TNG when `RESULTS_LAYOUT=auto`. Use `RESULTS_LAYOUT=legacy` only for compatibility checks. Direct command-line runs should either pass an explicit canonical `--output` path or be followed by the organizer.
+Future PBS clumping runs default to canonical layout for Thesan, TNG, and recognized AIDA-TNG simulations when `RESULTS_LAYOUT=auto`. Use `RESULTS_LAYOUT=legacy` only for compatibility checks. Direct command-line runs should either pass an explicit canonical `--output` path or be followed by the organizer.
 
 Forest runs default to the canonical `results/forest/...` layout unless `--output` is supplied:
 

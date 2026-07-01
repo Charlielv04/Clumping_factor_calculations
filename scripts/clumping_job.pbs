@@ -17,6 +17,7 @@ mkdir -p results logs
 BASE_PATH="${BASE_PATH:-../tng100-3/output}"
 SIMULATION_NAME="${SIMULATION_NAME:-}"
 RESULTS_LAYOUT="${RESULTS_LAYOUT:-auto}"
+RESULTS_FAMILY="${RESULTS_FAMILY:-}"
 SOURCE_CAMPAIGN="${SOURCE_CAMPAIGN:-${SIMULATION_NAME}}"
 SNAPSHOT="${SNAPSHOT:-98}"
 RADIUS_BINS="${RADIUS_BINS:-10}"
@@ -74,16 +75,20 @@ USE_CANONICAL_LAYOUT=0
 CANONICAL_FAMILY=""
 if [[ "${RESULTS_LAYOUT}" == "canonical" ]]; then
   USE_CANONICAL_LAYOUT=1
-elif [[ "${RESULTS_LAYOUT}" == "auto" && ( "${PHYSICAL_SIMULATION_NAME}" =~ ^Thesan-[12]$ || "${PHYSICAL_SIMULATION_NAME}" =~ ^tng[0-9]+-[0-9]+$ ) ]]; then
+elif [[ "${RESULTS_LAYOUT}" == "auto" && ( "${PHYSICAL_SIMULATION_NAME}" =~ ^Thesan-[12]$ || "${PHYSICAL_SIMULATION_NAME}" =~ ^tng[0-9]+-[0-9]+$ || "${PHYSICAL_SIMULATION_NAME}" =~ ^L(35n1080|75n910)_(CDM|SIDM1|vSIDM|WDM3)$ ) ]]; then
   USE_CANONICAL_LAYOUT=1
 fi
-if [[ "${PHYSICAL_SIMULATION_NAME}" =~ ^Thesan-[12]$ ]]; then
+if [[ -n "${RESULTS_FAMILY}" ]]; then
+  CANONICAL_FAMILY="${RESULTS_FAMILY}"
+elif [[ "${PHYSICAL_SIMULATION_NAME}" =~ ^Thesan-[12]$ ]]; then
   CANONICAL_FAMILY="thesan"
 elif [[ "${PHYSICAL_SIMULATION_NAME}" =~ ^tng[0-9]+-[0-9]+$ ]]; then
   CANONICAL_FAMILY="tng"
+elif [[ "${PHYSICAL_SIMULATION_NAME}" =~ ^L(35n1080|75n910)_(CDM|SIDM1|vSIDM|WDM3)$ ]]; then
+  CANONICAL_FAMILY="aida-tng"
 fi
 if (( USE_CANONICAL_LAYOUT == 1 )) && [[ -z "${CANONICAL_FAMILY}" ]]; then
-  echo "Canonical layout is only defined for Thesan and TNG simulations; got ${PHYSICAL_SIMULATION_NAME}." >&2
+  echo "No canonical results family is defined for ${PHYSICAL_SIMULATION_NAME}; set RESULTS_FAMILY." >&2
   exit 1
 fi
 if (( USE_CANONICAL_LAYOUT == 1 )); then
