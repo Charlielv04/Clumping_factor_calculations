@@ -1,0 +1,72 @@
+{
+  "calculation": "alternative_clumping_eq13_davies_2024",
+  "created_at": "2026-06-25T06:08:42.992275+00:00",
+  "diagnostics": {
+    "chunk_count": 1160,
+    "chunk_size": 1000000,
+    "density_unit_g_cm3": 1.0625704459658203e-19,
+    "dropped_count": 0,
+    "expected_gas_cell_count": 1152877363,
+    "input_count": 1152877363,
+    "mfp_interpolation": "linear in redshift",
+    "mfp_requested_redshift": 5.993503432016028,
+    "mfp_source_redshift": 5.993503432016028,
+    "mfp_table": "/lustre/work/carlos.lopez/Thesan-1/mfp_Thesan1.dat",
+    "mfp_table_redshift_max": 7.0232,
+    "mfp_table_redshift_min": 5.5118,
+    "mfp_units": "proper Mpc / h",
+    "missing_hydrogen_abundance_used_fallback": false,
+    "photon_density_unit_cm3": 3.6188296636362325,
+    "physical_length_unit_cm": 6.51344303814553e+20,
+    "valid_count": 1152877363
+  },
+  "parameters": {
+    "alpha_hii_cm3_s": 2.59e-13,
+    "alpha_hii_source": "Case B HII recombination at 10000 K default",
+    "chi_e": 1.08,
+    "chi_e_source": "constant",
+    "fully_ionized_approximation": false,
+    "hydrogen_mass_fraction_fallback": 0.76,
+    "mfp_source": "/lustre/work/carlos.lopez/Thesan-1/mfp_Thesan1.dat",
+    "mfp_units": "proper Mpc / h",
+    "n_h_source": "simulation-volume-mean",
+    "photon_density_source": "PartType0/PhotonDensity",
+    "photon_density_units": "# / (ckpc / h)^3 / 1e63; converted to physical cm^-3",
+    "photon_group_energy_ranges_ev": {
+      "0": "13.6-24.6",
+      "1": "24.6-54.4",
+      "2": "54.4-infinity"
+    },
+    "photon_groups": [
+      0,
+      1,
+      2
+    ]
+  },
+  "quantities": {
+    "clumping_factor_eq13": 82.13434577812669,
+    "ionized_fraction_factor": 0.7752278174620505,
+    "lambda_mfp_cm": 6.523637576680783e+24,
+    "lambda_mfp_pMpc_h": 1.4321366953405807,
+    "n_gamma_cm3": 1.638356984798102e-05,
+    "n_h_cm3": 6.501759070362178e-05,
+    "n_h_cosmic_mean_cm3": 6.510306258505296e-05,
+    "n_h_simulation_volume_mean_cm3": 6.501759070362178e-05,
+    "x_hi_mass_weighted": 0.10003828923254106,
+    "x_hi_volume_weighted": 0.1195297748009587,
+    "x_hii_volume_weighted": 0.8804702251990425
+  },
+  "schema_version": 1,
+  "simulation": {
+    "base_path": "/lustre/work/carlos.lopez/Thesan-2/output",
+    "hubble_param": 0.6774,
+    "name": "Thesan-2",
+    "omega_baryon": 0.0486,
+    "redshift": 5.993503432016028,
+    "scale_factor": 0.14298984903932885,
+    "snapshot": 70
+  },
+  "timings": {
+    "total": 392.76610764861107
+  }
+}
