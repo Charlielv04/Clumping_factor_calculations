@@ -8,7 +8,6 @@ from clumping_factor.forest.ionizing import (
     SIGMA_HI_912_CM2,
     THESAN_SIGMA_C_CM3_S,
     calculate_mean_free_paths,
-    calculate_mean_free_paths_reference,
     gamma_hi_from_arrays,
     gamma_hi_from_snapshot_files,
     gamma_hi_from_snapshot_files_reference,

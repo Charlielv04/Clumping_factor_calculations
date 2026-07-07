@@ -213,7 +213,6 @@ def test_eq13_result_matches_recorded_inputs(tmp_path):
         thresholds=[20.0],
     ).document
     q = result["quantities"]
-    p = result["parameters"]
     expected = q["n_gamma_cm3"][0] * SPEED_OF_LIGHT_CM_S / (
         q["lambda_mfp_cm"]
         * ALPHA_B_HII_10000K_CM3_S

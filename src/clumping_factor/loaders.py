@@ -418,7 +418,6 @@ def load_tng_particles(base_path: str | Path, snapshot: int, particle_type: str,
     import h5py
 
     t0 = perf_counter()
-    il = _load_illustris_python()
     base_path = Path(base_path)
     header_path = snapshot_header_path(base_path, snapshot)
 
@@ -427,23 +426,53 @@ def load_tng_particles(base_path: str | Path, snapshot: int, particle_type: str,
         mass_table = np.asarray(snapfile["Header"].attrs["MassTable"], dtype=np.float64)
 
     if particle_type == "dm":
-        coords = il.snapshot.loadSubset(str(base_path), snapshot, 1, fields=["Coordinates"])
-        coords = np.ascontiguousarray(coords, dtype=np.float32)
-        particle_mass = float(mass_table[1])
-        if particle_mass <= 0:
-            raise ValueError("Dark matter particle mass in MassTable[1] must be positive.")
+        # Use the same HDF5 reader and mass policy as chunked/parallel runs.
+        # In particular, variable-mass simulations may provide PartType1/Masses
+        # while leaving MassTable[1] at zero; silently replacing those masses
+        # with a constant made full and chunked calculations scientifically
+        # inconsistent.
+        chunks = list(
+            iter_particle_chunks(
+                base_path,
+                snapshot,
+                "dm",
+                radius_mode,
+                chunk_size=1_000_000,
+            )
+        )
+        coords = np.ascontiguousarray(
+            np.concatenate([chunk["coords"] for chunk in chunks], axis=0)
+            if chunks else np.empty((0, 3), dtype=np.float32),
+            dtype=np.float32,
+        )
+        masses = np.ascontiguousarray(
+            np.concatenate([chunk["masses"] for chunk in chunks])
+            if chunks else np.empty(0, dtype=np.float32),
+            dtype=np.float32,
+        )
+        radii = np.ascontiguousarray(
+            np.concatenate([chunk["radii"] for chunk in chunks])
+            if chunks else np.empty(0, dtype=np.float32),
+            dtype=np.float32,
+        )
         n_particles = int(coords.shape[0])
-        mean_spacing = lbox / n_particles ** (1.0 / 3.0)
-        radii = np.full(n_particles, mean_spacing, dtype=np.float32)
-        masses = np.full(n_particles, particle_mass, dtype=np.float32)
+        input_count = sum(int(chunk["input_count"]) for chunk in chunks)
+        has_particle_masses = False
+        for path in snapshot_file_paths(base_path, snapshot):
+            with h5py.File(path, "r") as snapfile:
+                if "PartType1" in snapfile and "Masses" in snapfile["PartType1"]:
+                    has_particle_masses = True
+                    break
         metadata = {
-            "input_count": n_particles,
+            "input_count": input_count,
             "valid_count": n_particles,
-            "dropped_count": 0,
-            "dm_particle_mass": particle_mass,
+            "dropped_count": input_count - n_particles,
+            "dm_mass_source": "PartType1/Masses" if has_particle_masses else "Header/MassTable[1]",
+            "dm_particle_mass": None if has_particle_masses else float(mass_table[1]),
             "dm_radius_definition": "mean particle spacing",
         }
     elif particle_type == "gas":
+        il = _load_illustris_python()
         gas_data = il.snapshot.loadSubset(str(base_path), snapshot, 0, fields=["Coordinates", "Density", "Masses"])
         coords, density, masses, metadata = validate_gas_arrays(
             gas_data["Coordinates"],

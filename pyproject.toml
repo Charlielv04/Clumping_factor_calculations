@@ -16,7 +16,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest"]
+test = ["pytest>=8,<9"]
+dev = [
+    "pytest>=8,<9",
+    "pytest-cov>=5,<7",
+    "ruff>=0.6,<1",
+    "mypy>=1.11,<2",
+    "types-setuptools",
+]
 
 [project.scripts]
 clumping-compute = "clumping_factor.cli:compute_main"
@@ -38,3 +45,25 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "clumping_factor.forest" = ["data/line_list.txt"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+files = [
+    "src/clumping_factor/configuration.py",
+    "src/clumping_factor/deposition.py",
+    "src/clumping_factor/results.py",
+]

@@ -1,14 +1,74 @@
 from __future__ import annotations
 
 import json
+import os
+import platform
 import re
+import subprocess
+import tempfile
 from datetime import datetime, timezone
+from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
 from .models import GridResult, ParticleData
+
+CURRENT_SCHEMA_VERSION = 2
+SUPPORTED_SCHEMA_VERSIONS = {1, CURRENT_SCHEMA_VERSION}
+
+
+def _package_version(name: str) -> str | None:
+    try:
+        return importlib_metadata.version(name)
+    except importlib_metadata.PackageNotFoundError:
+        return None
+
+
+def _code_revision() -> dict[str, Any]:
+    root = Path(__file__).resolve().parents[2]
+    try:
+        revision = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=root, check=True,
+            capture_output=True, text=True, timeout=2,
+        ).stdout.strip()
+        dirty = bool(subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=no"], cwd=root,
+            check=True, capture_output=True, text=True, timeout=2,
+        ).stdout.strip())
+        return {"revision": revision, "dirty": dirty}
+    except (OSError, subprocess.SubprocessError):
+        return {"revision": None, "dirty": None}
+
+
+def build_provenance(parameters: dict[str, Any]) -> dict[str, Any]:
+    dependencies = {
+        name: version
+        for name in ("numpy", "scipy", "h5py", "matplotlib")
+        if (version := _package_version(name)) is not None
+    }
+    provenance: dict[str, Any] = {
+        "code": _code_revision(),
+        "runtime": {"python": platform.python_version(), "dependencies": dependencies},
+        "units": {
+            "coordinates": "native simulation length",
+            "mass": "native simulation mass",
+            "density": "native simulation mass / length^3",
+            "clumping_factor": "dimensionless",
+            "overdensity_threshold": "dimensionless",
+        },
+        "estimator": "mean(rho^2 within mask) / mean(rho within mask)^2",
+    }
+    base_path = parameters.get("base_path")
+    snapshot = parameters.get("snapshot")
+    if base_path is not None and snapshot is not None:
+        try:
+            from .loaders import snapshot_file_signature
+            provenance["inputs"] = snapshot_file_signature(base_path, int(snapshot))
+        except (FileNotFoundError, OSError, ValueError):
+            provenance["inputs"] = []
+    return provenance
 
 
 def _json_number(value: Any) -> Any:
@@ -39,7 +99,7 @@ def build_result_document(
 ) -> dict[str, Any]:
     return _clean_json(
         {
-            "schema_version": 1,
+            "schema_version": CURRENT_SCHEMA_VERSION,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "particle_type": particles.particle_type,
             "parameters": parameters,
@@ -49,6 +109,7 @@ def build_result_document(
             "clumping_factors": clumping_factors,
             "diagnostics": grid_result.diagnostics,
             "timings": timings,
+            "provenance": build_provenance(parameters),
         }
     )
 
@@ -112,9 +173,32 @@ def canonical_thesan_result_path(
 def write_json_result(document: dict[str, Any], output_path: str | Path) -> Path:
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(document, indent=2, sort_keys=True), encoding="utf-8")
+    payload = json.dumps(_clean_json(document), indent=2, sort_keys=True)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=output_path.parent,
+            prefix=f".{output_path.name}.", suffix=".tmp", delete=False,
+        ) as handle:
+            temporary_path = Path(handle.name)
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_path, output_path)
+    finally:
+        if temporary_path is not None and temporary_path.exists():
+            temporary_path.unlink()
     return output_path
 
 
 def read_json_result(path: str | Path) -> dict[str, Any]:
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+    document = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(document, dict):
+        raise ValueError("Result document must be a JSON object.")
+    schema_version = document.get("schema_version", 1)
+    if schema_version not in SUPPORTED_SCHEMA_VERSIONS:
+        raise ValueError(
+            f"Unsupported result schema_version={schema_version!r}; "
+            f"supported versions are {sorted(SUPPORTED_SCHEMA_VERSIONS)}."
+        )
+    return document

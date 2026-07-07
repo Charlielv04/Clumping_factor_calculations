@@ -13,16 +13,16 @@ from clumping_factor.grid import (
     build_density_grid_scipy_chunked,
     build_density_grid_scipy_chunked_parallel,
 )
-from clumping_factor.loaders import SnapshotMetadata, iter_particle_chunks, read_snapshot_metadata, snapshot_file_particle_counts
+from clumping_factor.loaders import SnapshotMetadata, iter_particle_chunks, load_tng_particles, read_snapshot_metadata, snapshot_file_particle_counts
 from clumping_factor.models import ParticleData
 from clumping_factor.raw_gas import raw_gas_clumping_sweep, raw_gas_clumping_sweep_chunked
 
 
-def write_snapshot_file(path, lbox, counts_this_file, counts_total, gas=None, dm=None, file_count=1, scale_factor=0.5):
+def write_snapshot_file(path, lbox, counts_this_file, counts_total, gas=None, dm=None, file_count=1, scale_factor=0.5, dm_mass_table=2.0):
     with h5py.File(path, "w") as handle:
         header = handle.create_group("Header")
         header.attrs["BoxSize"] = lbox
-        header.attrs["MassTable"] = np.array([0.0, 2.0, 0.0, 0.0, 0.0, 0.0])
+        header.attrs["MassTable"] = np.array([0.0, dm_mass_table, 0.0, 0.0, 0.0, 0.0])
         header.attrs["NumPart_ThisFile"] = counts_this_file
         header.attrs["NumPart_Total"] = counts_total
         header.attrs["NumFilesPerSnapshot"] = file_count
@@ -36,6 +36,8 @@ def write_snapshot_file(path, lbox, counts_this_file, counts_total, gas=None, dm
         if dm is not None:
             group = handle.create_group("PartType1")
             group.create_dataset("Coordinates", data=dm["Coordinates"])
+            if "Masses" in dm:
+                group.create_dataset("Masses", data=dm["Masses"])
 
 
 def write_split_snapshot(tmp_path):
@@ -89,6 +91,28 @@ def test_iter_particle_chunks_reads_split_snapshot(tmp_path):
     assert all(chunk["coords"].shape == (1, 3) for chunk in chunks)
 
 
+def test_full_and_chunked_dm_preserve_variable_particle_masses(tmp_path):
+    snapdir = tmp_path / "snapdir_000"
+    snapdir.mkdir()
+    dm = {
+        "Coordinates": np.array([[0.1, 0.1, 0.1], [0.9, 0.9, 0.9]], dtype=np.float32),
+        "Masses": np.array([1.25, 3.75], dtype=np.float32),
+    }
+    counts = np.array([0, 2, 0, 0, 0, 0], dtype=np.uint32)
+    write_snapshot_file(
+        snapdir / "snap_000.0.hdf5", 1.0, counts, counts, dm=dm,
+        dm_mass_table=0.0,
+    )
+
+    full, _ = load_tng_particles(tmp_path, 0, "dm", "sphere")
+    chunks = list(iter_particle_chunks(tmp_path, 0, "dm", "sphere", chunk_size=1))
+    chunked_masses = np.concatenate([chunk["masses"] for chunk in chunks])
+
+    assert np.array_equal(full.masses, dm["Masses"])
+    assert np.array_equal(full.masses, chunked_masses)
+    assert full.metadata["dm_mass_source"] == "PartType1/Masses"
+
+
 def test_chunked_scipy_grid_matches_full_grid_for_single_radius(tmp_path):
     base_path = write_split_snapshot(tmp_path)
     coords = np.array(
@@ -100,7 +124,8 @@ def test_chunked_scipy_grid_matches_full_grid_for_single_radius(tmp_path):
     particles = ParticleData(coords=coords, masses=masses, radii=radii, lbox=1.0, particle_type="gas")
 
     full = build_density_grid_scipy(particles, grid_size=4, radius_bins=3, backend="cube")
-    chunk_factory = lambda: iter_particle_chunks(base_path, 0, "gas", "cube", chunk_size=2)
+    def chunk_factory():
+        return iter_particle_chunks(base_path, 0, "gas", "cube", chunk_size=2)
     chunked = build_density_grid_scipy_chunked(chunk_factory, grid_size=4, radius_bins=3, backend="cube", chunk_size=2)
 
     assert np.allclose(full.density_grid, chunked.density_grid)
@@ -110,7 +135,8 @@ def test_chunked_scipy_grid_matches_full_grid_for_single_radius(tmp_path):
 
 def test_parallel_chunked_cube_matches_serial_chunked(tmp_path):
     base_path = write_split_snapshot(tmp_path)
-    chunk_factory = lambda: iter_particle_chunks(base_path, 0, "gas", "cube", chunk_size=1)
+    def chunk_factory():
+        return iter_particle_chunks(base_path, 0, "gas", "cube", chunk_size=1)
     serial = build_density_grid_scipy_chunked(chunk_factory, grid_size=4, radius_bins=3, backend="cube", chunk_size=1)
     parallel = build_density_grid_scipy_chunked_parallel(
         str(base_path),
@@ -136,7 +162,8 @@ def test_parallel_chunked_cube_matches_serial_chunked(tmp_path):
 
 def test_parallel_chunked_sphere_matches_serial_chunked(tmp_path):
     base_path = write_split_snapshot(tmp_path)
-    chunk_factory = lambda: iter_particle_chunks(base_path, 0, "gas", "sphere", chunk_size=1)
+    def chunk_factory():
+        return iter_particle_chunks(base_path, 0, "gas", "sphere", chunk_size=1)
     serial = build_density_grid_scipy_chunked(chunk_factory, grid_size=4, radius_bins=3, backend="sphere", chunk_size=1)
     parallel = build_density_grid_scipy_chunked_parallel(
         str(base_path),

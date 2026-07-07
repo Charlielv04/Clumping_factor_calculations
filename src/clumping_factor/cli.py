@@ -445,60 +445,9 @@ def _compute_raw_transmission_chunked(*args, **kwargs):
 
 
 def _validate_compute_args(args: argparse.Namespace) -> None:
-    if args.backend != "raw-transmission" and args.threshold_count < 1:
-        raise ValueError("--threshold-count must be at least 1.")
-    if args.backend != "raw-transmission" and args.threshold_min >= args.threshold_max:
-        raise ValueError("--threshold-min must be less than --threshold-max.")
-    if args.threads < 1:
-        raise ValueError("--threads must be at least 1.")
-    if getattr(args, "chunk_size", 1) < 1:
-        raise ValueError("--chunk-size must be at least 1.")
-    if getattr(args, "radius_bin_batch_size", 1) < 1:
-        raise ValueError("--radius-bin-batch-size must be at least 1.")
-    if getattr(args, "max_full_load_gb", 1.0) <= 0:
-        raise ValueError("--max-full-load-gb must be positive.")
-    if not 0 <= getattr(args, "memory_safety_fraction", 0.1) < 1:
-        raise ValueError("--memory-safety-fraction must be in [0, 1).")
-    if getattr(args, "progress_interval", 1) < 1:
-        raise ValueError("--progress-interval must be at least 1.")
-    if getattr(args, "max_file_readers", 1) < 1:
-        raise ValueError("--max-file-readers must be at least 1.")
-    if getattr(args, "raw_constant_electron_abundance", 1.08) <= 0:
-        raise ValueError("--raw-constant-electron-abundance must be positive.")
-    if getattr(args, "raw_hydrogen_mass_fraction", 0.76) <= 0:
-        raise ValueError("--raw-hydrogen-mass-fraction must be positive.")
-    if args.backend not in {"raw", "raw-volume"}:
-        if args.grid_size < 1:
-            raise ValueError("--grid-size must be at least 1.")
-        if args.radius_bins < 1:
-            raise ValueError("--radius-bins must be at least 1.")
-    if args.backend in {"raw", "raw-volume", "raw-transmission"} and args.particle_type != "gas":
-        raise ValueError("raw backends are only valid with --particle-type gas.")
-    if getattr(args, "mas", "CIC") != "CIC" and args.backend in {"raw", "raw-volume"}:
-        raise ValueError("--mas TSC is only valid for gridded backends.")
-    if (
-        args.backend in {"raw", "raw-volume"}
-        and getattr(args, "raw_clumping_mode", "density") != "density"
-        and not getattr(args, "_allow_raw_ionization_clumping", False)
-    ):
-        raise ValueError("Use clumping-eq5 for n_HII or electron-HII raw clumping modes.")
-    if args.backend not in {"raw", "raw-volume"} and getattr(args, "raw_clumping_mode", "density") != "density":
-        raise ValueError("--raw-clumping-mode other than density is only valid for --backend raw or raw-volume.")
-    if args.backend in {"raw", "raw-volume", "raw-transmission"} and (
-        getattr(args, "target_particle_type", None)
-        or getattr(args, "target_backend", None)
-        or getattr(args, "mask_particle_type", None)
-        or getattr(args, "mask_backend", None)
-        or getattr(args, "target_radius_mode", None)
-        or getattr(args, "mask_radius_mode", None)
-    ):
-        raise ValueError("raw backends do not support separate mask/target fields.")
-    if args.backend == "raw-transmission":
-        sigma = getattr(args, "sigma_bar_ion_cm2", None)
-        if sigma is None or not np.isfinite(sigma) or sigma <= 0:
-            raise ValueError("--backend raw-transmission requires a positive --sigma-bar-ion-cm2.")
-        if not str(getattr(args, "sigma_bar_ion_source", "") or "").strip():
-            raise ValueError("--backend raw-transmission requires --sigma-bar-ion-source.")
+    from .configuration import validate_compute_config
+
+    validate_compute_config(args)
 
 
 def _estimate_particle_load_gb(args: argparse.Namespace, particle_type: str) -> float:
@@ -857,11 +806,12 @@ def run_compute(args: argparse.Namespace) -> Path:
             int(metadata.particle_counts[0]) if selected_load_mode == "full" else getattr(args, "chunk_size", 1_000_000)
         )
         stream_chunk_size = max(1, stream_chunk_size)
-        chunk_factory = lambda: _iter_raw_transmission_chunks(
-            args.base_path,
-            args.snapshot,
-            stream_chunk_size,
-        )
+        def chunk_factory():
+            return _iter_raw_transmission_chunks(
+                args.base_path,
+                args.snapshot,
+                stream_chunk_size,
+            )
         clumping_factor, transmission_timings, transmission_diagnostics = _compute_raw_transmission_chunked(
             chunk_factory,
             metadata.lbox,

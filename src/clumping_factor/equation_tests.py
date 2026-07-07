@@ -127,8 +127,10 @@ def _finite_or_none(value: float) -> float | None:
 
 def _format_mask_value(value: float) -> str:
     """Format a mask boundary precisely enough for a stable row name."""
-
-    return f"{float(value):.12g}"
+    value = float(value)
+    if abs(value) >= 1.0e6:
+        return f"{value:.12g}" if not value.is_integer() else f"{value:.0e}"
+    return f"{value:.12g}"
 
 
 def _mask_names(

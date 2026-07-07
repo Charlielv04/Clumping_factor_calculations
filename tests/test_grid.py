@@ -59,8 +59,24 @@ def test_tsc_spreads_mass_over_more_cells_than_cic():
     assert np.count_nonzero(tsc.density_grid) > np.count_nonzero(cic.density_grid)
 
 
+def test_periodic_deposition_is_translation_invariant():
+    left = ParticleData(
+        coords=np.array([[0.125, 0.5, 0.5]], dtype=np.float32),
+        radii=np.array([0.0], dtype=np.float32), masses=np.array([2.0], dtype=np.float32),
+        lbox=1.0, particle_type="dm",
+    )
+    wrapped = ParticleData(
+        coords=np.array([[1.125, 0.5, 0.5]], dtype=np.float32),
+        radii=left.radii, masses=left.masses, lbox=1.0, particle_type="dm",
+    )
+    for mas in ("CIC", "TSC"):
+        first = build_density_grid_scipy(left, 8, 1, "cube", mas=mas)
+        second = build_density_grid_scipy(wrapped, 8, 1, "cube", mas=mas)
+        assert np.allclose(first.density_grid, second.density_grid, rtol=0, atol=1e-6)
+
+
 def test_grid_size_above_limit_is_rejected(monkeypatch):
-    monkeypatch.setattr("clumping_factor.grid.MAX_GRID_CELLS", 7)
+    monkeypatch.setenv("CLUMPING_MAX_GRID_CELLS", "7")
     try:
         build_density_grid_scipy(synthetic_particles(), grid_size=2, radius_bins=1, backend="cube")
     except ValueError as exc:

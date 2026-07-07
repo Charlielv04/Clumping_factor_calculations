@@ -1,6 +1,6 @@
 import numpy as np
 
-from clumping_factor.clumping import clumping_factor_sweep
+from clumping_factor.clumping import clumping_factor_sweep, clumping_factor_sweep_with_mask
 
 
 def test_uniform_density_has_unit_clumping():
@@ -23,3 +23,14 @@ def test_threshold_sweep_shape_and_order():
     assert np.isnan(factors[0])
     assert np.isfinite(factors[1])
     assert np.isfinite(factors[2])
+
+
+def test_masked_clumping_matches_direct_legacy_definition():
+    mask_density = np.array([1.0, 2.0, 4.0, 8.0])
+    target_density = np.array([2.0, 3.0, 5.0, 11.0])
+    threshold = np.array([0.5])
+    factors, _, diagnostics = clumping_factor_sweep_with_mask(threshold, mask_density, target_density)
+    selected = target_density[(mask_density / mask_density.mean() - 1.0) < threshold[0]]
+    expected = np.mean(selected**2) / np.mean(selected) ** 2
+    assert np.allclose(factors, [expected])
+    assert diagnostics["selected_cell_counts"] == [selected.size]

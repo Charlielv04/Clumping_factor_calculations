@@ -22,13 +22,33 @@ Clumping_factor_calculations/
   pyproject.toml    Package metadata and console scripts.
 ```
 
-Only `clumping-compute` and `clumping-plot` are user-facing console commands. The previous multi-node partial/shard workflow has been removed; chunked gridded runs now parallelize on one node through `clumping-compute --load-mode chunked --threads N`.
+The primary workflow uses `clumping-compute` and `clumping-plot`. Additional
+installed commands support evolution/campaign plots, equation diagnostics,
+forest and ionizing calculations, and the alternative estimator. Run any
+command with `--help` for its supported interface. The previous multi-node
+partial/shard workflow has been removed; chunked gridded runs now parallelize
+on one node through `clumping-compute --load-mode chunked --threads N`.
 
 ## Install
 
 ```bash
 python -m pip install -e ".[test]"
 ```
+
+For development checks, install `.[dev]`; this includes the test, lint, type,
+and coverage tools used by CI.
+
+## Reproducibility and result artifacts
+
+New compute summaries use result schema version 2. They record the Git revision
+and dirty state, Python and scientific-library versions, input snapshot file
+signatures, execution parameters, unit conventions, and estimator definition.
+Schema version 1 results remain readable.
+
+Result files are written atomically, so an interrupted job cannot replace a
+previous valid result with partial JSON. The generated `results/` tree is not
+tracked by Git; retain production artifacts in project storage and keep only
+small, curated regression fixtures under `tests/`.
 
 On clusters with old system compilers, install the scientific stack from wheels first:
 
