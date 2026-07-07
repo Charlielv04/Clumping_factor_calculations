@@ -363,6 +363,60 @@ clumping-forest \
   --output-dir results/forest
 ```
 
+Ionizing observables use the same THESAN/COLT ray format as the forest pipeline.
+The MFP command samples periodic starting positions, measures the proper distance
+to `tau_912 = 1`, and can independently re-evaluate the supplied scalar equation:
+
+```bash
+clumping-ionizing mfp \
+  --los-file ../Thesan-1/rays_080.hdf5 \
+  --starts-per-ray 100 \
+  --seed 0 \
+  --cross-check \
+  --output results/forest/thesan/Thesan-1/snapshot080/mfp_912.json
+```
+
+`--seed` makes the random origins reproducible. The result is reported in proper
+Mpc/h, matching `get_mfp_from_sim.py`. A ray that does not reach unit optical
+depth within one periodic traversal is reported as an error instead of returning
+the misleading last segment used by the original notebook snippet.
+
+The Gamma command streams any explicitly listed snapshot pieces and applies the
+volume-weighted, `HI_Fraction < 0.5` calculation from `get_gamma_from_sim.py`:
+
+```bash
+clumping-ionizing gamma \
+  --snapshot-files /path/to/snapdir_080/snap_080.*.hdf5 \
+  --cross-check \
+  --output results/forest/thesan/Thesan-1/snapshot080/gamma_hi.json
+```
+
+With `--cross-check`, both commands evaluate an independent scalar form of the
+supplied scripts and store `cross_check.passed` plus the absolute numerical
+difference in the output JSON. The regression suite also compares identical
+rays, starting indices, snapshot cells, masks, unit conversions, and cached
+table values; this mirrors the legacy-vs-new checks used for Lyman-alpha.
+
+The repository-level `simloader.zip` is the upstream reader used by the supplied
+MFP script. It remains available for exact legacy runs; the integrated command
+uses `clumping_factor.forest.los_loader`, whose conversion behavior is regression
+tested against that reader and is already shared with the Lyman-alpha pipeline.
+
+Eq. 5--13 diagnostics can calculate both ionizing inputs when their tables are
+missing. Gamma_HI is read from the snapshot itself; MFP additionally requires the
+matching COLT ray file. Both generated tables are cached in `snapdir_NNN` and
+reused on later runs:
+
+```bash
+clumping-equation-tests \
+  --base-path /path/to/output --snapshot 80 \
+  --compute-missing-ionizing --mfp-los-file /path/to/rays_080.hdf5 \
+  --sigma-hi-cm2 6.3e-18 --output equations_080.json
+```
+
+For the Eq. 13-only command, use `--compute-missing-mfp` with the same
+`--mfp-los-file` option.
+
 Existing legacy clumping folders can be audited without moving files:
 
 ```bash

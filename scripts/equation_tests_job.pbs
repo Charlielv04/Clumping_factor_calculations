@@ -12,7 +12,12 @@ mkdir -p results logs
 
 SNAPSHOT="${SNAPSHOT:?SNAPSHOT must be set.}"
 BASE_PATH="${BASE_PATH:?BASE_PATH must point to the simulation output directory.}"
-MFP_FILE="${MFP_FILE:?MFP_FILE must point to a THESAN mfp table.}"
+MFP_FILE="${MFP_FILE:-}"
+COMPUTE_MISSING_IONIZING="${COMPUTE_MISSING_IONIZING:-0}"
+MFP_LOS_FILE="${MFP_LOS_FILE:-}"
+MFP_STARTS_PER_RAY="${MFP_STARTS_PER_RAY:-100}"
+MFP_SEED="${MFP_SEED:-0}"
+GAMMA_HI_THRESHOLD="${GAMMA_HI_THRESHOLD:-0.5}"
 SIGMA_HI_CM2="${SIGMA_HI_CM2:?SIGMA_HI_CM2 must be set.}"
 SIMULATION_NAME="${SIMULATION_NAME:-}"
 OUTPUT_DIR="${OUTPUT_DIR:-results}"
@@ -55,6 +60,15 @@ fi
 mkdir -p "$(dirname "${OUTPUT}")"
 
 EXTRA_ARGS=()
+if [[ -n "${MFP_FILE}" ]]; then
+  EXTRA_ARGS+=(--mfp-file "${MFP_FILE}")
+fi
+if [[ "${COMPUTE_MISSING_IONIZING}" == "1" ]]; then
+  EXTRA_ARGS+=(--compute-missing-ionizing --mfp-starts-per-ray "${MFP_STARTS_PER_RAY}" --mfp-seed "${MFP_SEED}" --gamma-hi-threshold "${GAMMA_HI_THRESHOLD}")
+  if [[ -n "${MFP_LOS_FILE}" ]]; then
+    EXTRA_ARGS+=(--mfp-los-file "${MFP_LOS_FILE}")
+  fi
+fi
 if [[ "${VERBOSE}" == "1" ]]; then
   EXTRA_ARGS+=(--verbose --progress-interval "${PROGRESS_INTERVAL}")
 fi
@@ -131,7 +145,6 @@ clumping-equation-tests \
   --base-path "${BASE_PATH}" \
   --simulation-name "${SIMULATION_NAME}" \
   --snapshot "${SNAPSHOT}" \
-  --mfp-file "${MFP_FILE}" \
   --sigma-hi-cm2 "${SIGMA_HI_CM2}" \
   --photon-groups "${photon_group_array[@]}" \
   --chunk-size "${CHUNK_SIZE}" \

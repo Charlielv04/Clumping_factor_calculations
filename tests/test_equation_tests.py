@@ -12,6 +12,7 @@ from clumping_factor.equation_tests import (
     write_equation_tests_result,
 )
 from clumping_factor.equation_tests_cli import build_equation_tests_parser, run_equation_tests
+from test_forest import _write_los
 
 
 def _write_snapshot(base_path):
@@ -210,6 +211,30 @@ def test_equation_tests_cli_defaults_gamma_file_next_to_mfp(tmp_path):
     document = json.loads(output.read_text())
     assert document["parameters"]["GammaHI_source"] == "redshift_table"
     assert document["parameters"]["GammaHI_table"].endswith("Gamma_HI_Thesan1.dat")
+
+
+def test_equation_tests_computes_and_caches_missing_ionizing_inputs(tmp_path):
+    base = _write_snapshot(tmp_path / "snapshot")
+    snapdir = base / "snapdir_080"
+    _write_tigm(snapdir / "Tigm_Thesan1.dat")
+    los = _write_los(tmp_path / "rays_080.hdf5", hi_scale=1e8)
+    output = tmp_path / "equations_generated.json"
+    args = build_equation_tests_parser().parse_args(
+        [
+            "--base-path", str(base), "--snapshot", "80",
+            "--compute-missing-ionizing", "--mfp-los-file", str(los),
+            "--mfp-starts-per-ray", "3", "--sigma-hi-cm2", "6.3e-18",
+            "--output", str(output),
+        ]
+    )
+    run_equation_tests(args)
+    mfp = snapdir / "mfp_from_sim.dat"
+    gamma = snapdir / "Gamma_HI_from_sim.dat"
+    assert mfp.exists()
+    assert gamma.exists()
+    document = json.loads(output.read_text())
+    assert document["parameters"]["mfp_table"] == str(mfp)
+    assert document["parameters"]["GammaHI_table"] == str(gamma)
 
 
 def test_equation_tests_requires_gamma_and_temperature_table(tmp_path):
