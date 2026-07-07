@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import h5py
 import numpy as np
 
-from clumping_factor.forest.cli import build_forest_parser, canonical_forest_output_path, run_forest
+from clumping_factor.forest.cli import build_forest_parser, canonical_forest_output_path, canonical_mfp_output_path, run_forest
 from clumping_factor.forest.constants import (
     ELECTRON_CHARGE_ESU,
     ELECTRON_MASS_G,
@@ -161,6 +161,23 @@ def test_cli_defaults_to_canonical_forest_output(tmp_path, monkeypatch):
     expected = output_root / "thesan" / "Thesan-2" / "snapshot054" / "lya" / "rays_054_lya.hdf5"
     assert written == [expected]
     assert expected.exists()
+
+
+def test_cli_can_compute_spectra_and_mfp_together(tmp_path):
+    los_file = _write_los(tmp_path / "Thesan-2" / "rays_080.hdf5", hi_scale=1e8)
+    output_root = tmp_path / "results" / "forest"
+    args = build_forest_parser().parse_args([
+        "--los-file", str(los_file), "--output-dir", str(output_root),
+        "--resolution-kms", "25", "--compute-mfp", "--mfp-starts-per-ray", "3",
+        "--mfp-cross-check",
+    ])
+    spectra = run_forest(args)
+    assert spectra[0].exists()
+    mfp = canonical_mfp_output_path(output_root, "Thesan-2", 80, los_file)
+    assert mfp.exists()
+    document = __import__("json").loads(mfp.read_text())
+    assert document["sample_count"] == 6
+    assert document["cross_check"]["passed"] is True
 
 
 def test_legacy_regression_against_compute_tau_functions(tmp_path):

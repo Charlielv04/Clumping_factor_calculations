@@ -363,6 +363,20 @@ clumping-forest \
   --output-dir results/forest
 ```
 
+The forest command can produce Lyman-alpha spectra and MFP in one run from the
+same COLT ray file:
+
+```bash
+clumping-forest \
+  --los-file /path/to/rays_080.hdf5 \
+  --simulation-name Thesan-1 \
+  --compute-mfp --mfp-starts-per-ray 100 --mfp-cross-check
+```
+
+The outputs are written under the same snapshot directory as `lya/` and
+`mfp912/`. This command consumes an existing COLT ray file; constructing that
+file from a raw snapshot remains a separate COLT operation.
+
 Ionizing observables use the same THESAN/COLT ray format as the forest pipeline.
 The MFP command samples periodic starting positions, measures the proper distance
 to `tau_912 = 1`, and can independently re-evaluate the supplied scalar equation:

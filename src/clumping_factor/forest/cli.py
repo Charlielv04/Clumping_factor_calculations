@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 from pathlib import Path
 
@@ -72,8 +73,56 @@ def build_forest_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", help="Output HDF5 path for --los-file mode.")
     parser.add_argument("--output-dir", default="results/forest", help="Canonical output root for forest spectra.")
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--compute-mfp", action="store_true", help="Also calculate the 912-Angstrom MFP from each input ray file.")
+    parser.add_argument("--mfp-starts-per-ray", type=int, default=100)
+    parser.add_argument("--mfp-seed", type=int, default=0)
+    parser.add_argument("--mfp-cross-check", action="store_true")
+    parser.add_argument("--mfp-output", help="Explicit MFP JSON path in single-file mode.")
     parser.add_argument("--verbose", action="store_true")
     return parser
+
+
+def canonical_mfp_output_path(output_root: str | Path, simulation: str, snapshot: int | None, los_file: Path) -> Path:
+    snapshot_part = f"snapshot{int(snapshot):03d}" if snapshot is not None else "unknown-snapshot"
+    return Path(output_root) / _infer_family(simulation) / simulation / snapshot_part / "mfp912" / f"{los_file.stem}_mfp912.json"
+
+
+def _compute_and_write_mfp(args: argparse.Namespace, los_file: Path, simulation: str, snapshot: int | None) -> Path:
+    import numpy as np
+
+    from .ionizing import calculate_mean_free_paths, calculate_mean_free_paths_reference
+    from .los_loader import read_thesan_random_los
+
+    if args.mfp_starts_per_ray <= 0:
+        raise ValueError("--mfp-starts-per-ray must be positive.")
+    output = Path(args.mfp_output) if args.mfp_output else canonical_mfp_output_path(
+        args.output_dir, simulation, snapshot, los_file
+    )
+    if output.exists() and not args.overwrite:
+        raise FileExistsError(f"MFP output already exists: {output}. Use --overwrite to replace it.")
+    data = read_thesan_random_los(los_file, only_rays=args.only_rays)
+    result = calculate_mean_free_paths(
+        data, only_rays=args.only_rays, starts_per_ray=args.mfp_starts_per_ray, seed=args.mfp_seed
+    )
+    document: dict[str, object] = {
+        "calculation": "thesan_mfp_912",
+        "source_los_file": str(los_file),
+        "simulation": simulation,
+        "snapshot": snapshot,
+        "units": "proper Mpc / h",
+        **result.summary(),
+    }
+    if args.mfp_cross_check:
+        reference = calculate_mean_free_paths_reference(data, result.starting_indices)
+        difference = np.abs(reference - result.samples_pMpc_h)
+        document["cross_check"] = {
+            "reference": "get_mfp_from_sim.py independent scalar equation",
+            "passed": bool(np.allclose(reference, result.samples_pMpc_h, rtol=1e-12, atol=0.0)),
+            "max_abs_difference_pMpc_h": float(np.max(difference)),
+        }
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+    return output
 
 
 def _find_los_file(los_dir: Path, snapshot: int) -> Path:
@@ -109,7 +158,7 @@ def run_forest(args: argparse.Namespace) -> list[Path]:
             if args.output
             else canonical_forest_output_path(args.output_dir, simulation, _infer_snapshot(los_file), args.line, los_file)
         )
-        return [
+        written = [
             compute_and_write_los_spectra(
                 los_file,
                 output,
@@ -121,6 +170,9 @@ def run_forest(args: argparse.Namespace) -> list[Path]:
                 verbose=args.verbose,
             )
         ]
+        if args.compute_mfp:
+            _compute_and_write_mfp(args, los_file, simulation, _infer_snapshot(los_file))
+        return written
     if not args.snapshots:
         raise ValueError("--los-dir mode requires at least one --snapshots value.")
     los_dir = Path(args.los_dir)
@@ -142,6 +194,10 @@ def run_forest(args: argparse.Namespace) -> list[Path]:
                 verbose=args.verbose,
             )
         )
+        if args.compute_mfp:
+            if args.mfp_output:
+                raise ValueError("--mfp-output is only valid with --los-file; batch mode uses canonical paths.")
+            _compute_and_write_mfp(args, los_file, simulation, snapshot)
     return written
 
 
