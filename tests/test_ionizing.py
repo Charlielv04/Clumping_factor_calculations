@@ -8,6 +8,7 @@ from clumping_factor.forest.ionizing import (
     SIGMA_HI_912_CM2,
     THESAN_SIGMA_C_CM3_S,
     calculate_mean_free_paths,
+    calculate_mean_free_paths_reference,
     gamma_hi_from_arrays,
     gamma_hi_from_snapshot_files,
     gamma_hi_from_snapshot_files_reference,
@@ -46,6 +47,15 @@ def test_mfp_is_reproducible(tmp_path: Path):
     two = calculate_mean_free_paths(data, starts_per_ray=3, seed=7)
     assert np.array_equal(one.starting_indices, two.starting_indices)
     assert np.array_equal(one.samples_pMpc_h, two.samples_pMpc_h)
+
+
+def test_mfp_continues_across_periodic_ray_copies(tmp_path: Path):
+    data = read_thesan_random_los(_write_los(tmp_path / "transparent_rays.hdf5", hi_scale=1e-4))
+    measured = calculate_mean_free_paths(data, starts_per_ray=2, seed=3)
+    reference = calculate_mean_free_paths_reference(data, measured.starting_indices)
+    one_wrap_lengths = np.asarray([np.sum(ray.segments_cgs) for ray in data.rays for _ in range(2)]) / MPC_CM * data.hubble_param
+    assert np.all(measured.samples_pMpc_h > one_wrap_lengths)
+    assert np.allclose(measured.samples_pMpc_h, reference, rtol=1e-12)
 
 
 def test_gamma_matches_direct_reference_sum():

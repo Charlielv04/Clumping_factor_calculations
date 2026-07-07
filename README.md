@@ -399,7 +399,8 @@ file from a raw snapshot remains a separate COLT operation.
 
 Ionizing observables use the same THESAN/COLT ray format as the forest pipeline.
 The MFP command samples periodic starting positions, measures the proper distance
-to `tau_912 = 1`, and can independently re-evaluate the supplied scalar equation:
+to `tau_912 = 1`, continuing through periodic ray copies when one traversal is
+too transparent, and can independently re-evaluate the supplied scalar equation:
 
 ```bash
 clumping-ionizing mfp \

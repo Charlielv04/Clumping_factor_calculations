@@ -42,18 +42,29 @@ class MeanFreePathResult:
 
 
 def _distance_to_tau_one(ray: Ray, start: int, *, sigma_cm2: float, hydrogen_fraction: float) -> float:
-    """Return the periodic distance to optical depth one, in cm."""
+    """Return the distance to optical depth one through periodic ray copies."""
     order = (np.arange(ray.segments_cgs.size) + start) % ray.segments_cgs.size
     dl = ray.segments_cgs[order]
     dtau = ray.density_cgs[order] * ray.xHI[order] * hydrogen_fraction / HYDROGEN_MASS_G * dl * sigma_cm2
-    tau = np.cumsum(dtau)
-    reached = np.flatnonzero(tau >= 1.0)
-    if not reached.size:
+    tau_per_wrap = float(np.sum(dtau))
+    if not np.isfinite(tau_per_wrap) or tau_per_wrap <= 0:
         return float("nan")
+    # Complete as many whole periodic traversals as possible while leaving the
+    # final tau=1 crossing inside one explicit copy of the ray.
+    full_wraps = max(0, int(np.ceil(1.0 / tau_per_wrap)) - 1)
+    remaining_tau = 1.0 - full_wraps * tau_per_wrap
+    tau = np.cumsum(dtau)
+    reached = np.flatnonzero(tau >= remaining_tau)
+    if not reached.size:  # Protect against floating-point roundoff at a wrap boundary.
+        full_wraps += 1
+        remaining_tau = 1.0 - full_wraps * tau_per_wrap
+        if remaining_tau <= 0:
+            return float(full_wraps * np.sum(dl))
+        reached = np.flatnonzero(tau >= remaining_tau)
     i = int(reached[0])
     before = 0.0 if i == 0 else float(tau[i - 1])
-    fraction = (1.0 - before) / float(dtau[i])
-    return float(np.sum(dl[:i]) + fraction * dl[i])
+    fraction = (remaining_tau - before) / float(dtau[i])
+    return float(full_wraps * np.sum(dl) + np.sum(dl[:i]) + fraction * dl[i])
 
 
 def calculate_mean_free_paths(
@@ -95,18 +106,29 @@ def calculate_mean_free_paths_reference(data: LosData, starting_indices: Sequenc
     for ray, start in zip((r for r in data.rays for _ in range(len(starting_indices) // len(data.rays))), starting_indices):
         order = (np.arange(ray.segments_cgs.size) + int(start)) % ray.segments_cgs.size
         dl = ray.segments_cgs[order]
-        tau = np.cumsum(
+        dtau = (
             ray.density_cgs[order] * ray.xHI[order] * PRIMORDIAL_HYDROGEN_FRACTION
             / HYDROGEN_MASS_G * dl * SIGMA_HI_912_CM2
         )
-        reached = np.flatnonzero(tau >= 1.0)
-        if not reached.size:
+        tau_per_wrap = float(np.sum(dtau))
+        if tau_per_wrap <= 0:
             values.append(float("nan"))
             continue
+        full_wraps = max(0, int(np.ceil(1.0 / tau_per_wrap)) - 1)
+        remaining_tau = 1.0 - full_wraps * tau_per_wrap
+        tau = np.cumsum(dtau)
+        reached = np.flatnonzero(tau >= remaining_tau)
+        if not reached.size:
+            full_wraps += 1
+            remaining_tau = 1.0 - full_wraps * tau_per_wrap
+            if remaining_tau <= 0:
+                values.append(float(full_wraps * np.sum(dl) / MPC_CM * data.hubble_param))
+                continue
+            reached = np.flatnonzero(tau >= remaining_tau)
         index = int(reached[0])
         previous_tau = 0.0 if index == 0 else float(tau[index - 1])
-        previous_length = float(np.sum(dl[:index]))
-        distance = previous_length + dl[index] * (1.0 - previous_tau) / (tau[index] - previous_tau)
+        previous_length = float(full_wraps * np.sum(dl) + np.sum(dl[:index]))
+        distance = previous_length + dl[index] * (remaining_tau - previous_tau) / (tau[index] - previous_tau)
         values.append(float(distance / MPC_CM * data.hubble_param))
     return np.asarray(values)
 
