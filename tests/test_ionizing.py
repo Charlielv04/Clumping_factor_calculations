@@ -126,3 +126,27 @@ def test_commands_report_passing_cross_checks(tmp_path: Path):
     ])
     run_ionizing(gamma_args)
     assert json.loads(gamma_output.read_text())["cross_check"]["passed"] is True
+
+
+def test_gamma_command_discovers_snapshot_from_base_path(tmp_path: Path):
+    base = tmp_path / "output"
+    snapdir = base / "snapdir_080"
+    snapdir.mkdir(parents=True)
+    snapshot = snapdir / "snap_080.0.hdf5"
+    with h5py.File(snapshot, "w") as f:
+        header = f.create_group("Header")
+        header.attrs["Time"] = 0.2
+        header.attrs["UnitLength_in_cm"] = 10.0
+        header.attrs["HubbleParam"] = 0.5
+        gas = f.create_group("PartType0")
+        gas.create_dataset("Masses", data=[2.0])
+        gas.create_dataset("Density", data=[1.0])
+        gas.create_dataset("HI_Fraction", data=[0.1])
+        gas.create_dataset("PhotonDensity", data=[[1.0, 2.0, 3.0]])
+    output = tmp_path / "gamma_discovered.json"
+    args = build_ionizing_parser().parse_args([
+        "gamma", "--base-path", str(base), "--snapshot", "80",
+        "--cross-check", "--output", str(output),
+    ])
+    run_ionizing(args)
+    assert json.loads(output.read_text())["cross_check"]["passed"] is True

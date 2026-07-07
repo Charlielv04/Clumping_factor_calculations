@@ -26,7 +26,10 @@ def build_ionizing_parser() -> argparse.ArgumentParser:
     mfp.add_argument("--output", required=True)
     mfp.add_argument("--cross-check", action="store_true")
     gamma = sub.add_parser("gamma", help="Measure volume-weighted Gamma_HI from snapshot pieces.")
-    gamma.add_argument("--snapshot-files", nargs="+", required=True)
+    gamma_source = gamma.add_mutually_exclusive_group(required=True)
+    gamma_source.add_argument("--snapshot-files", nargs="+", help="Snapshot pieces or glob patterns.")
+    gamma_source.add_argument("--base-path", help="Simulation output directory containing snapdir_NNN.")
+    gamma.add_argument("--snapshot", type=int, help="Snapshot number required with --base-path.")
     gamma.add_argument("--hi-threshold", type=float, default=0.5)
     gamma.add_argument("--output", required=True)
     gamma.add_argument("--cross-check", action="store_true")
@@ -50,10 +53,18 @@ def run_ionizing(args: argparse.Namespace) -> Path:
                 "max_abs_difference_pMpc_h": float(np.max(difference)),
             }
     else:
-        snapshot_files: list[str] = []
-        for pattern in args.snapshot_files:
-            matches = sorted(glob.glob(pattern))
-            snapshot_files.extend(matches or [pattern])
+        if args.base_path:
+            if args.snapshot is None:
+                raise ValueError("--base-path requires --snapshot.")
+            from ..loaders import snapshot_file_paths
+            snapshot_files = [str(path) for path in snapshot_file_paths(args.base_path, args.snapshot)]
+        else:
+            snapshot_files = []
+            for pattern in args.snapshot_files:
+                matches = sorted(glob.glob(pattern))
+                if not matches and glob.has_magic(pattern):
+                    raise FileNotFoundError(f"No snapshot files matched pattern: {pattern}")
+                snapshot_files.extend(matches or [pattern])
         a, gamma = gamma_hi_from_snapshot_files(snapshot_files, hi_threshold=args.hi_threshold)
         document = {
             "quantity": "Gamma_HI", "units": "s^-1", "scale_factor": a,
