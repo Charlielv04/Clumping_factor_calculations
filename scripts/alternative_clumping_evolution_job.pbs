@@ -63,6 +63,7 @@ MASK_RADIUS_MODE="${MASK_RADIUS_MODE:-sphere}"
 FULLY_IONIZED="${FULLY_IONIZED:-1}"
 PROGRESS_INTERVAL="${PROGRESS_INTERVAL:-5}"
 VERBOSE="${VERBOSE:-1}"
+ALLOW_LEGACY_IONIZING_TABLE="${ALLOW_LEGACY_IONIZING_TABLE:-0}"
 
 if [[ -z "${SIMULATION_NAME}" ]]; then
   base_trimmed="${BASE_PATH%/}"
@@ -83,6 +84,9 @@ fi
 mkdir -p "${OUTPUT_DIR}"
 
 EXTRA_ARGS=()
+if [[ "${ALLOW_LEGACY_IONIZING_TABLE}" == "1" ]]; then
+  EXTRA_ARGS+=(--allow-legacy-ionizing-table)
+fi
 if [[ "${VERBOSE}" == "1" ]]; then
   EXTRA_ARGS+=(--verbose --progress-interval "${PROGRESS_INTERVAL}")
 fi

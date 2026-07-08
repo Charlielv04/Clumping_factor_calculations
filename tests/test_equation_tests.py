@@ -172,6 +172,7 @@ def test_equation_tests_writes_json_and_csv(tmp_path):
             "1e-12",
             "--mfp-file",
             str(mfp),
+            "--allow-legacy-ionizing-table",
             "--sigma-hi-cm2",
             "6.3e-18",
             "--output",
@@ -201,6 +202,7 @@ def test_equation_tests_cli_defaults_gamma_file_next_to_mfp(tmp_path):
             "80",
             "--mfp-file",
             str(mfp),
+            "--allow-legacy-ionizing-table",
             "--sigma-hi-cm2",
             "6.3e-18",
             "--output",
@@ -218,6 +220,8 @@ def test_equation_tests_computes_and_caches_missing_ionizing_inputs(tmp_path):
     snapdir = base / "snapdir_080"
     _write_tigm(snapdir / "Tigm_Thesan1.dat")
     los = _write_los(tmp_path / "rays_080.hdf5", hi_scale=1e8)
+    with h5py.File(los, "a") as handle:
+        handle["Header"].attrs["Redshift"] = 4.0
     output = tmp_path / "equations_generated.json"
     args = build_equation_tests_parser().parse_args(
         [

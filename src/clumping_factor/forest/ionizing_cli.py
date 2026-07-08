@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import argparse
 import glob
-import json
 from pathlib import Path
 from time import perf_counter
-
-import numpy as np
 
 from .ionizing import (
     calculate_mean_free_paths,
     calculate_mean_free_paths_reference,
-    gamma_hi_from_snapshot_files,
+    atomic_write_json,
+    compute_gamma_hi_result,
+    gamma_result_document,
+    mfp_result_document,
 )
 from .los_loader import read_thesan_random_los
 
@@ -36,6 +36,7 @@ def build_ionizing_parser() -> argparse.ArgumentParser:
     gamma.add_argument("--cross-check", action="store_true")
     gamma.add_argument("--verbose", action="store_true")
     gamma.add_argument("--progress-interval", type=int, default=10, help="Report every N snapshot files.")
+    gamma.add_argument("--chunk-size", type=int, default=1_000_000)
     return parser
 
 
@@ -46,15 +47,10 @@ def run_ionizing(args: argparse.Namespace) -> Path:
         data = read_thesan_random_los(args.los_file, only_rays=args.only_rays)
         result = calculate_mean_free_paths(data, only_rays=args.only_rays,
                                            starts_per_ray=args.starts_per_ray, seed=args.seed)
-        document: dict[str, object] = {"quantity": "mfp_912", "units": "proper Mpc / h", **result.summary()}
+        reference = None
         if args.cross_check:
             reference = calculate_mean_free_paths_reference(data, result.starting_indices)
-            difference = np.abs(reference - result.samples_pMpc_h)
-            document["cross_check"] = {
-                "reference": "get_mfp_from_sim.py scalar equation",
-                "passed": bool(np.allclose(reference, result.samples_pMpc_h, rtol=1e-12, atol=0.0)),
-                "max_abs_difference_pMpc_h": float(np.max(difference)),
-            }
+        document = mfp_result_document(result, source_los_file=args.los_file, reference=reference)
     else:
         started = perf_counter()
 
@@ -88,34 +84,21 @@ def run_ionizing(args: argparse.Namespace) -> Path:
         if args.verbose:
             print(f"[gamma] discovered {len(snapshot_files)} snapshot files", flush=True)
             print(f"[gamma] starting primary volume-weighted calculation (HI fraction < {args.hi_threshold:g})", flush=True)
-        a, gamma = gamma_hi_from_snapshot_files(
+        gamma_result = compute_gamma_hi_result(
             snapshot_files, hi_threshold=args.hi_threshold,
+            cross_check=args.cross_check,
+            chunk_size=args.chunk_size,
             progress=report("primary") if args.verbose else None,
             progress_interval=args.progress_interval,
         )
-        document = {
-            "quantity": "Gamma_HI", "units": "s^-1", "scale_factor": a,
-            "redshift": 1.0 / a - 1.0, "Gamma_HI_s_1": gamma,
-            "hi_fraction_threshold": args.hi_threshold,
-            "reference": "get_gamma_from_sim.py volume-weighted equation",
-        }
+        document = gamma_result_document(gamma_result, source_files=snapshot_files)
+        document["hi_fraction_threshold"] = args.hi_threshold
         if args.cross_check:
-            from .ionizing import gamma_hi_from_snapshot_files_reference
             if args.verbose:
-                print("[gamma] starting independent scalar cross-check pass", flush=True)
-            reference_a, reference_gamma = gamma_hi_from_snapshot_files_reference(
-                snapshot_files, hi_threshold=args.hi_threshold,
-                progress=report("cross-check") if args.verbose else None,
-                progress_interval=args.progress_interval,
-            )
-            document["cross_check"] = {
-                "reference": "get_gamma_from_sim.py scalar band loop",
-                "passed": bool(np.isclose(a, reference_a) and np.isclose(gamma, reference_gamma, rtol=1e-12, atol=0.0)),
-                "absolute_difference_s_1": float(abs(gamma - reference_gamma)),
-            }
+                print("[gamma] independent scalar cross-check accumulated during the primary pass", flush=True)
         if args.verbose:
-            print(f"[gamma] completed in {perf_counter() - started:.1f}s; Gamma_HI={gamma:.8e} s^-1", flush=True)
-    output.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+            print(f"[gamma] completed in {perf_counter() - started:.1f}s; Gamma_HI={gamma_result.gamma_hi_s_1:.8e} s^-1", flush=True)
+    atomic_write_json(output, document)
     return output
 
 

@@ -48,6 +48,8 @@ def build_equation_tests_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mfp-starts-per-ray", type=int, default=100)
     parser.add_argument("--mfp-seed", type=int, default=0)
     parser.add_argument("--gamma-hi-threshold", type=float, default=0.5)
+    parser.add_argument("--refresh-ionizing-cache", action="store_true", help="Recompute generated ionizing caches even when provenance matches.")
+    parser.add_argument("--allow-legacy-ionizing-table", action="store_true", help="Deliberately allow provenance-free MFP/Gamma_HI tables.")
     parser.add_argument("--sigma-hi-cm2", type=float, required=True)
     parser.add_argument("--reduced-speed-of-light-fraction", type=float, default=0.2)
     parser.add_argument("--c-tilde-cm-s", type=float)
@@ -105,36 +107,42 @@ def run_equation_tests(args: argparse.Namespace) -> tuple[Path, Path]:
         elapsed = perf_counter() - start
         print(f"[equation-tests {elapsed:8.1f}s] {message}", flush=True)
 
-    from .forest.ionizing import compute_and_cache_snapshot_ionizing_inputs
+    from .forest.ionizing import compute_and_cache_snapshot_ionizing_inputs, require_ionizing_table_provenance
 
     mfp_file = args.mfp_file
     gamma_hi_file = args.gamma_hi_file
     default_gamma = None if mfp_file is None else Path(mfp_file).parent / "Gamma_HI_Thesan1.dat"
     mfp_missing = mfp_file is None or not Path(mfp_file).exists()
     gamma_missing = args.gamma_hi_s_1 is None and gamma_hi_file is None and (default_gamma is None or not default_gamma.exists())
-    if args.compute_missing_ionizing and (mfp_missing or gamma_missing):
+    if args.compute_missing_ionizing and (mfp_missing or gamma_missing or args.refresh_ionizing_cache):
         generated_mfp, generated_gamma = compute_and_cache_snapshot_ionizing_inputs(
             args.base_path,
             args.snapshot,
             mfp_los_file=args.mfp_los_file,
-            need_mfp=mfp_missing,
-            need_gamma=gamma_missing,
+            need_mfp=mfp_missing or args.refresh_ionizing_cache,
+            need_gamma=gamma_missing or (args.refresh_ionizing_cache and args.gamma_hi_s_1 is None),
             starts_per_ray=args.mfp_starts_per_ray,
             seed=args.mfp_seed,
             hi_threshold=args.gamma_hi_threshold,
+            refresh=args.refresh_ionizing_cache,
+            allow_legacy=args.allow_legacy_ionizing_table,
+            progress=progress if args.verbose else None,
         )
-        if mfp_missing:
+        if mfp_missing or args.refresh_ionizing_cache:
             mfp_file = str(generated_mfp)
-        if gamma_missing:
+        if gamma_missing or (args.refresh_ionizing_cache and args.gamma_hi_s_1 is None):
             gamma_hi_file = str(generated_gamma)
         if args.verbose:
             progress(f"cached simulation-derived ionizing inputs beside snapshot {args.snapshot:03d}")
     if mfp_file is None:
         raise ValueError("--mfp-file is required unless --compute-missing-ionizing is used.")
+    require_ionizing_table_provenance(mfp_file, allow_legacy=args.allow_legacy_ionizing_table)
     if args.gamma_hi_s_1 is None and gamma_hi_file is None:
         gamma_hi_file = str(Path(mfp_file).parent / "Gamma_HI_Thesan1.dat")
         if args.verbose:
             progress(f"using default Gamma_HI table next to MFP file: {gamma_hi_file}")
+    if args.gamma_hi_s_1 is None:
+        require_ionizing_table_provenance(gamma_hi_file, allow_legacy=args.allow_legacy_ionizing_table)
     temperature_file = args.temperature_file
     if temperature_file is None:
         temperature_file = str(Path(mfp_file).parent / "Tigm_Thesan1.dat")

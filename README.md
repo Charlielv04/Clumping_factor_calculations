@@ -397,6 +397,40 @@ The outputs are written under the same snapshot directory as `lya/` and
 `mfp912/`. This command consumes an existing COLT ray file; constructing that
 file from a raw snapshot remains a separate COLT operation.
 
+For a complete snapshot workflow, explicitly select the desired products:
+
+```bash
+clumping-snapshot \
+  --base-path /lustre/work/carlos.lopez/Thesan-1/output \
+  --snapshot 80 --simulation-name Thesan-1 \
+  --los-file /lustre/work/carlos.lopez/Thesan-1/postprocessing/los/rays_080.hdf5 \
+  --products lya mfp gamma equations \
+  --temperature-file /path/to/Tigm_Thesan1.dat \
+  --threshold-min -1 --threshold-max 25 --threshold-count 200 \
+  --ionized-sweep --ionized-cut-min 0.9 --ionized-cut-max 0.9999 \
+  --ionized-cut-count 200 --ionized-density-thresholds 1 5 10 15 20 25 \
+  --mfp-cross-check --gamma-cross-check --verbose
+```
+
+The command writes `manifest.json`, `lya/`, `mfp912/`, `gamma_hi/`, and
+`equations/` under the canonical snapshot directory. Successful products are
+reused when their manifest fingerprint and outputs still match. Use
+`--refresh-products` to recompute selected products. Independent products keep
+running after a failure, but the command exits nonzero and records the failure
+in the manifest. Gamma reads HDF5 data in chunks controlled by
+`--gamma-chunk-size` (default 1,000,000 cells).
+
+The equivalent Python API is:
+
+```python
+from clumping_factor.forest import SnapshotWorkflowConfig, run_snapshot_workflow
+
+result = run_snapshot_workflow(SnapshotWorkflowConfig(
+    base_path="/path/to/output", snapshot=80, simulation_name="Thesan-1",
+    los_file="/path/to/rays_080.hdf5", products=["lya", "mfp", "gamma"],
+))
+```
+
 Ionizing observables use the same THESAN/COLT ray format as the forest pipeline.
 The MFP command samples periodic starting positions, measures the proper distance
 to `tau_912 = 1`, continuing through periodic ray copies when one traversal is
@@ -412,9 +446,8 @@ clumping-ionizing mfp \
 ```
 
 `--seed` makes the random origins reproducible. The result is reported in proper
-Mpc/h, matching `get_mfp_from_sim.py`. A ray that does not reach unit optical
-depth within one periodic traversal is reported as an error instead of returning
-the misleading last segment used by the original notebook snippet.
+Mpc/h, matching `get_mfp_from_sim.py`. Transparent rays continue through
+periodic copies until unit optical depth is reached.
 
 The Gamma command streams any explicitly listed snapshot pieces and applies the
 volume-weighted, `HI_Fraction < 0.5` calculation from `get_gamma_from_sim.py`:
@@ -452,6 +485,14 @@ clumping-equation-tests \
 
 For the Eq. 13-only command, use `--compute-missing-mfp` with the same
 `--mfp-los-file` option.
+
+Generated tables have adjacent `.meta.json` provenance sidecars containing file
+signatures, snapshot/redshift, algorithm version, constants, and calculation
+settings. A mismatch automatically regenerates the cache; use
+`--refresh-ionizing-cache` to force this. Provenance-free MFP/Gamma_HI tables are
+rejected by default. For a deliberate historical comparison only, pass
+`--allow-legacy-ionizing-table` (or set `ALLOW_LEGACY_IONIZING_TABLE=1` in the PBS
+submission scripts).
 
 Existing legacy clumping folders can be audited without moving files:
 

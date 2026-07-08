@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import re
 from pathlib import Path
 
@@ -88,9 +87,7 @@ def canonical_mfp_output_path(output_root: str | Path, simulation: str, snapshot
 
 
 def _compute_and_write_mfp(args: argparse.Namespace, los_file: Path, simulation: str, snapshot: int | None) -> Path:
-    import numpy as np
-
-    from .ionizing import calculate_mean_free_paths, calculate_mean_free_paths_reference
+    from .ionizing import atomic_write_json, calculate_mean_free_paths, calculate_mean_free_paths_reference, mfp_result_document
     from .los_loader import read_thesan_random_los
 
     if args.mfp_starts_per_ray <= 0:
@@ -104,24 +101,12 @@ def _compute_and_write_mfp(args: argparse.Namespace, los_file: Path, simulation:
     result = calculate_mean_free_paths(
         data, only_rays=args.only_rays, starts_per_ray=args.mfp_starts_per_ray, seed=args.mfp_seed
     )
-    document: dict[str, object] = {
-        "calculation": "thesan_mfp_912",
-        "source_los_file": str(los_file),
-        "simulation": simulation,
-        "snapshot": snapshot,
-        "units": "proper Mpc / h",
-        **result.summary(),
-    }
+    reference = None
     if args.mfp_cross_check:
         reference = calculate_mean_free_paths_reference(data, result.starting_indices)
-        difference = np.abs(reference - result.samples_pMpc_h)
-        document["cross_check"] = {
-            "reference": "get_mfp_from_sim.py independent scalar equation",
-            "passed": bool(np.allclose(reference, result.samples_pMpc_h, rtol=1e-12, atol=0.0)),
-            "max_abs_difference_pMpc_h": float(np.max(difference)),
-        }
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+    document = mfp_result_document(result, source_los_file=los_file, simulation=simulation,
+                                   snapshot=snapshot, reference=reference)
+    atomic_write_json(output, document)
     return output
 
 

@@ -55,6 +55,8 @@ def build_alternative_clumping_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mfp-los-file", help="Matching COLT ray file required to compute MFP.")
     parser.add_argument("--mfp-starts-per-ray", type=int, default=100)
     parser.add_argument("--mfp-seed", type=int, default=0)
+    parser.add_argument("--refresh-ionizing-cache", action="store_true")
+    parser.add_argument("--allow-legacy-ionizing-table", action="store_true")
     parser.add_argument("--simulation-name")
     parser.add_argument("--output", help="Explicit JSON output path. Omit to use the canonical results tree.")
     parser.add_argument("--output-dir", default="results", help="Canonical output root. Defaults to results.")
@@ -122,7 +124,7 @@ def build_alternative_clumping_parser() -> argparse.ArgumentParser:
 
 def run_alternative_clumping(args: argparse.Namespace) -> Path:
     from .alternative_clumping import compute_alternative_clumping, write_alternative_clumping_result
-    from .forest.ionizing import compute_and_cache_snapshot_ionizing_inputs
+    from .forest.ionizing import compute_and_cache_snapshot_ionizing_inputs, require_ionizing_table_provenance
 
     explicit_thresholds = None
     if args.igm_overdensity_threshold is not None:
@@ -137,17 +139,21 @@ def run_alternative_clumping(args: argparse.Namespace) -> Path:
         print(f"[{elapsed:8.1f}s] {message}", flush=True)
 
     mfp_file = args.mfp_file
-    if mfp_file is None or not Path(mfp_file).exists():
+    if mfp_file is None or not Path(mfp_file).exists() or args.refresh_ionizing_cache:
         if not args.compute_missing_mfp:
             raise ValueError("--mfp-file is required unless --compute-missing-mfp is used.")
         generated, _ = compute_and_cache_snapshot_ionizing_inputs(
             args.base_path, args.snapshot, mfp_los_file=args.mfp_los_file,
             need_mfp=True, need_gamma=False, starts_per_ray=args.mfp_starts_per_ray,
             seed=args.mfp_seed,
+            refresh=args.refresh_ionizing_cache,
+            allow_legacy=args.allow_legacy_ionizing_table,
+            progress=progress if args.verbose else None,
         )
         mfp_file = str(generated)
         if args.verbose:
             progress(f"cached simulation-derived MFP beside snapshot {args.snapshot:03d}")
+    require_ionizing_table_provenance(mfp_file, allow_legacy=args.allow_legacy_ionizing_table)
 
     result = compute_alternative_clumping(
         base_path=args.base_path,

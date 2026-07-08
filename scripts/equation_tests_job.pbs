@@ -18,6 +18,8 @@ MFP_LOS_FILE="${MFP_LOS_FILE:-}"
 MFP_STARTS_PER_RAY="${MFP_STARTS_PER_RAY:-100}"
 MFP_SEED="${MFP_SEED:-0}"
 GAMMA_HI_THRESHOLD="${GAMMA_HI_THRESHOLD:-0.5}"
+REFRESH_IONIZING_CACHE="${REFRESH_IONIZING_CACHE:-0}"
+ALLOW_LEGACY_IONIZING_TABLE="${ALLOW_LEGACY_IONIZING_TABLE:-0}"
 SIGMA_HI_CM2="${SIGMA_HI_CM2:?SIGMA_HI_CM2 must be set.}"
 SIMULATION_NAME="${SIMULATION_NAME:-}"
 OUTPUT_DIR="${OUTPUT_DIR:-results}"
@@ -68,6 +70,12 @@ if [[ "${COMPUTE_MISSING_IONIZING}" == "1" ]]; then
   if [[ -n "${MFP_LOS_FILE}" ]]; then
     EXTRA_ARGS+=(--mfp-los-file "${MFP_LOS_FILE}")
   fi
+fi
+if [[ "${REFRESH_IONIZING_CACHE}" == "1" ]]; then
+  EXTRA_ARGS+=(--refresh-ionizing-cache)
+fi
+if [[ "${ALLOW_LEGACY_IONIZING_TABLE}" == "1" ]]; then
+  EXTRA_ARGS+=(--allow-legacy-ionizing-table)
 fi
 if [[ "${VERBOSE}" == "1" ]]; then
   EXTRA_ARGS+=(--verbose --progress-interval "${PROGRESS_INTERVAL}")
