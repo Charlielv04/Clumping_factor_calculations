@@ -91,6 +91,25 @@ def test_iter_particle_chunks_reads_split_snapshot(tmp_path):
     assert all(chunk["coords"].shape == (1, 3) for chunk in chunks)
 
 
+def test_iter_particle_chunks_maps_tng_neutral_hydrogen_abundance(tmp_path):
+    base_path = write_split_snapshot(tmp_path)
+    expected_hi = []
+    expected_electrons = []
+    for index, path in enumerate(sorted((tmp_path / "snapdir_000").glob("*.hdf5"))):
+        hi = np.array([0.1 + 0.2 * index, 0.2 + 0.2 * index], dtype=np.float32)
+        electrons = np.array([1.0 + 0.1 * index, 1.1 + 0.1 * index], dtype=np.float32)
+        with h5py.File(path, "a") as handle:
+            handle["PartType0"].create_dataset("NeutralHydrogenAbundance", data=hi)
+            handle["PartType0"].create_dataset("ElectronAbundance", data=electrons)
+        expected_hi.extend(hi)
+        expected_electrons.extend(electrons)
+
+    chunks = list(iter_particle_chunks(base_path, 0, "gas", "sphere", chunk_size=1, include_chemistry=True))
+
+    assert np.allclose(np.concatenate([chunk["hi_fraction"] for chunk in chunks]), expected_hi)
+    assert np.allclose(np.concatenate([chunk["electron_abundance"] for chunk in chunks]), expected_electrons)
+
+
 def test_full_and_chunked_dm_preserve_variable_particle_masses(tmp_path):
     snapdir = tmp_path / "snapdir_000"
     snapdir.mkdir()

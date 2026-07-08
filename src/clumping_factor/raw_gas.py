@@ -208,7 +208,7 @@ def _raw_hii_fraction(chunk: dict, hii_source: str) -> np.ndarray:
     else:
         raise ValueError(
             "Requested HII source is unavailable. Use --raw-hii-source fully-ionized, "
-            "or provide HI_Fraction/HII_Fraction in the snapshot."
+            "or provide HI_Fraction, HII_Fraction, or NeutralHydrogenAbundance in the snapshot."
         )
     if hii.shape != density.shape or not np.all(np.isfinite(hii)) or np.any(hii < 0):
         raise ValueError("HII fraction must be finite, non-negative, and match the gas density shape.")

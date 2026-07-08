@@ -326,7 +326,14 @@ def iter_particle_chunks(
                         density_raw = group["Density"][start:stop]
                         masses_raw = group["Masses"][start:stop]
                         if include_chemistry:
-                            hi_raw = group["HI_Fraction"][start:stop] if "HI_Fraction" in group else None
+                            if "HI_Fraction" in group:
+                                hi_raw = group["HI_Fraction"][start:stop]
+                            elif "NeutralHydrogenAbundance" in group:
+                                # Illustris/TNG stores the neutral hydrogen fraction under
+                                # this name, while THESAN uses HI_Fraction.
+                                hi_raw = group["NeutralHydrogenAbundance"][start:stop]
+                            else:
+                                hi_raw = None
                             hii_raw = group["HII_Fraction"][start:stop] if "HII_Fraction" in group else None
                             electron_raw = (
                                 group["ElectronAbundance"][start:stop] if "ElectronAbundance" in group else None
