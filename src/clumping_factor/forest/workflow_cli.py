@@ -30,6 +30,10 @@ def build_snapshot_parser() -> argparse.ArgumentParser:
     parser.add_argument("--temperature-file")
     parser.add_argument("--reduced-speed-of-light-fraction", type=float, default=0.2)
     parser.add_argument("--photon-groups", nargs="+", type=int, default=[0])
+    parser.add_argument(
+        "--photon-group-tests", nargs="+",
+        help="Photon-group combinations for Eq. 5-13 diagnostics, e.g. 0 1 2 0+1 1+2 0+1+2.",
+    )
     parser.add_argument("--thresholds", nargs="+", type=float)
     parser.add_argument("--threshold-min", type=float, default=-1.0)
     parser.add_argument("--threshold-max", type=float, default=25.0)
@@ -62,7 +66,8 @@ def snapshot_main(argv: list[str] | None = None) -> None:
         progress_interval=args.progress_interval, sigma_hi_cm2=args.sigma_hi_cm2,
         temperature_file=args.temperature_file,
         reduced_speed_of_light_fraction=args.reduced_speed_of_light_fraction,
-        photon_groups=args.photon_groups, thresholds=args.thresholds,
+        photon_groups=args.photon_groups, photon_group_tests=args.photon_group_tests,
+        thresholds=args.thresholds,
         threshold_min=args.threshold_min, threshold_max=args.threshold_max,
         threshold_count=args.threshold_count,
         ionized_density_thresholds=args.ionized_density_thresholds,

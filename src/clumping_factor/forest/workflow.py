@@ -45,6 +45,7 @@ class SnapshotWorkflowConfig:
     temperature_file: str | Path | None = None
     reduced_speed_of_light_fraction: float = 0.2
     photon_groups: Sequence[int] = (0,)
+    photon_group_tests: Sequence[str] | None = None
     thresholds: Sequence[float] | None = None
     threshold_min: float = -1.0
     threshold_max: float = 25.0
@@ -127,10 +128,13 @@ def run_snapshot_workflow(
     manifest_path = output_dir / "manifest.json"
     previous = _existing_manifest(manifest_path)
     configuration = json.loads(json.dumps(asdict(config), default=str))
+    preserved_products = {
+        name: row for name, row in previous.get("products", {}).items() if name not in requested
+    }
     document = {
         "workflow_version": WORKFLOW_VERSION, "status": "running", "started_at": _now(),
         "updated_at": _now(), "simulation": config.simulation_name, "snapshot": config.snapshot,
-        "requested_products": requested, "configuration": configuration, "products": {},
+        "requested_products": requested, "configuration": configuration, "products": preserved_products,
         "warnings": [], "failures": [],
     }
     atomic_write_json(manifest_path, document)
@@ -161,8 +165,11 @@ def run_snapshot_workflow(
 
     def update_product(name: str, row: dict) -> None:
         document["products"][name] = row
-        if row["status"] == "failed":
-            document["failures"].append({"product": name, "error": row["error"]})
+        document["failures"] = [
+            {"product": product, "error": product_row["error"]}
+            for product, product_row in document["products"].items()
+            if product_row.get("status") == "failed"
+        ]
         document["updated_at"] = _now()
         atomic_write_json(manifest_path, document)
 
@@ -239,7 +246,8 @@ def run_snapshot_workflow(
                     config.base_path, config.snapshot, mfp_table, sigma_hi_cm2=config.sigma_hi_cm2,
                     temperature_file=temperature, gamma_hi_file=gamma_table,
                     reduced_speed_of_light_fraction=config.reduced_speed_of_light_fraction,
-                    photon_groups=config.photon_groups, thresholds=config.thresholds,
+                    photon_groups=config.photon_groups, photon_group_tests=config.photon_group_tests,
+                    thresholds=config.thresholds,
                     threshold_min=config.threshold_min, threshold_max=config.threshold_max,
                     threshold_count=config.threshold_count,
                     ionized_density_thresholds=config.ionized_density_thresholds,

@@ -407,6 +407,7 @@ clumping-snapshot \
   --products lya mfp gamma equations \
   --temperature-file /path/to/Tigm_Thesan1.dat \
   --threshold-min -1 --threshold-max 25 --threshold-count 200 \
+  --photon-group-tests 0 1 2 0+1 1+2 0+1+2 \
   --ionized-sweep --ionized-cut-min 0.9 --ionized-cut-max 0.9999 \
   --ionized-cut-count 200 --ionized-density-thresholds 1 5 10 15 20 25 \
   --mfp-cross-check --gamma-cross-check --verbose

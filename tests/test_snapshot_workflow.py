@@ -61,6 +61,16 @@ def test_workflow_resume_and_refresh(tmp_path):
     assert refreshed.document["products"]["gamma"]["status"] == "success"
 
 
+def test_product_only_rerun_preserves_other_manifest_products(tmp_path):
+    base, los = _inputs(tmp_path)
+    common = dict(base_path=base, snapshot=80, simulation_name="Thesan-1", los_file=los,
+                  output_root=tmp_path / "results", mfp_starts_per_ray=2)
+    first = run_snapshot_workflow(SnapshotWorkflowConfig(products=["mfp", "gamma"], **common))
+    assert first.succeeded
+    second = run_snapshot_workflow(SnapshotWorkflowConfig(products=["gamma"], refresh_products=True, **common))
+    assert set(second.document["products"]) == {"mfp", "gamma"}
+
+
 def test_partial_failure_continues_independent_product(tmp_path):
     base, _ = _inputs(tmp_path)
     result = run_snapshot_workflow(SnapshotWorkflowConfig(
@@ -79,6 +89,7 @@ def test_all_products_write_canonical_snapshot_tree(tmp_path):
         base, 80, "Thesan-1", ["lya", "mfp", "gamma", "equations"], los_file=los,
         output_root=tmp_path / "results", resolution_kms=25, mfp_starts_per_ray=2,
         thresholds=[1e9], ionized_density_thresholds=[1e9], ionized_sweep=True,
+        photon_group_tests=["0", "1", "2", "0+1", "1+2", "0+1+2"],
         ionized_cut_min=0.9, ionized_cut_max=0.99, ionized_cut_count=2,
         equation_chunk_size=2, gamma_chunk_size=2,
     ))
@@ -92,6 +103,9 @@ def test_all_products_write_canonical_snapshot_tree(tmp_path):
     equations = json.loads((root / "equations" / "equations.json").read_text())
     assert equations["parameters"]["ionized_density_thresholds"] == [1e9]
     assert equations["parameters"]["ionized_cuts"] == [0.9, 0.99]
+    assert [row["label"] for row in equations["parameters"]["photon_group_tests"]] == [
+        "0", "1", "2", "0+1", "1+2", "0+1+2"
+    ]
 
 
 def test_cluster_style_cli_and_focused_imports():
@@ -99,11 +113,13 @@ def test_cluster_style_cli_and_focused_imports():
         "--base-path", "/lustre/work/example/Thesan-1/output", "--snapshot", "80",
         "--simulation-name", "Thesan-1", "--los-file", "/lustre/work/example/rays_080.hdf5",
         "--products", "lya", "mfp", "gamma", "equations",
+        "--photon-group-tests", "0", "1", "2", "0+1", "1+2", "0+1+2",
         "--ionized-sweep", "--ionized-cut-min", "0.9", "--ionized-cut-max", "0.9999",
         "--ionized-cut-count", "200", "--ionized-density-thresholds", "1", "5", "10",
     ])
     assert args.products == ["lya", "mfp", "gamma", "equations"]
     assert args.ionized_sweep is True
+    assert args.photon_group_tests == ["0", "1", "2", "0+1", "1+2", "0+1+2"]
     assert args.ionized_density_thresholds == [1.0, 5.0, 10.0]
     from clumping_factor.forest.gamma import GammaHIResult
     from clumping_factor.forest.mfp import MeanFreePathResult
