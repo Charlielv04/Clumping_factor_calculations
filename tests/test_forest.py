@@ -23,7 +23,7 @@ from clumping_factor.forest.los_loader import read_thesan_random_los
 from clumping_factor.forest.spectra import calculate_tau_line, compute_los_spectra, doppler_shift_to_wavelength, voigt
 
 
-ROOT = Path(__file__).resolve().parents[2]
+COMPARATIVE_ROOT = Path(__file__).resolve().parents[1] / "comparative_implementations" / "forest"
 
 
 def _write_los(path: Path, hi_scale: float = 1.0, velocity_scale: float = 1.0) -> Path:
@@ -64,7 +64,8 @@ def _write_los(path: Path, hi_scale: float = 1.0, velocity_scale: float = 1.0) -
 
 
 def _legacy_functions():
-    source = (ROOT / "compute_tau.py").read_text(encoding="utf-8")
+    source_path = COMPARATIVE_ROOT / "compute_tau.py"
+    source = source_path.read_text(encoding="utf-8")
     module = ast.parse(source)
     function_defs = [node for node in module.body if isinstance(node, ast.FunctionDef)]
     legacy_module = ast.Module(body=function_defs, type_ignores=[])
@@ -82,7 +83,7 @@ def _legacy_functions():
         "X": PRIMORDIAL_HYDROGEN_FRACTION,
         "mc": SimpleNamespace(HubbleParam=lambda a, OmegaM, OmegaL, Hubble0: hubble_param(a, Hubble0, OmegaM, OmegaL)),
     }
-    exec(compile(legacy_module, str(ROOT / "compute_tau.py"), "exec"), namespace)
+    exec(compile(legacy_module, str(source_path), "exec"), namespace)
     return namespace
 
 
@@ -183,7 +184,7 @@ def test_cli_can_compute_spectra_and_mfp_together(tmp_path):
 def test_legacy_regression_against_compute_tau_functions(tmp_path):
     path = _write_los(tmp_path / "rays_054.hdf5")
     los_data = read_thesan_random_los(path)
-    line_list = ROOT / "line_list.txt"
+    line_list = COMPARATIVE_ROOT / "line_list.txt"
     legacy = _legacy_functions()
     legacy_lines = legacy["read_line_parameters"](str(line_list))
     new_lines = read_legacy_line_parameters(line_list)
