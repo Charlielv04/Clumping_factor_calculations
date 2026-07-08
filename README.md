@@ -423,6 +423,7 @@ volume-weighted, `HI_Fraction < 0.5` calculation from `get_gamma_from_sim.py`:
 clumping-ionizing gamma \
   --base-path /path/to/output --snapshot 80 \
   --cross-check \
+  --verbose --progress-interval 10 \
   --output results/forest/thesan/Thesan-1/snapshot080/gamma_hi.json
 ```
 

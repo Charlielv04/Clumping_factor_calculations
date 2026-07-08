@@ -4,6 +4,7 @@ import argparse
 import glob
 import json
 from pathlib import Path
+from time import perf_counter
 
 import numpy as np
 
@@ -33,6 +34,8 @@ def build_ionizing_parser() -> argparse.ArgumentParser:
     gamma.add_argument("--hi-threshold", type=float, default=0.5)
     gamma.add_argument("--output", required=True)
     gamma.add_argument("--cross-check", action="store_true")
+    gamma.add_argument("--verbose", action="store_true")
+    gamma.add_argument("--progress-interval", type=int, default=10, help="Report every N snapshot files.")
     return parser
 
 
@@ -53,6 +56,23 @@ def run_ionizing(args: argparse.Namespace) -> Path:
                 "max_abs_difference_pMpc_h": float(np.max(difference)),
             }
     else:
+        started = perf_counter()
+
+        def report(phase: str):
+            phase_started = perf_counter()
+            def callback(done: int, total: int, path: str) -> None:
+                elapsed = perf_counter() - phase_started
+                rate = done / elapsed if elapsed > 0 else 0.0
+                eta = (total - done) / rate if rate > 0 else float("inf")
+                percent = 100.0 * done / total if total else 100.0
+                print(
+                    f"[gamma {phase}] {done}/{total} files ({percent:5.1f}%) "
+                    f"elapsed={elapsed:.1f}s rate={rate:.2f} files/s eta={eta:.1f}s "
+                    f"current={Path(path).name}",
+                    flush=True,
+                )
+            return callback
+
         if args.base_path:
             if args.snapshot is None:
                 raise ValueError("--base-path requires --snapshot.")
@@ -65,7 +85,14 @@ def run_ionizing(args: argparse.Namespace) -> Path:
                 if not matches and glob.has_magic(pattern):
                     raise FileNotFoundError(f"No snapshot files matched pattern: {pattern}")
                 snapshot_files.extend(matches or [pattern])
-        a, gamma = gamma_hi_from_snapshot_files(snapshot_files, hi_threshold=args.hi_threshold)
+        if args.verbose:
+            print(f"[gamma] discovered {len(snapshot_files)} snapshot files", flush=True)
+            print(f"[gamma] starting primary volume-weighted calculation (HI fraction < {args.hi_threshold:g})", flush=True)
+        a, gamma = gamma_hi_from_snapshot_files(
+            snapshot_files, hi_threshold=args.hi_threshold,
+            progress=report("primary") if args.verbose else None,
+            progress_interval=args.progress_interval,
+        )
         document = {
             "quantity": "Gamma_HI", "units": "s^-1", "scale_factor": a,
             "redshift": 1.0 / a - 1.0, "Gamma_HI_s_1": gamma,
@@ -74,14 +101,20 @@ def run_ionizing(args: argparse.Namespace) -> Path:
         }
         if args.cross_check:
             from .ionizing import gamma_hi_from_snapshot_files_reference
+            if args.verbose:
+                print("[gamma] starting independent scalar cross-check pass", flush=True)
             reference_a, reference_gamma = gamma_hi_from_snapshot_files_reference(
-                snapshot_files, hi_threshold=args.hi_threshold
+                snapshot_files, hi_threshold=args.hi_threshold,
+                progress=report("cross-check") if args.verbose else None,
+                progress_interval=args.progress_interval,
             )
             document["cross_check"] = {
                 "reference": "get_gamma_from_sim.py scalar band loop",
                 "passed": bool(np.isclose(a, reference_a) and np.isclose(gamma, reference_gamma, rtol=1e-12, atol=0.0)),
                 "absolute_difference_s_1": float(abs(gamma - reference_gamma)),
             }
+        if args.verbose:
+            print(f"[gamma] completed in {perf_counter() - started:.1f}s; Gamma_HI={gamma:.8e} s^-1", flush=True)
     output.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
     return output
 

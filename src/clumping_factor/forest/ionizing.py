@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Callable, Iterable, Sequence
 
 import h5py
 import numpy as np
@@ -159,11 +159,18 @@ def gamma_hi_from_arrays(
     return float(np.sum(rates[mask] * volume[mask]) * conversion / denominator)
 
 
-def gamma_hi_from_snapshot_files(paths: Iterable[str | Path], *, hi_threshold: float = 0.5) -> tuple[float, float]:
+def gamma_hi_from_snapshot_files(
+    paths: Iterable[str | Path], *, hi_threshold: float = 0.5,
+    progress: Callable[[int, int, str], None] | None = None,
+    progress_interval: int = 10,
+) -> tuple[float, float]:
     """Stream snapshot pieces and return ``(scale_factor, Gamma_HI [s^-1])``."""
+    paths = list(paths)
+    if progress_interval < 1:
+        raise ValueError("progress_interval must be at least 1.")
     numerator = denominator = 0.0
     scale_factor: float | None = None
-    for path in paths:
+    for file_number, path in enumerate(paths, start=1):
         with h5py.File(path, "r") as handle:
             attrs = handle["Header"].attrs
             a = float(attrs["Time"])
@@ -176,6 +183,8 @@ def gamma_hi_from_snapshot_files(paths: Iterable[str | Path], *, hi_threshold: f
             rate = handle["PartType0/PhotonDensity"][:, :3] @ THESAN_SIGMA_C_CM3_S
             numerator += float(np.sum(rate[mask] * volume[mask]) * conversion)
             denominator += float(np.sum(volume[mask]))
+        if progress is not None and (file_number == 1 or file_number % progress_interval == 0 or file_number == len(paths)):
+            progress(file_number, len(paths), str(path))
     if scale_factor is None:
         raise ValueError("No snapshot files were supplied.")
     if denominator <= 0:
@@ -183,11 +192,18 @@ def gamma_hi_from_snapshot_files(paths: Iterable[str | Path], *, hi_threshold: f
     return scale_factor, numerator / denominator
 
 
-def gamma_hi_from_snapshot_files_reference(paths: Iterable[str | Path], *, hi_threshold: float = 0.5) -> tuple[float, float]:
+def gamma_hi_from_snapshot_files_reference(
+    paths: Iterable[str | Path], *, hi_threshold: float = 0.5,
+    progress: Callable[[int, int, str], None] | None = None,
+    progress_interval: int = 10,
+) -> tuple[float, float]:
     """Independent band-by-band form of the supplied Gamma_HI script."""
+    paths = list(paths)
+    if progress_interval < 1:
+        raise ValueError("progress_interval must be at least 1.")
     numerator = denominator = 0.0
     scale_factor: float | None = None
-    for path in paths:
+    for file_number, path in enumerate(paths, start=1):
         with h5py.File(path, "r") as handle:
             attrs = handle["Header"].attrs
             a = float(attrs["Time"])
@@ -199,6 +215,8 @@ def gamma_hi_from_snapshot_files_reference(paths: Iterable[str | Path], *, hi_th
             for band in range(3):
                 numerator += float(np.sum(photons[:, band] * conversion * THESAN_SIGMA_C_CM3_S[band] * mask * volume))
             denominator += float(np.sum(mask * volume))
+        if progress is not None and (file_number == 1 or file_number % progress_interval == 0 or file_number == len(paths)):
+            progress(file_number, len(paths), str(path))
     if scale_factor is None or denominator <= 0:
         raise ValueError("Reference Gamma_HI calculation has no selected snapshot cells.")
     return scale_factor, numerator / denominator
