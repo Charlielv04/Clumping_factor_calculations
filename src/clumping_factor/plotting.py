@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from collections import OrderedDict
 from pathlib import Path
 import re
 
@@ -258,6 +259,14 @@ def _equation_context_label(document: dict, result_path: str | Path) -> str:
     return Path(result_path).stem
 
 
+def _density_panel_key(density: float, existing: list[float]) -> float:
+    for key in existing:
+        if np.isclose(density, key, rtol=0.0, atol=1.0e-10):
+            return key
+    existing.append(density)
+    return density
+
+
 def plot_ionized_sweep_files(
     result_paths: list[str | Path],
     output_path: str | Path,
@@ -266,41 +275,112 @@ def plot_ionized_sweep_files(
     density_thresholds: list[float] | None = None,
     title: str | None = None,
     alternate_linestyles: bool = False,
+    relative_to_baseline: str | Path | None = None,
 ) -> Path:
     if not result_paths:
         raise ValueError("At least one equation-test JSON result file is required.")
 
     documents = [(result_path, read_json_result(result_path)) for result_path in result_paths]
-    fig, ax = plt.subplots(figsize=(8, 5))
+    baseline_curves = None
+    if relative_to_baseline is not None:
+        baseline_document = read_json_result(relative_to_baseline)
+        baseline_curves = {
+            density: (x, y)
+            for density, x, y in _ionized_sweep_curves(
+                baseline_document,
+                relative_to_baseline,
+                quantity,
+                density_thresholds,
+            )
+        }
     colors = plt.rcParams["axes.prop_cycle"].by_key().get("color", ["#1f77b4"])
     linestyles = ["-", "--", ":", "-."]
-    plotted = 0
     multiple_documents = len(documents) > 1
+    density_order: list[float] = []
+    panel_series: OrderedDict[float, list[tuple[np.ndarray, np.ndarray, str, int]]] = OrderedDict()
     for document_index, (result_path, document) in enumerate(documents):
         context = _equation_context_label(document, result_path)
-        for curve_index, (density, x, y) in enumerate(
-            _ionized_sweep_curves(document, result_path, quantity, density_thresholds)
-        ):
+        for density, x, y in _ionized_sweep_curves(document, result_path, quantity, density_thresholds):
+            if baseline_curves is not None:
+                baseline = next(
+                    (
+                        (baseline_x, baseline_y)
+                        for baseline_density, (baseline_x, baseline_y) in baseline_curves.items()
+                        if np.isclose(density, baseline_density, rtol=0.0, atol=1.0e-10)
+                    ),
+                    None,
+                )
+                if baseline is None:
+                    raise ValueError(
+                        f"{relative_to_baseline} has no ionized sweep for overdensity threshold {density:g}."
+                    )
+                y = _relative_to_baseline(
+                    x,
+                    y,
+                    baseline[0],
+                    baseline[1],
+                    result_path,
+                    relative_to_baseline,
+                )
             finite = np.isfinite(x) & np.isfinite(y)
             if not np.any(finite):
                 continue
-            label = rf"$\delta < {density:g}$"
-            if multiple_documents:
-                label = f"{context}; " + label
-            linestyle = linestyles[(document_index + curve_index) % len(linestyles)] if alternate_linestyles else "-"
-            color = colors[(document_index + curve_index) % len(colors)]
-            ax.plot(x[finite], y[finite], label=label, linestyle=linestyle, color=color)
-            plotted += 1
+            density_key = _density_panel_key(density, density_order)
+            label = context if multiple_documents else quantity
+            panel_series.setdefault(density_key, []).append((x[finite], y[finite], label, document_index))
+    plotted = sum(len(series) for series in panel_series.values())
     if plotted == 0:
-        plt.close(fig)
         raise ValueError(f"No finite {quantity} values remain to plot.")
 
-    ax.set_xlabel(r"Minimum ionized fraction, $x_{\mathrm{HII,min}}$")
-    ax.set_ylabel(quantity)
-    ax.set_xscale("logit")
-    ax.grid(True, alpha=0.35)
-    ax.legend(title="Ionized IGM mask")
-    ax.set_title(title or f"Ionized-fraction sweep: {quantity}")
+    panel_count = len(panel_series)
+    ncols = min(3, panel_count)
+    nrows = math.ceil(panel_count / ncols)
+    fig, axes_array = plt.subplots(
+        nrows,
+        ncols,
+        figsize=(4.6 * ncols, 3.7 * nrows),
+        squeeze=False,
+        sharex=True,
+    )
+    axes = list(axes_array.ravel())
+    handles_by_label: OrderedDict[str, object] = OrderedDict()
+    for axis, (density, series) in zip(axes, panel_series.items()):
+        for x, y, label, document_index in series:
+            linestyle = linestyles[document_index % len(linestyles)] if alternate_linestyles else "-"
+            color = colors[document_index % len(colors)]
+            (line,) = axis.plot(x, y, label=label, linestyle=linestyle, color=color)
+            handles_by_label.setdefault(label, line)
+        axis.set_title(rf"$\delta < {density:g}$")
+        axis.set_xscale("logit")
+        axis.grid(True, alpha=0.35)
+    for axis in axes[panel_count:]:
+        axis.set_visible(False)
+
+    for axis in axes[-ncols:]:
+        if axis.get_visible():
+            axis.set_xlabel(r"Minimum ionized fraction, $x_{\mathrm{HII,min}}$")
+    if relative_to_baseline is None:
+        ylabel = quantity
+    else:
+        ylabel = r"Proportional difference, $(C - C_{\mathrm{baseline}}) / C_{\mathrm{baseline}}$"
+    for row_index in range(nrows):
+        axes_array[row_index, 0].set_ylabel(ylabel)
+    if handles_by_label:
+        fig.legend(
+            handles_by_label.values(),
+            handles_by_label.keys(),
+            title="Simulation",
+            loc="upper center",
+            bbox_to_anchor=(0.5, 0.98),
+            ncol=min(4, len(handles_by_label)),
+        )
+    if title is None:
+        title = (
+            f"Ionized-fraction sweep: {quantity}"
+            if relative_to_baseline is None
+            else f"Ionized-fraction proportional difference: {quantity}"
+        )
+    fig.suptitle(title, y=1.03)
 
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -329,8 +409,6 @@ def plot_result_files(
     if sweep_axis not in {"overdensity", "ionized"}:
         raise ValueError("sweep_axis must be 'overdensity' or 'ionized'.")
     if sweep_axis == "ionized":
-        if relative_to_baseline is not None:
-            raise ValueError("--relative-to-baseline is not supported with --sweep-axis ionized.")
         return plot_ionized_sweep_files(
             result_paths,
             output_path,
@@ -338,6 +416,7 @@ def plot_result_files(
             density_thresholds=ionized_density_thresholds,
             title=title,
             alternate_linestyles=alternate_linestyles,
+            relative_to_baseline=relative_to_baseline,
         )
     if quantity not in {"clumping-factor", "cell-count"}:
         raise ValueError("quantity must be 'clumping-factor' or 'cell-count'.")

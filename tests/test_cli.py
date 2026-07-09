@@ -410,6 +410,64 @@ def test_plot_command_writes_ionized_sweep_plot(tmp_path):
     assert output.stat().st_size > 0
 
 
+def test_plot_command_writes_relative_ionized_sweep_plot(tmp_path):
+    baseline_json = tmp_path / "baseline.json"
+    comparison_json = tmp_path / "comparison.json"
+    baseline_json.write_text(
+        json.dumps(
+            {
+                "calculation": "ionized_igm_raw_volume_sweep",
+                "simulation": {"name": "CDM", "snapshot": 99},
+                "rows": [
+                    {
+                        "mask_name": "overdensity_lt_25__xHII_gt_0.9",
+                        "C_standard_raw_volume": 2.0,
+                    },
+                    {
+                        "mask_name": "overdensity_lt_25__xHII_gt_0.99",
+                        "C_standard_raw_volume": 4.0,
+                    },
+                ],
+            }
+        )
+    )
+    comparison_json.write_text(
+        json.dumps(
+            {
+                "calculation": "ionized_igm_raw_volume_sweep",
+                "simulation": {"name": "SIDM1", "snapshot": 99},
+                "rows": [
+                    {
+                        "mask_name": "overdensity_lt_25__xHII_gt_0.9",
+                        "C_standard_raw_volume": 3.0,
+                    },
+                    {
+                        "mask_name": "overdensity_lt_25__xHII_gt_0.99",
+                        "C_standard_raw_volume": 6.0,
+                    },
+                ],
+            }
+        )
+    )
+    output = tmp_path / "relative-ionized.png"
+    plot_main(
+        [
+            str(baseline_json),
+            str(comparison_json),
+            "--sweep-axis",
+            "ionized",
+            "--ionized-density-threshold",
+            "25",
+            "--relative-to-baseline",
+            str(baseline_json),
+            "--output",
+            str(output),
+        ]
+    )
+    assert output.exists()
+    assert output.stat().st_size > 0
+
+
 def test_relative_to_baseline_rejects_cell_count_quantity(tmp_path):
     result_json = tmp_path / "result.json"
     result_json.write_text(
