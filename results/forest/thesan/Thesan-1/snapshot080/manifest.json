@@ -1,0 +1,140 @@
+{
+  "workflow_version": 1,
+  "status": "failed",
+  "started_at": "2026-07-08T03:15:54.821593+00:00",
+  "updated_at": "2026-07-08T03:15:54.928320+00:00",
+  "simulation": "Thesan-1",
+  "snapshot": 80,
+  "requested_products": [
+    "lya",
+    "mfp",
+    "gamma",
+    "equations"
+  ],
+  "configuration": {
+    "base_path": "/path/to/Thesan-1/output",
+    "snapshot": 80,
+    "simulation_name": "Thesan-1",
+    "products": [
+      "lya",
+      "mfp",
+      "gamma",
+      "equations"
+    ],
+    "los_file": "/path/to/rays_080.hdf5",
+    "output_root": "results/forest",
+    "refresh_products": false,
+    "verbose": true,
+    "only_rays": null,
+    "line": "Ly a",
+    "resolution_kms": 1.0,
+    "static": false,
+    "mfp_starts_per_ray": 100,
+    "mfp_seed": 0,
+    "mfp_cross_check": false,
+    "gamma_hi_threshold": 0.5,
+    "gamma_cross_check": false,
+    "gamma_chunk_size": 1000000,
+    "progress_interval": 10,
+    "sigma_hi_cm2": 6.3e-18,
+    "temperature_file": "/path/to/Tigm_Thesan1.dat",
+    "reduced_speed_of_light_fraction": 0.2,
+    "photon_groups": [
+      0
+    ],
+    "thresholds": null,
+    "threshold_min": -1.0,
+    "threshold_max": 25.0,
+    "threshold_count": 200,
+    "ionized_density_thresholds": [
+      1.0,
+      5.0,
+      10.0,
+      15.0,
+      20.0,
+      25.0
+    ],
+    "ionized_cuts": null,
+    "ionized_sweep": true,
+    "ionized_cut_min": 0.9,
+    "ionized_cut_max": 0.9999,
+    "ionized_cut_count": 200,
+    "equation_chunk_size": 1000000,
+    "allow_legacy_ionizing_table": false,
+    "refresh_ionizing_cache": false
+  },
+  "products": {
+    "lya": {
+      "status": "failed",
+      "fingerprint": "01eb57d11f82784ebc190ad96917d3871c6b16e814567ea7ebd373b1138e9d98",
+      "outputs": [],
+      "duration_seconds": 0.0011532120406627655,
+      "error": {
+        "type": "FileNotFoundError",
+        "message": "[Errno 2] Unable to synchronously open file (unable to open file: name = '/path/to/rays_080.hdf5', errno = 2, error message = 'No such file or directory', flags = 0, o_flags = 0)"
+      }
+    },
+    "mfp": {
+      "status": "failed",
+      "fingerprint": "219e3e44fee9dd18a1f8befc654eea6e40cd0dd0c04f0bc53a3260aa1ecfb284",
+      "outputs": [],
+      "duration_seconds": 0.000149482861161232,
+      "error": {
+        "type": "FileNotFoundError",
+        "message": "[Errno 2] Unable to synchronously open file (unable to open file: name = '/path/to/rays_080.hdf5', errno = 2, error message = 'No such file or directory', flags = 0, o_flags = 0)"
+      }
+    },
+    "gamma": {
+      "status": "failed",
+      "fingerprint": "ae7b63a22e4bf4ec2768141de036b849edfd00173f6eb406ffae04e590fb74ef",
+      "outputs": [],
+      "duration_seconds": 0.00014372915029525757,
+      "error": {
+        "type": "FileNotFoundError",
+        "message": "No snapshot files found for snapshot 80 under /path/to/Thesan-1/output."
+      }
+    },
+    "equations": {
+      "status": "failed",
+      "fingerprint": "4afe9f574a2a6245e8a0cf3594396da5677684ab3aff366a8dfac75f440fcfca",
+      "outputs": [],
+      "duration_seconds": 0.0001330878585577011,
+      "error": {
+        "type": "FileNotFoundError",
+        "message": "No snapshot files found for snapshot 80 under /path/to/Thesan-1/output."
+      }
+    }
+  },
+  "warnings": [],
+  "failures": [
+    {
+      "product": "lya",
+      "error": {
+        "type": "FileNotFoundError",
+        "message": "[Errno 2] Unable to synchronously open file (unable to open file: name = '/path/to/rays_080.hdf5', errno = 2, error message = 'No such file or directory', flags = 0, o_flags = 0)"
+      }
+    },
+    {
+      "product": "mfp",
+      "error": {
+        "type": "FileNotFoundError",
+        "message": "[Errno 2] Unable to synchronously open file (unable to open file: name = '/path/to/rays_080.hdf5', errno = 2, error message = 'No such file or directory', flags = 0, o_flags = 0)"
+      }
+    },
+    {
+      "product": "gamma",
+      "error": {
+        "type": "FileNotFoundError",
+        "message": "No snapshot files found for snapshot 80 under /path/to/Thesan-1/output."
+      }
+    },
+    {
+      "product": "equations",
+      "error": {
+        "type": "FileNotFoundError",
+        "message": "No snapshot files found for snapshot 80 under /path/to/Thesan-1/output."
+      }
+    }
+  ],
+  "finished_at": "2026-07-08T03:15:54.928309+00:00"
+}
