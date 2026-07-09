@@ -209,8 +209,8 @@ def _ionized_sweep_curves(
     quantity: str,
     density_thresholds: list[float] | None,
 ) -> list[tuple[float, np.ndarray, np.ndarray]]:
-    if document.get("calculation") != "thesan_clumping_equation_tests":
-        raise ValueError(f"{result_path} is not an equation-test JSON with ionized mask rows.")
+    if document.get("calculation") not in {"thesan_clumping_equation_tests", "ionized_igm_raw_volume_sweep"}:
+        raise ValueError(f"{result_path} is not a JSON with ionized mask rows.")
     rows = []
     for row in document.get("rows", []):
         match = _IONIZED_MASK_RE.match(str(row.get("mask_name", "")))

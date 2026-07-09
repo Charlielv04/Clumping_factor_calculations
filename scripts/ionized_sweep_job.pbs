@@ -1,0 +1,56 @@
+#!/bin/bash
+
+set -euo pipefail
+
+set +u
+source ~/.bashrc
+set -u
+conda activate "${CONDA_ENV:-clumping-factor}"
+
+cd "${PROJECT_DIR:-$PBS_O_WORKDIR}"
+
+SNAPSHOT="${SNAPSHOT:?SNAPSHOT must be set.}"
+BASE_PATH="${BASE_PATH:?BASE_PATH must point to the simulation output directory.}"
+SIMULATION_NAME="${SIMULATION_NAME:?SIMULATION_NAME must be set.}"
+OUTPUT="${OUTPUT:?OUTPUT must be set.}"
+IONIZED_DENSITY_THRESHOLDS="${IONIZED_DENSITY_THRESHOLDS:-1 5 10 15 20 25}"
+IONIZED_CUT_MIN="${IONIZED_CUT_MIN:-0.9}"
+IONIZED_CUT_MAX="${IONIZED_CUT_MAX:-0.9999}"
+IONIZED_CUT_COUNT="${IONIZED_CUT_COUNT:-200}"
+CHUNK_SIZE="${CHUNK_SIZE:-1000000}"
+HII_SOURCE="${HII_SOURCE:-auto}"
+PROGRESS_INTERVAL="${PROGRESS_INTERVAL:-5}"
+VERBOSE="${VERBOSE:-1}"
+
+mkdir -p "$(dirname "${OUTPUT}")"
+
+EXTRA_ARGS=()
+if [[ "${VERBOSE}" == "1" ]]; then
+  EXTRA_ARGS+=(--verbose --progress-interval "${PROGRESS_INTERVAL}")
+fi
+
+read -r -a density_thresholds <<< "${IONIZED_DENSITY_THRESHOLDS}"
+
+echo "Started: $(date)"
+echo "Host: $(hostname)"
+echo "Simulation: ${SIMULATION_NAME}"
+echo "Snapshot: ${SNAPSHOT}"
+echo "Base path: ${BASE_PATH}"
+echo "Output: ${OUTPUT}"
+echo "Ionized density thresholds: ${IONIZED_DENSITY_THRESHOLDS}"
+echo "Ionized cuts: ${IONIZED_CUT_MIN} to ${IONIZED_CUT_MAX} (${IONIZED_CUT_COUNT})"
+
+clumping-ionized-sweep \
+  --base-path "${BASE_PATH}" \
+  --simulation-name "${SIMULATION_NAME}" \
+  --snapshot "${SNAPSHOT}" \
+  --ionized-density-thresholds "${density_thresholds[@]}" \
+  --ionized-cut-min "${IONIZED_CUT_MIN}" \
+  --ionized-cut-max "${IONIZED_CUT_MAX}" \
+  --ionized-cut-count "${IONIZED_CUT_COUNT}" \
+  --chunk-size "${CHUNK_SIZE}" \
+  --hii-source "${HII_SOURCE}" \
+  --output "${OUTPUT}" \
+  "${EXTRA_ARGS[@]}"
+
+echo "Finished: $(date)"
