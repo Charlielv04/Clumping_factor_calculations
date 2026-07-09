@@ -15,6 +15,7 @@ BASE_PATH="${BASE_PATH:?BASE_PATH must point to the simulation output directory.
 MFP_FILE="${MFP_FILE:-}"
 COMPUTE_MISSING_IONIZING="${COMPUTE_MISSING_IONIZING:-0}"
 MFP_LOS_FILE="${MFP_LOS_FILE:-}"
+ALLOW_MFP_LOS_REDSHIFT_MISMATCH="${ALLOW_MFP_LOS_REDSHIFT_MISMATCH:-0}"
 MFP_STARTS_PER_RAY="${MFP_STARTS_PER_RAY:-100}"
 MFP_SEED="${MFP_SEED:-0}"
 GAMMA_HI_THRESHOLD="${GAMMA_HI_THRESHOLD:-0.5}"
@@ -69,6 +70,9 @@ if [[ "${COMPUTE_MISSING_IONIZING}" == "1" ]]; then
   EXTRA_ARGS+=(--compute-missing-ionizing --mfp-starts-per-ray "${MFP_STARTS_PER_RAY}" --mfp-seed "${MFP_SEED}" --gamma-hi-threshold "${GAMMA_HI_THRESHOLD}")
   if [[ -n "${MFP_LOS_FILE}" ]]; then
     EXTRA_ARGS+=(--mfp-los-file "${MFP_LOS_FILE}")
+  fi
+  if [[ "${ALLOW_MFP_LOS_REDSHIFT_MISMATCH}" == "1" ]]; then
+    EXTRA_ARGS+=(--allow-mfp-los-redshift-mismatch)
   fi
 fi
 if [[ "${REFRESH_IONIZING_CACHE}" == "1" ]]; then
@@ -131,6 +135,7 @@ echo "Simulation: ${SIMULATION_NAME}"
 echo "Snapshot: ${SNAPSHOT}"
 echo "Base path: ${BASE_PATH}"
 echo "MFP file: ${MFP_FILE}"
+echo "MFP LOS redshift mismatch allowed: ${ALLOW_MFP_LOS_REDSHIFT_MISMATCH}"
 echo "Sigma_HI: ${SIGMA_HI_CM2} cm^2"
 echo "Photon groups: ${PHOTON_GROUPS_CSV//:/ }"
 if [[ -n "${PHOTON_GROUP_TESTS_CSV}" ]]; then

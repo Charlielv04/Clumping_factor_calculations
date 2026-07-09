@@ -45,6 +45,11 @@ def build_equation_tests_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mfp-file", help="MFP table. With --compute-missing-ionizing, defaults to a generated table beside the snapshot.")
     parser.add_argument("--compute-missing-ionizing", action="store_true", help="Compute and cache missing MFP/Gamma_HI tables from simulation data.")
     parser.add_argument("--mfp-los-file", help="Matching COLT ray file required when MFP must be computed.")
+    parser.add_argument(
+        "--allow-mfp-los-redshift-mismatch",
+        action="store_true",
+        help="Deliberately allow --mfp-los-file redshift to differ from --snapshot when computing MFP.",
+    )
     parser.add_argument("--mfp-starts-per-ray", type=int, default=100)
     parser.add_argument("--mfp-seed", type=int, default=0)
     parser.add_argument("--gamma-hi-threshold", type=float, default=0.5)
@@ -127,6 +132,7 @@ def run_equation_tests(args: argparse.Namespace) -> tuple[Path, Path]:
             refresh=args.refresh_ionizing_cache,
             allow_legacy=args.allow_legacy_ionizing_table,
             progress=progress if args.verbose else None,
+            allow_mfp_los_redshift_mismatch=args.allow_mfp_los_redshift_mismatch,
         )
         if mfp_missing or args.refresh_ionizing_cache:
             mfp_file = str(generated_mfp)

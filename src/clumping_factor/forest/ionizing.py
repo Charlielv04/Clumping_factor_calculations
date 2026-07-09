@@ -429,6 +429,7 @@ def compute_and_cache_snapshot_ionizing_inputs(
     gamma_result: GammaHIResult | None = None,
     mfp_result: MeanFreePathResult | None = None,
     mfp_los_data: LosData | None = None,
+    allow_mfp_los_redshift_mismatch: bool = False,
 ) -> tuple[Path | None, Path | None]:
     """Calculate missing Eq. 5--13 inputs and cache them beside a snapshot."""
     from ..loaders import snapshot_file_paths
@@ -483,7 +484,10 @@ def compute_and_cache_snapshot_ionizing_inputs(
                 if progress:
                     progress(f"MFP cache regeneration: {reason if not refresh else 'refresh requested'}")
                 data = mfp_los_data or read_thesan_random_los(mfp_los_file)
-                if not np.isclose(data.redshift, snapshot_metadata.redshift, rtol=0.0, atol=1e-6):
+                if (
+                    not allow_mfp_los_redshift_mismatch
+                    and not np.isclose(data.redshift, snapshot_metadata.redshift, rtol=0.0, atol=1e-6)
+                ):
                     raise ValueError(f"MFP ray redshift {data.redshift} does not match snapshot redshift {snapshot_metadata.redshift}.")
                 result = mfp_result or calculate_mean_free_paths(data, starts_per_ray=starts_per_ray, seed=seed)
                 _atomic_write_table_pair(mfp_path, result.redshift, float(np.mean(result.samples_pMpc_h)),
