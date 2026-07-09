@@ -1,6 +1,11 @@
 import numpy as np
 
-from clumping_factor.grid import build_density_grid_scipy, spherical_tophat_kernel
+from clumping_factor.grid import (
+    build_density_grid_mass_assignment,
+    build_density_grid_mass_assignment_chunked,
+    build_density_grid_scipy,
+    spherical_tophat_kernel,
+)
 from clumping_factor.models import ParticleData
 
 
@@ -31,6 +36,45 @@ def test_cube_backend_mass_conservation_and_shape():
     assert result.density_grid.dtype == np.float64
     assert np.all(np.isfinite(result.density_grid))
     assert abs(result.diagnostics["relative_mass_error"]) < 1e-6
+
+
+def test_mass_assignment_grid_has_no_extra_smoothing():
+    particles = ParticleData(
+        coords=np.array([[0.0, 0.0, 0.0]], dtype=np.float32),
+        radii=np.array([0.5], dtype=np.float32),
+        masses=np.array([1.0], dtype=np.float32),
+        lbox=1.0,
+        particle_type="gas",
+    )
+    result = build_density_grid_mass_assignment(particles, grid_size=4, mas="CIC")
+    assert result.backend_metadata["smoothing"] == "none"
+    assert np.count_nonzero(result.density_grid) == 1
+    assert abs(result.diagnostics["relative_mass_error"]) < 1e-6
+
+
+def test_mass_assignment_chunked_matches_full():
+    particles = synthetic_particles()
+    full = build_density_grid_mass_assignment(particles, grid_size=4, mas="TSC")
+
+    def chunks():
+        yield {
+            "coords": particles.coords[:1],
+            "masses": particles.masses[:1],
+            "lbox": particles.lbox,
+            "input_count": 1,
+            "valid_count": 1,
+        }
+        yield {
+            "coords": particles.coords[1:],
+            "masses": particles.masses[1:],
+            "lbox": particles.lbox,
+            "input_count": 1,
+            "valid_count": 1,
+        }
+
+    chunked = build_density_grid_mass_assignment_chunked(chunks, grid_size=4, mas="TSC")
+    assert np.allclose(full.density_grid, chunked.density_grid)
+    assert chunked.diagnostics["chunk_count"] == 2
 
 
 def test_sphere_backend_mass_conservation():

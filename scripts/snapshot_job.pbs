@@ -1,0 +1,158 @@
+#!/bin/bash
+
+set -euo pipefail
+
+set +u
+source ~/.bashrc
+set -u
+conda activate "${CONDA_ENV:-clumping-factor}"
+
+cd "${PROJECT_DIR:-$PBS_O_WORKDIR}"
+mkdir -p results logs
+
+BASE_PATH="${BASE_PATH:?BASE_PATH must point to the simulation output directory.}"
+SNAPSHOT="${SNAPSHOT:?SNAPSHOT must be set.}"
+SIMULATION_NAME="${SIMULATION_NAME:?SIMULATION_NAME must be set.}"
+PRODUCTS_CSV="${PRODUCTS_CSV:?PRODUCTS_CSV must be set.}"
+LOS_FILE="${LOS_FILE:-}"
+OUTPUT_DIR="${OUTPUT_DIR:-results/forest}"
+THREADS="${THREADS:-1}"
+EQUATION_WORKERS="${EQUATION_WORKERS:-}"
+GAMMA_WORKERS="${GAMMA_WORKERS:-}"
+MFP_WORKERS="${MFP_WORKERS:-}"
+REFRESH_PRODUCTS="${REFRESH_PRODUCTS:-0}"
+VERBOSE="${VERBOSE:-1}"
+ONLY_RAYS_CSV="${ONLY_RAYS_CSV:-}"
+LINE="${LINE:-Ly a}"
+RESOLUTION_KMS="${RESOLUTION_KMS:-1}"
+STATIC="${STATIC:-0}"
+MFP_STARTS_PER_RAY="${MFP_STARTS_PER_RAY:-100}"
+MFP_SEED="${MFP_SEED:-0}"
+MFP_CROSS_CHECK="${MFP_CROSS_CHECK:-0}"
+GAMMA_HI_THRESHOLD="${GAMMA_HI_THRESHOLD:-0.5}"
+GAMMA_CROSS_CHECK="${GAMMA_CROSS_CHECK:-0}"
+GAMMA_CHUNK_SIZE="${GAMMA_CHUNK_SIZE:-1000000}"
+PROGRESS_INTERVAL="${PROGRESS_INTERVAL:-10}"
+SIGMA_HI_CM2="${SIGMA_HI_CM2:-6.3e-18}"
+TEMPERATURE_FILE="${TEMPERATURE_FILE:-}"
+REDUCED_SPEED_OF_LIGHT_FRACTION="${REDUCED_SPEED_OF_LIGHT_FRACTION:-0.2}"
+PHOTON_GROUPS_CSV="${PHOTON_GROUPS_CSV:-0}"
+PHOTON_GROUP_TESTS_CSV="${PHOTON_GROUP_TESTS_CSV:-}"
+THRESHOLDS_CSV="${THRESHOLDS_CSV:-}"
+THRESHOLD_MIN="${THRESHOLD_MIN:--1}"
+THRESHOLD_MAX="${THRESHOLD_MAX:-25}"
+THRESHOLD_COUNT="${THRESHOLD_COUNT:-200}"
+IONIZED_DENSITY_THRESHOLDS_CSV="${IONIZED_DENSITY_THRESHOLDS_CSV:-}"
+IONIZED_CUTS_CSV="${IONIZED_CUTS_CSV:-}"
+IONIZED_SWEEP="${IONIZED_SWEEP:-0}"
+IONIZED_CUT_MIN="${IONIZED_CUT_MIN:-0.9}"
+IONIZED_CUT_MAX="${IONIZED_CUT_MAX:-0.9999}"
+IONIZED_CUT_COUNT="${IONIZED_CUT_COUNT:-200}"
+EQUATION_CHUNK_SIZE="${EQUATION_CHUNK_SIZE:-1000000}"
+ALLOW_LEGACY_IONIZING_TABLE="${ALLOW_LEGACY_IONIZING_TABLE:-0}"
+REFRESH_IONIZING_CACHE="${REFRESH_IONIZING_CACHE:-0}"
+
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+
+IFS=':' read -r -a products <<< "${PRODUCTS_CSV}"
+IFS=':' read -r -a photon_groups <<< "${PHOTON_GROUPS_CSV}"
+
+ARGS=(
+  --base-path "${BASE_PATH}"
+  --snapshot "${SNAPSHOT}"
+  --simulation-name "${SIMULATION_NAME}"
+  --products "${products[@]}"
+  --output-dir "${OUTPUT_DIR}"
+  --threads "${THREADS}"
+  --line "${LINE}"
+  --resolution-kms "${RESOLUTION_KMS}"
+  --mfp-starts-per-ray "${MFP_STARTS_PER_RAY}"
+  --mfp-seed "${MFP_SEED}"
+  --gamma-hi-threshold "${GAMMA_HI_THRESHOLD}"
+  --gamma-chunk-size "${GAMMA_CHUNK_SIZE}"
+  --progress-interval "${PROGRESS_INTERVAL}"
+  --sigma-hi-cm2 "${SIGMA_HI_CM2}"
+  --reduced-speed-of-light-fraction "${REDUCED_SPEED_OF_LIGHT_FRACTION}"
+  --photon-groups "${photon_groups[@]}"
+  --threshold-min "${THRESHOLD_MIN}"
+  --threshold-max "${THRESHOLD_MAX}"
+  --threshold-count "${THRESHOLD_COUNT}"
+  --ionized-cut-min "${IONIZED_CUT_MIN}"
+  --ionized-cut-max "${IONIZED_CUT_MAX}"
+  --ionized-cut-count "${IONIZED_CUT_COUNT}"
+  --equation-chunk-size "${EQUATION_CHUNK_SIZE}"
+)
+
+if [[ -n "${LOS_FILE}" ]]; then
+  ARGS+=(--los-file "${LOS_FILE}")
+fi
+if [[ -n "${EQUATION_WORKERS}" ]]; then
+  ARGS+=(--equation-workers "${EQUATION_WORKERS}")
+fi
+if [[ -n "${GAMMA_WORKERS}" ]]; then
+  ARGS+=(--gamma-workers "${GAMMA_WORKERS}")
+fi
+if [[ -n "${MFP_WORKERS}" ]]; then
+  ARGS+=(--mfp-workers "${MFP_WORKERS}")
+fi
+if [[ "${REFRESH_PRODUCTS}" == "1" ]]; then
+  ARGS+=(--refresh-products)
+fi
+if [[ "${VERBOSE}" == "1" ]]; then
+  ARGS+=(--verbose)
+fi
+if [[ "${STATIC}" == "1" ]]; then
+  ARGS+=(--static)
+fi
+if [[ "${MFP_CROSS_CHECK}" == "1" ]]; then
+  ARGS+=(--mfp-cross-check)
+fi
+if [[ "${GAMMA_CROSS_CHECK}" == "1" ]]; then
+  ARGS+=(--gamma-cross-check)
+fi
+if [[ -n "${TEMPERATURE_FILE}" ]]; then
+  ARGS+=(--temperature-file "${TEMPERATURE_FILE}")
+fi
+if [[ -n "${ONLY_RAYS_CSV}" ]]; then
+  IFS=':' read -r -a only_rays <<< "${ONLY_RAYS_CSV}"
+  ARGS+=(--only-rays "${only_rays[@]}")
+fi
+if [[ -n "${PHOTON_GROUP_TESTS_CSV}" ]]; then
+  IFS=':' read -r -a photon_group_tests <<< "${PHOTON_GROUP_TESTS_CSV}"
+  ARGS+=(--photon-group-tests "${photon_group_tests[@]}")
+fi
+if [[ -n "${THRESHOLDS_CSV}" ]]; then
+  IFS=':' read -r -a thresholds <<< "${THRESHOLDS_CSV}"
+  ARGS+=(--thresholds "${thresholds[@]}")
+fi
+if [[ -n "${IONIZED_DENSITY_THRESHOLDS_CSV}" ]]; then
+  IFS=':' read -r -a ionized_density_thresholds <<< "${IONIZED_DENSITY_THRESHOLDS_CSV}"
+  ARGS+=(--ionized-density-thresholds "${ionized_density_thresholds[@]}")
+fi
+if [[ -n "${IONIZED_CUTS_CSV}" ]]; then
+  IFS=':' read -r -a ionized_cuts <<< "${IONIZED_CUTS_CSV}"
+  ARGS+=(--ionized-cuts "${ionized_cuts[@]}")
+elif [[ "${IONIZED_SWEEP}" == "1" ]]; then
+  ARGS+=(--ionized-sweep)
+fi
+if [[ "${ALLOW_LEGACY_IONIZING_TABLE}" == "1" ]]; then
+  ARGS+=(--allow-legacy-ionizing-table)
+fi
+if [[ "${REFRESH_IONIZING_CACHE}" == "1" ]]; then
+  ARGS+=(--refresh-ionizing-cache)
+fi
+
+echo "Started: $(date)"
+echo "Host: $(hostname)"
+echo "Simulation: ${SIMULATION_NAME}"
+echo "Snapshot: ${SNAPSHOT}"
+echo "Products: ${PRODUCTS_CSV//:/ }"
+echo "Threads: ${THREADS}"
+echo "Output dir: ${OUTPUT_DIR}"
+
+clumping-snapshot "${ARGS[@]}"
+
+echo "Finished: $(date)"

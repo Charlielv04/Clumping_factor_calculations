@@ -43,10 +43,16 @@ IONIZED_CUT_MIN="${IONIZED_CUT_MIN:-0.9}"
 IONIZED_CUT_MAX="${IONIZED_CUT_MAX:-0.9999}"
 IONIZED_CUT_COUNT="${IONIZED_CUT_COUNT:-200}"
 CHUNK_SIZE="${CHUNK_SIZE:-1000000}"
+THREADS="${THREADS:-1}"
 HYDROGEN_MASS_FRACTION="${HYDROGEN_MASS_FRACTION:-0.76}"
 CHI_E="${CHI_E:-1.08}"
 PROGRESS_INTERVAL="${PROGRESS_INTERVAL:-5}"
 VERBOSE="${VERBOSE:-1}"
+
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
 
 if [[ -z "${SIMULATION_NAME}" ]]; then
   base_trimmed="${BASE_PATH%/}"
@@ -153,6 +159,7 @@ elif [[ -z "${IONIZED_CUTS_CSV}" ]]; then
 fi
 echo "Ionized density thresholds: ${IONIZED_DENSITY_THRESHOLDS_CSV//:/ }"
 echo "Output: ${OUTPUT}"
+echo "Worker threads: ${THREADS}"
 
 clumping-equation-tests \
   --base-path "${BASE_PATH}" \
@@ -161,6 +168,7 @@ clumping-equation-tests \
   --sigma-hi-cm2 "${SIGMA_HI_CM2}" \
   --photon-groups "${photon_group_array[@]}" \
   --chunk-size "${CHUNK_SIZE}" \
+  --workers "${THREADS}" \
   --hydrogen-mass-fraction "${HYDROGEN_MASS_FRACTION}" \
   --chi-e "${CHI_E}" \
   --output "${OUTPUT}" \

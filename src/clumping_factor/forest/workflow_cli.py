@@ -15,6 +15,10 @@ def build_snapshot_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", default="results/forest")
     parser.add_argument("--refresh-products", action="store_true")
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--threads", type=int, default=1, help="Default worker threads for thread-safe snapshot products.")
+    parser.add_argument("--equation-workers", type=int, help="Override worker threads for Eq. 5-13 diagnostics.")
+    parser.add_argument("--gamma-workers", type=int, help="Override worker threads for Gamma_HI calculation.")
+    parser.add_argument("--mfp-workers", type=int, help="Override worker threads for MFP calculation.")
     parser.add_argument("--only-rays", nargs="*", type=int)
     parser.add_argument("--line", default="Ly a")
     parser.add_argument("--resolution-kms", type=float, default=1.0)
@@ -58,7 +62,10 @@ def snapshot_main(argv: list[str] | None = None) -> None:
     config = SnapshotWorkflowConfig(
         base_path=args.base_path, snapshot=args.snapshot, simulation_name=args.simulation_name,
         products=args.products, los_file=args.los_file, output_root=args.output_dir,
-        refresh_products=args.refresh_products, verbose=args.verbose, only_rays=args.only_rays,
+        refresh_products=args.refresh_products, verbose=args.verbose,
+        threads=args.threads, equation_workers=args.equation_workers,
+        gamma_workers=args.gamma_workers, mfp_workers=args.mfp_workers,
+        only_rays=args.only_rays,
         line=args.line, resolution_kms=args.resolution_kms, static=args.static,
         mfp_starts_per_ray=args.mfp_starts_per_ray, mfp_seed=args.mfp_seed,
         mfp_cross_check=args.mfp_cross_check, gamma_hi_threshold=args.gamma_hi_threshold,

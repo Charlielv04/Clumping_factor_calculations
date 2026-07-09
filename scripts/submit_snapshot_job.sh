@@ -1,0 +1,118 @@
+#!/bin/bash
+
+set -euo pipefail
+
+BASE_PATH="${BASE_PATH:?Set BASE_PATH, for example /lustre/work/carlos.lopez/Thesan-1/output.}"
+SNAPSHOT="${SNAPSHOT:?Set SNAPSHOT, for example 80.}"
+SIMULATION_NAME="${SIMULATION_NAME:-}"
+PRODUCTS="${PRODUCTS:?Set PRODUCTS, for example 'lya mfp gamma equations'.}"
+LOS_FILE="${LOS_FILE:-}"
+OUTPUT_DIR="${OUTPUT_DIR:-results/forest}"
+CONDA_ENV="${CONDA_ENV:-clumping-factor}"
+NCPUS="${NCPUS:-1}"
+THREADS="${THREADS:-${NCPUS}}"
+EQUATION_WORKERS="${EQUATION_WORKERS:-}"
+GAMMA_WORKERS="${GAMMA_WORKERS:-}"
+MFP_WORKERS="${MFP_WORKERS:-}"
+MEM="${MEM:-16gb}"
+WALLTIME="${WALLTIME:-08:00:00}"
+QUEUE="${QUEUE:-auto}"
+REFRESH_PRODUCTS="${REFRESH_PRODUCTS:-0}"
+VERBOSE="${VERBOSE:-1}"
+ONLY_RAYS="${ONLY_RAYS:-}"
+LINE="${LINE:-Ly a}"
+RESOLUTION_KMS="${RESOLUTION_KMS:-1}"
+STATIC="${STATIC:-0}"
+MFP_STARTS_PER_RAY="${MFP_STARTS_PER_RAY:-100}"
+MFP_SEED="${MFP_SEED:-0}"
+MFP_CROSS_CHECK="${MFP_CROSS_CHECK:-0}"
+GAMMA_HI_THRESHOLD="${GAMMA_HI_THRESHOLD:-0.5}"
+GAMMA_CROSS_CHECK="${GAMMA_CROSS_CHECK:-0}"
+GAMMA_CHUNK_SIZE="${GAMMA_CHUNK_SIZE:-1000000}"
+PROGRESS_INTERVAL="${PROGRESS_INTERVAL:-10}"
+SIGMA_HI_CM2="${SIGMA_HI_CM2:-6.3e-18}"
+TEMPERATURE_FILE="${TEMPERATURE_FILE:-}"
+REDUCED_SPEED_OF_LIGHT_FRACTION="${REDUCED_SPEED_OF_LIGHT_FRACTION:-0.2}"
+PHOTON_GROUPS="${PHOTON_GROUPS:-0}"
+PHOTON_GROUP_TESTS="${PHOTON_GROUP_TESTS:-}"
+THRESHOLDS="${THRESHOLDS:-}"
+THRESHOLD_MIN="${THRESHOLD_MIN:--1}"
+THRESHOLD_MAX="${THRESHOLD_MAX:-25}"
+THRESHOLD_COUNT="${THRESHOLD_COUNT:-200}"
+IONIZED_DENSITY_THRESHOLDS="${IONIZED_DENSITY_THRESHOLDS:-}"
+IONIZED_CUTS="${IONIZED_CUTS:-}"
+IONIZED_SWEEP="${IONIZED_SWEEP:-0}"
+IONIZED_CUT_MIN="${IONIZED_CUT_MIN:-0.9}"
+IONIZED_CUT_MAX="${IONIZED_CUT_MAX:-0.9999}"
+IONIZED_CUT_COUNT="${IONIZED_CUT_COUNT:-200}"
+EQUATION_CHUNK_SIZE="${EQUATION_CHUNK_SIZE:-1000000}"
+ALLOW_LEGACY_IONIZING_TABLE="${ALLOW_LEGACY_IONIZING_TABLE:-0}"
+REFRESH_IONIZING_CACHE="${REFRESH_IONIZING_CACHE:-0}"
+
+if [[ -z "${SIMULATION_NAME}" ]]; then
+  base_trimmed="${BASE_PATH%/}"
+  SIMULATION_NAME="$(basename "${base_trimmed}")"
+  if [[ "${SIMULATION_NAME}" == "output" ]]; then
+    SIMULATION_NAME="$(basename "$(dirname "${base_trimmed}")")"
+  fi
+fi
+
+case "${QUEUE}" in
+  auto)
+    if (( NCPUS == 1 )); then
+      selected_queue="tiny"
+    else
+      selected_queue="mini"
+    fi
+    ;;
+  default|none)
+    selected_queue=""
+    ;;
+  *)
+    selected_queue="${QUEUE}"
+    ;;
+esac
+
+to_csv() {
+  local value="$1"
+  if [[ -z "${value}" ]]; then
+    echo ""
+    return
+  fi
+  read -r -a items <<< "${value}"
+  local IFS=:
+  echo "${items[*]}"
+}
+
+products_csv="$(to_csv "${PRODUCTS}")"
+only_rays_csv="$(to_csv "${ONLY_RAYS}")"
+photon_groups_csv="$(to_csv "${PHOTON_GROUPS}")"
+photon_group_tests_csv="$(to_csv "${PHOTON_GROUP_TESTS}")"
+thresholds_csv="$(to_csv "${THRESHOLDS}")"
+ionized_density_thresholds_csv="$(to_csv "${IONIZED_DENSITY_THRESHOLDS}")"
+ionized_cuts_csv="$(to_csv "${IONIZED_CUTS}")"
+
+project_dir="$(pwd)"
+snapshot_padded="$(printf "%03d" "${SNAPSHOT}")"
+job_simulation_name="${SIMULATION_NAME//[^A-Za-z0-9_]/_}"
+name="cfsnap_${job_simulation_name}_s${snapshot_padded}"
+
+mkdir -p "logs/${SIMULATION_NAME}" "${OUTPUT_DIR}"
+
+env_vars="PROJECT_DIR=${project_dir},BASE_PATH=${BASE_PATH},SNAPSHOT=${SNAPSHOT},SIMULATION_NAME=${SIMULATION_NAME},PRODUCTS_CSV=${products_csv},LOS_FILE=${LOS_FILE},OUTPUT_DIR=${OUTPUT_DIR},CONDA_ENV=${CONDA_ENV},THREADS=${THREADS},EQUATION_WORKERS=${EQUATION_WORKERS},GAMMA_WORKERS=${GAMMA_WORKERS},MFP_WORKERS=${MFP_WORKERS},REFRESH_PRODUCTS=${REFRESH_PRODUCTS},VERBOSE=${VERBOSE},ONLY_RAYS_CSV=${only_rays_csv},LINE=${LINE},RESOLUTION_KMS=${RESOLUTION_KMS},STATIC=${STATIC},MFP_STARTS_PER_RAY=${MFP_STARTS_PER_RAY},MFP_SEED=${MFP_SEED},MFP_CROSS_CHECK=${MFP_CROSS_CHECK},GAMMA_HI_THRESHOLD=${GAMMA_HI_THRESHOLD},GAMMA_CROSS_CHECK=${GAMMA_CROSS_CHECK},GAMMA_CHUNK_SIZE=${GAMMA_CHUNK_SIZE},PROGRESS_INTERVAL=${PROGRESS_INTERVAL},SIGMA_HI_CM2=${SIGMA_HI_CM2},TEMPERATURE_FILE=${TEMPERATURE_FILE},REDUCED_SPEED_OF_LIGHT_FRACTION=${REDUCED_SPEED_OF_LIGHT_FRACTION},PHOTON_GROUPS_CSV=${photon_groups_csv},PHOTON_GROUP_TESTS_CSV=${photon_group_tests_csv},THRESHOLDS_CSV=${thresholds_csv},THRESHOLD_MIN=${THRESHOLD_MIN},THRESHOLD_MAX=${THRESHOLD_MAX},THRESHOLD_COUNT=${THRESHOLD_COUNT},IONIZED_DENSITY_THRESHOLDS_CSV=${ionized_density_thresholds_csv},IONIZED_CUTS_CSV=${ionized_cuts_csv},IONIZED_SWEEP=${IONIZED_SWEEP},IONIZED_CUT_MIN=${IONIZED_CUT_MIN},IONIZED_CUT_MAX=${IONIZED_CUT_MAX},IONIZED_CUT_COUNT=${IONIZED_CUT_COUNT},EQUATION_CHUNK_SIZE=${EQUATION_CHUNK_SIZE},ALLOW_LEGACY_IONIZING_TABLE=${ALLOW_LEGACY_IONIZING_TABLE},REFRESH_IONIZING_CACHE=${REFRESH_IONIZING_CACHE}"
+
+qsub_args=(
+  -N "${name}"
+  -o "${project_dir}/logs/${SIMULATION_NAME}/${name}.out"
+  -e "${project_dir}/logs/${SIMULATION_NAME}/${name}.err"
+  -l "select=1:ncpus=${NCPUS}:mem=${MEM}"
+  -l "walltime=${WALLTIME}"
+  -v "${env_vars}"
+  scripts/snapshot_job.pbs
+)
+if [[ -n "${selected_queue}" ]]; then
+  qsub_args=(-q "${selected_queue}" "${qsub_args[@]}")
+fi
+
+echo "Submitting ${name}: products=${PRODUCTS}, snapshot=${SNAPSHOT}, ncpus=${NCPUS}, threads=${THREADS}, mem=${MEM}, walltime=${WALLTIME}, queue=${selected_queue:-default}"
+qsub "${qsub_args[@]}"

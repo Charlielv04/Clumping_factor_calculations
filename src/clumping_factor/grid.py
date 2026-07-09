@@ -446,6 +446,128 @@ def _smooth_group_mass_grid(group_mass_grid: np.ndarray, group_radius: float, ce
     return cube_tophat_smooth(group_mass_grid, float(group_radius), cell_size)
 
 
+def build_density_grid_mass_assignment(
+    particles: ParticleData,
+    grid_size: int,
+    mas: str = "CIC",
+) -> GridResult:
+    """Build a density grid with only the requested mass-assignment window."""
+    total_t0 = perf_counter()
+    allocation_metadata = _validate_grid_request(grid_size, np.float64)
+    cell_size = particles.lbox / grid_size
+    cell_volume = cell_size**3
+    mass_grid = np.zeros((grid_size, grid_size, grid_size), dtype=np.float64)
+
+    t0 = perf_counter()
+    _add_deposited_mass(mass_grid, particles.coords, particles.masses, particles.lbox, grid_size, mas)
+    deposit_seconds = perf_counter() - t0
+
+    t0 = perf_counter()
+    grid_mass = float(np.sum(mass_grid, dtype=np.float64))
+    density_grid = mass_grid / cell_volume
+    density_seconds = perf_counter() - t0
+
+    input_mass = float(np.sum(particles.masses, dtype=np.float64))
+    diagnostics = {
+        "input_mass": input_mass,
+        "grid_mass": grid_mass,
+        "relative_mass_error": (grid_mass - input_mass) / input_mass if input_mass else None,
+        "grid_shape": [grid_size, grid_size, grid_size],
+        "cell_size": float(cell_size),
+        "cell_volume": float(cell_volume),
+        "load_mode": "full",
+        **allocation_metadata,
+    }
+    timings = {
+        "deposit_total": deposit_seconds,
+        "density_conversion": density_seconds,
+        "build_density_grid": perf_counter() - total_t0,
+    }
+    return GridResult(
+        density_grid=density_grid,
+        diagnostics=diagnostics,
+        timings=timings,
+        backend_metadata={"backend": "mass-assignment", "smoothing": "none", "mas": mas},
+    )
+
+
+def build_density_grid_mass_assignment_chunked(
+    chunk_factory: Callable[[], Iterable[dict]],
+    grid_size: int,
+    mas: str = "CIC",
+) -> GridResult:
+    """Stream particles into a density grid with no extra radius/top-hat smoothing."""
+    total_t0 = perf_counter()
+    allocation_metadata = _validate_grid_request(grid_size, np.float64)
+    mass_grid = np.zeros((grid_size, grid_size, grid_size), dtype=np.float64)
+    lbox: float | None = None
+    input_mass = 0.0
+    input_count = 0
+    valid_count = 0
+    dropped_count = 0
+    chunk_count = 0
+    io_seconds = 0.0
+    preprocess_seconds = 0.0
+    deposit_seconds = 0.0
+
+    for chunk in chunk_factory():
+        chunk_count += 1
+        coords = np.asarray(chunk["coords"])
+        masses = np.asarray(chunk["masses"])
+        chunk_lbox = float(chunk["lbox"])
+        if lbox is None:
+            lbox = chunk_lbox
+        elif not np.isclose(lbox, chunk_lbox):
+            raise ValueError("All chunks must use the same box size.")
+        input_count += int(chunk.get("input_count", coords.shape[0]))
+        valid_count += int(chunk.get("valid_count", coords.shape[0]))
+        dropped_count += int(chunk.get("dropped_count", 0))
+        io_seconds += float(chunk.get("io_seconds", 0.0))
+        preprocess_seconds += float(chunk.get("preprocess_seconds", 0.0))
+        input_mass += float(np.sum(masses, dtype=np.float64))
+        t0 = perf_counter()
+        _add_deposited_mass(mass_grid, coords, masses, chunk_lbox, grid_size, mas)
+        deposit_seconds += perf_counter() - t0
+
+    if lbox is None:
+        raise ValueError("Cannot build a density grid from an empty chunk stream.")
+
+    cell_size = lbox / grid_size
+    cell_volume = cell_size**3
+    t0 = perf_counter()
+    grid_mass = float(np.sum(mass_grid, dtype=np.float64))
+    density_grid = mass_grid / cell_volume
+    density_seconds = perf_counter() - t0
+
+    diagnostics = {
+        "input_mass": input_mass,
+        "grid_mass": grid_mass,
+        "relative_mass_error": (grid_mass - input_mass) / input_mass if input_mass else None,
+        "grid_shape": [grid_size, grid_size, grid_size],
+        "cell_size": float(cell_size),
+        "cell_volume": float(cell_volume),
+        "load_mode": "chunked",
+        "chunk_count": int(chunk_count),
+        "input_count": int(input_count),
+        "valid_count": int(valid_count),
+        "dropped_count": int(dropped_count),
+        **allocation_metadata,
+    }
+    timings = {
+        "io_total": io_seconds,
+        "preprocess_total": preprocess_seconds,
+        "deposit_total": deposit_seconds,
+        "density_conversion": density_seconds,
+        "build_density_grid": perf_counter() - total_t0,
+    }
+    return GridResult(
+        density_grid=density_grid,
+        diagnostics=diagnostics,
+        timings=timings,
+        backend_metadata={"backend": "mass-assignment", "smoothing": "none", "load_mode": "chunked", "mas": mas},
+    )
+
+
 def build_density_grid_scipy(
     particles: ParticleData,
     grid_size: int,

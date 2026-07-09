@@ -28,6 +28,15 @@ def test_chunked_gamma_matches_across_chunk_sizes(tmp_path):
     assert np.isclose(tiny.gamma_hi_s_1, tiny.reference_gamma_hi_s_1, rtol=1e-12)
 
 
+def test_threaded_gamma_matches_serial(tmp_path):
+    base, _ = _inputs(tmp_path)
+    path = base / "snapdir_080" / "snap_080.0.hdf5"
+    serial = compute_gamma_hi_result([path, path], cross_check=True, chunk_size=1, workers=1)
+    threaded = compute_gamma_hi_result([path, path], cross_check=True, chunk_size=1, workers=2)
+    assert np.isclose(serial.gamma_hi_s_1, threaded.gamma_hi_s_1, rtol=1e-14)
+    assert serial.selected_cells == threaded.selected_cells
+
+
 def test_combined_lya_mfp_loads_los_once(tmp_path, monkeypatch):
     base, los = _inputs(tmp_path)
     import clumping_factor.forest.workflow as workflow
@@ -59,6 +68,22 @@ def test_workflow_resume_and_refresh(tmp_path):
         gamma_chunk_size=1, refresh_products=True,
     ))
     assert refreshed.document["products"]["gamma"]["status"] == "success"
+
+
+def test_threaded_workflow_records_worker_counts(tmp_path):
+    base, los = _inputs(tmp_path)
+    result = run_snapshot_workflow(SnapshotWorkflowConfig(
+        base, 80, "Thesan-1", ["mfp", "gamma", "equations"], los_file=los,
+        output_root=tmp_path / "results", mfp_starts_per_ray=2, threads=2,
+        thresholds=[1e9], ionized_density_thresholds=[1e9], ionized_sweep=True,
+        photon_group_tests=["0", "1"], ionized_cut_min=0.9,
+        ionized_cut_max=0.99, ionized_cut_count=2,
+        equation_chunk_size=1, gamma_chunk_size=1,
+    ))
+    assert result.succeeded, result.failures
+    assert result.document["products"]["mfp"]["details"]["workers"] == 2
+    assert result.document["products"]["gamma"]["details"]["workers"] == 2
+    assert result.document["products"]["equations"]["details"]["workers"] == 2
 
 
 def test_product_only_rerun_preserves_other_manifest_products(tmp_path):

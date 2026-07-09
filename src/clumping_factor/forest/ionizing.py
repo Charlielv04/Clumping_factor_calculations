@@ -7,6 +7,7 @@ deterministic, and usable on arbitrary THESAN file layouts.
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from pathlib import Path
@@ -97,24 +98,43 @@ def calculate_mean_free_paths(
     seed: int | None = 0,
     sigma_cm2: float = SIGMA_HI_912_CM2,
     hydrogen_fraction: float = PRIMORDIAL_HYDROGEN_FRACTION,
+    workers: int = 1,
 ) -> MeanFreePathResult:
     """Sample periodic LOS origins and measure where Lyman-limit tau reaches one."""
     if starts_per_ray <= 0:
         raise ValueError("starts_per_ray must be positive.")
+    if workers < 1:
+        raise ValueError("workers must be at least 1.")
     selected = set(range(data.num_rays) if only_rays is None else map(int, only_rays))
     rays = [ray for ray in data.rays if ray.id in selected]
     if len(rays) != len(selected):
         raise ValueError("Requested rays were not loaded in LosData.")
     rng = np.random.default_rng(seed)
-    distances: list[float] = []
-    starts: list[int] = []
+    starts_by_ray: list[np.ndarray] = []
     for ray in rays:
         cumulative = np.cumsum(ray.segments_cgs)
         positions = rng.random(starts_per_ray) * cumulative[-1]
-        for position in positions:
-            start = int(np.searchsorted(cumulative, position, side="right"))
-            starts.append(start)
-            distances.append(_distance_to_tau_one(ray, start, sigma_cm2=sigma_cm2, hydrogen_fraction=hydrogen_fraction))
+        starts_by_ray.append(np.searchsorted(cumulative, positions, side="right").astype(int))
+
+    def calculate_ray(args: tuple[Ray, np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
+        ray, ray_starts = args
+        distances = np.asarray([
+            _distance_to_tau_one(
+                ray, int(start), sigma_cm2=sigma_cm2,
+                hydrogen_fraction=hydrogen_fraction,
+            )
+            for start in ray_starts
+        ], dtype=np.float64)
+        return distances, ray_starts
+
+    tasks = list(zip(rays, starts_by_ray, strict=True))
+    if workers == 1 or len(tasks) <= 1:
+        ray_results = [calculate_ray(task) for task in tasks]
+    else:
+        with ThreadPoolExecutor(max_workers=min(int(workers), len(tasks))) as executor:
+            ray_results = list(executor.map(calculate_ray, tasks))
+    distances = np.concatenate([result[0] for result in ray_results]) if ray_results else np.empty(0)
+    starts = np.concatenate([result[1] for result in ray_results]) if ray_results else np.empty(0, dtype=int)
     values = np.asarray(distances) / MPC_CM * data.hubble_param
     if np.any(~np.isfinite(values)):
         count = int(np.count_nonzero(~np.isfinite(values)))
@@ -187,6 +207,7 @@ def compute_gamma_hi_result(
     chunk_size: int = 1_000_000,
     progress: Callable[[int, int, str], None] | None = None,
     progress_interval: int = 10,
+    workers: int = 1,
 ) -> GammaHIResult:
     """Stream validated snapshot pieces, optionally checking both equations in one I/O pass."""
     paths = list(paths)
@@ -198,12 +219,13 @@ def compute_gamma_hi_result(
         raise ValueError("hi_threshold must lie in [0, 1].")
     if progress_interval < 1:
         raise ValueError("progress_interval must be at least 1.")
-    numerator = denominator = 0.0
-    reference_numerator = 0.0
-    selected_cells = 0
-    scale_factor: float | None = None
-    header_signature: tuple[float, float, float] | None = None
-    for file_number, path in enumerate(paths, start=1):
+    if workers < 1:
+        raise ValueError("workers must be at least 1.")
+
+    def process_file(index_path: tuple[int, str | Path]) -> dict:
+        file_number, path = index_path
+        numerator = denominator = reference_numerator = 0.0
+        selected_cells = 0
         with h5py.File(path, "r") as handle:
             if "Header" not in handle or "PartType0" not in handle:
                 raise ValueError(f"{path} must contain Header and PartType0 groups.")
@@ -212,13 +234,7 @@ def compute_gamma_hi_result(
             if missing_attrs:
                 raise ValueError(f"{path} is missing Header attributes: {', '.join(missing_attrs)}.")
             a = float(attrs["Time"])
-            scale_factor = a if scale_factor is None else scale_factor
-            if not np.isclose(a, scale_factor):
-                raise ValueError("Snapshot pieces have inconsistent scale factors.")
             signature = (a, float(attrs["UnitLength_in_cm"]), float(attrs["HubbleParam"]))
-            header_signature = signature if header_signature is None else header_signature
-            if not np.allclose(signature, header_signature, rtol=1e-12, atol=0.0):
-                raise ValueError("Snapshot pieces have inconsistent unit or cosmology headers.")
             group = handle["PartType0"]
             missing = [name for name in ("Masses", "Density", "HI_Fraction", "PhotonDensity") if name not in group]
             if missing:
@@ -251,8 +267,40 @@ def compute_gamma_hi_result(
                         reference_numerator += float(
                             np.sum(photons[:, band] * conversion * THESAN_SIGMA_C_CM3_S[band] * integer_mask * volume)
                         )
+        return {
+            "file_number": file_number, "path": str(path), "signature": signature,
+            "numerator": numerator, "denominator": denominator,
+            "reference_numerator": reference_numerator, "selected_cells": selected_cells,
+        }
+
+    indexed_paths = list(enumerate(paths, start=1))
+    if workers == 1 or len(indexed_paths) <= 1:
+        file_results = [process_file(item) for item in indexed_paths]
+    else:
+        with ThreadPoolExecutor(max_workers=min(int(workers), len(indexed_paths))) as executor:
+            file_results = list(executor.map(process_file, indexed_paths))
+    file_results.sort(key=lambda row: int(row["file_number"]))
+
+    numerator = denominator = reference_numerator = 0.0
+    selected_cells = 0
+    scale_factor: float | None = None
+    header_signature: tuple[float, float, float] | None = None
+    for row in file_results:
+        signature = row["signature"]
+        a = float(signature[0])
+        scale_factor = a if scale_factor is None else scale_factor
+        if not np.isclose(a, scale_factor):
+            raise ValueError("Snapshot pieces have inconsistent scale factors.")
+        header_signature = signature if header_signature is None else header_signature
+        if not np.allclose(signature, header_signature, rtol=1e-12, atol=0.0):
+            raise ValueError("Snapshot pieces have inconsistent unit or cosmology headers.")
+        numerator += float(row["numerator"])
+        denominator += float(row["denominator"])
+        reference_numerator += float(row["reference_numerator"])
+        selected_cells += int(row["selected_cells"])
+        file_number = int(row["file_number"])
         if progress is not None and (file_number == 1 or file_number % progress_interval == 0 or file_number == len(paths)):
-            progress(file_number, len(paths), str(path))
+            progress(file_number, len(paths), str(row["path"]))
     if denominator <= 0:
         raise ValueError("No positive-volume cells satisfy the HI-fraction threshold.")
     return GammaHIResult(
@@ -267,11 +315,12 @@ def gamma_hi_from_snapshot_files(
     progress: Callable[[int, int, str], None] | None = None,
     progress_interval: int = 10,
     chunk_size: int = 1_000_000,
+    workers: int = 1,
 ) -> tuple[float, float]:
     """Compatibility wrapper returning ``(scale_factor, Gamma_HI [s^-1])``."""
     result = compute_gamma_hi_result(
         paths, hi_threshold=hi_threshold, progress=progress, progress_interval=progress_interval,
-        chunk_size=chunk_size,
+        chunk_size=chunk_size, workers=workers,
     )
     return result.scale_factor, result.gamma_hi_s_1
 
@@ -426,6 +475,8 @@ def compute_and_cache_snapshot_ionizing_inputs(
     allow_legacy: bool = False,
     progress: Callable[[str], None] | None = None,
     gamma_chunk_size: int = 1_000_000,
+    gamma_workers: int = 1,
+    mfp_workers: int = 1,
     gamma_result: GammaHIResult | None = None,
     mfp_result: MeanFreePathResult | None = None,
     mfp_los_data: LosData | None = None,
@@ -489,7 +540,10 @@ def compute_and_cache_snapshot_ionizing_inputs(
                     and not np.isclose(data.redshift, snapshot_metadata.redshift, rtol=0.0, atol=1e-6)
                 ):
                     raise ValueError(f"MFP ray redshift {data.redshift} does not match snapshot redshift {snapshot_metadata.redshift}.")
-                result = mfp_result or calculate_mean_free_paths(data, starts_per_ray=starts_per_ray, seed=seed)
+                result = mfp_result or calculate_mean_free_paths(
+                    data, starts_per_ray=starts_per_ray, seed=seed,
+                    workers=mfp_workers,
+                )
                 _atomic_write_table_pair(mfp_path, result.redshift, float(np.mean(result.samples_pMpc_h)),
                                          column="mfp", units="pMpc/h", metadata=mfp_provenance)
                 if progress:
@@ -510,7 +564,8 @@ def compute_and_cache_snapshot_ionizing_inputs(
             if progress:
                 progress(f"Gamma_HI cache regeneration: {reason if not refresh else 'refresh requested'}")
             calculated_gamma = gamma_result or compute_gamma_hi_result(
-                pieces, hi_threshold=hi_threshold, chunk_size=gamma_chunk_size
+                pieces, hi_threshold=hi_threshold, chunk_size=gamma_chunk_size,
+                workers=gamma_workers,
             )
             if not np.isclose(calculated_gamma.redshift, snapshot_metadata.redshift, rtol=0.0, atol=1e-6):
                 raise ValueError("Gamma_HI snapshot redshift does not match discovery metadata.")

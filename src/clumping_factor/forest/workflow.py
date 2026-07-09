@@ -30,6 +30,10 @@ class SnapshotWorkflowConfig:
     output_root: str | Path = "results/forest"
     refresh_products: bool = False
     verbose: bool = False
+    threads: int = 1
+    equation_workers: int | None = None
+    gamma_workers: int | None = None
+    mfp_workers: int | None = None
     only_rays: Sequence[int] | None = None
     line: str = "Ly a"
     resolution_kms: float = 1.0
@@ -123,6 +127,13 @@ def run_snapshot_workflow(
         raise ValueError("lya and mfp products require los_file.")
     if config.resolution_kms <= 0 or config.gamma_chunk_size < 1 or config.equation_chunk_size < 1:
         raise ValueError("resolution and chunk sizes must be positive.")
+    if config.threads < 1:
+        raise ValueError("threads must be at least 1.")
+    equation_workers = int(config.equation_workers or config.threads)
+    gamma_workers = int(config.gamma_workers or config.threads)
+    mfp_workers = int(config.mfp_workers or config.threads)
+    if min(equation_workers, gamma_workers, mfp_workers) < 1:
+        raise ValueError("worker counts must be at least 1.")
 
     output_dir = snapshot_output_dir(config)
     manifest_path = output_dir / "manifest.json"
@@ -204,7 +215,8 @@ def run_snapshot_workflow(
             elif product == "mfp":
                 output = output_dir / "mfp912" / f"{Path(config.los_file).stem}_mfp912.json"
                 result = calculate_mean_free_paths(los_data, only_rays=config.only_rays,
-                                                   starts_per_ray=config.mfp_starts_per_ray, seed=config.mfp_seed)
+                                                   starts_per_ray=config.mfp_starts_per_ray, seed=config.mfp_seed,
+                                                   workers=mfp_workers)
                 reference = calculate_mean_free_paths_reference(los_data, result.starting_indices) if config.mfp_cross_check else None
                 atomic_write_json(output, mfp_result_document(result, source_los_file=config.los_file,
                                                               simulation=config.simulation_name, snapshot=config.snapshot,
@@ -214,24 +226,27 @@ def run_snapshot_workflow(
                     need_gamma=False, starts_per_ray=config.mfp_starts_per_ray, seed=config.mfp_seed,
                     refresh=config.refresh_ionizing_cache, allow_legacy=config.allow_legacy_ionizing_table,
                     progress=progress, mfp_result=result, mfp_los_data=los_data,
+                    mfp_workers=mfp_workers,
                 )
                 outputs = [str(output)]
-                details = result.summary()
+                details = {**result.summary(), "workers": mfp_workers}
             elif product == "gamma":
                 output = output_dir / "gamma_hi" / "gamma_hi.json"
                 result = compute_gamma_hi_result(snapshot_files, hi_threshold=config.gamma_hi_threshold,
                                                  cross_check=config.gamma_cross_check,
                                                  chunk_size=config.gamma_chunk_size,
-                                                 progress_interval=config.progress_interval)
+                                                 progress_interval=config.progress_interval,
+                                                 workers=gamma_workers)
                 atomic_write_json(output, gamma_result_document(result, source_files=snapshot_files))
                 compute_and_cache_snapshot_ionizing_inputs(
                     config.base_path, config.snapshot, need_mfp=False, need_gamma=True,
                     hi_threshold=config.gamma_hi_threshold, refresh=config.refresh_ionizing_cache,
                     allow_legacy=config.allow_legacy_ionizing_table, progress=progress,
                     gamma_chunk_size=config.gamma_chunk_size, gamma_result=result,
+                    gamma_workers=gamma_workers,
                 )
                 outputs = [str(output)]
-                details = result.summary()
+                details = {**result.summary(), "workers": gamma_workers}
             else:
                 mfp_table, gamma_table = compute_and_cache_snapshot_ionizing_inputs(
                     config.base_path, config.snapshot, mfp_los_file=config.los_file, need_mfp=True, need_gamma=True,
@@ -239,6 +254,7 @@ def run_snapshot_workflow(
                     hi_threshold=config.gamma_hi_threshold, refresh=config.refresh_ionizing_cache,
                     allow_legacy=config.allow_legacy_ionizing_table, progress=progress,
                     gamma_chunk_size=config.gamma_chunk_size, mfp_los_data=los_data,
+                    gamma_workers=gamma_workers, mfp_workers=mfp_workers,
                 )
                 temperature = Path(config.temperature_file) if config.temperature_file else snapshot_files[0].parent / "Tigm_Thesan1.dat"
                 from ..equation_tests import compute_equation_tests, write_equation_tests_result
@@ -255,12 +271,12 @@ def run_snapshot_workflow(
                     ionized_cut_min=config.ionized_cut_min, ionized_cut_max=config.ionized_cut_max,
                     ionized_cut_count=config.ionized_cut_count, chunk_size=config.equation_chunk_size,
                     simulation_name=config.simulation_name, progress=progress,
-                    progress_interval=config.progress_interval,
+                    progress_interval=config.progress_interval, workers=equation_workers,
                 )
                 output = output_dir / "equations" / "equations.json"
                 json_output, csv_output = write_equation_tests_result(result, output)
                 outputs = [str(json_output), str(csv_output)]
-                details = {"row_count": len(result.document.get("rows", []))}
+                details = {"row_count": len(result.document.get("rows", [])), "workers": equation_workers}
             update_product(product, {"status": "success", "fingerprint": fingerprint, "outputs": outputs,
                                      "duration_seconds": perf_counter() - started, "details": details})
             if progress:

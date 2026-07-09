@@ -9,6 +9,7 @@ entering the Eq. 5 to Eq. 13 chain in one output table.
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import csv
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -498,6 +499,7 @@ def compute_equation_tests(
     simulation_name: str | None = None,
     progress: Callable[[str], None] | None = None,
     progress_interval: int = 10,
+    workers: int = 1,
 ) -> EquationTestResult:
     """Compute all raw-volume equation diagnostics in a single snapshot pass.
 
@@ -546,6 +548,8 @@ def compute_equation_tests(
 
     if chunk_size < 1:
         raise ValueError("chunk_size must be at least 1.")
+    if workers < 1:
+        raise ValueError("workers must be at least 1.")
     group_tests = _normalize_photon_group_tests(
         photon_groups,
         photon_group_tests,
@@ -698,11 +702,31 @@ def compute_equation_tests(
     total_volume = 0.0
     missing_hydrogen_abundance = False
     field_validate_t0 = perf_counter()
-    for file_index, path in enumerate(snapshot_file_paths(base_path, snapshot)):
+
+    def process_snapshot_file(index_path: tuple[int, Path]) -> dict:
+        file_index, path = index_path
         file_t0 = perf_counter()
+        local_accumulators = _empty_accumulators(mask_names, photon_value_keys)
+        local_input_count = local_valid_count = local_dropped_count = 0
+        local_chunk_count = 0
+        local_total_volume = 0.0
+        local_missing_hydrogen_abundance = False
+        count = 0
         with h5py.File(path, "r") as handle:
             if "PartType0" not in handle:
-                continue
+                return {
+                    "file_index": file_index,
+                    "path": str(path),
+                    "count": 0,
+                    "input_count": 0,
+                    "valid_count": 0,
+                    "dropped_count": 0,
+                    "chunk_count": 0,
+                    "total_volume": 0.0,
+                    "missing_hydrogen_abundance": False,
+                    "accumulators": local_accumulators,
+                    "duration_seconds": perf_counter() - file_t0,
+                }
             gas = handle["PartType0"]
             missing = sorted(required.difference(gas.keys()))
             if missing:
@@ -723,8 +747,8 @@ def compute_equation_tests(
                 progress(f"file {file_index + 1}: {path.name}, {count:,} gas cells")
             for start in range(0, count, chunk_size):
                 stop = min(start + chunk_size, count)
-                chunk_count += 1
-                input_count += stop - start
+                local_chunk_count += 1
+                local_input_count += stop - start
                 density_code = np.asarray(gas["Density"][start:stop], dtype=np.float64)
                 masses_code = np.asarray(gas["Masses"][start:stop], dtype=np.float64)
                 x_hi = np.asarray(gas["HI_Fraction"][start:stop], dtype=np.float64)
@@ -747,7 +771,7 @@ def compute_equation_tests(
                     )
                 else:
                     hydrogen_fraction = np.full_like(density_code, float(hydrogen_mass_fraction))
-                    missing_hydrogen_abundance = True
+                    local_missing_hydrogen_abundance = True
                 valid = (
                     np.isfinite(density_code)
                     & np.isfinite(masses_code)
@@ -763,8 +787,8 @@ def compute_equation_tests(
                     & (hydrogen_fraction > 0)
                     & (hydrogen_fraction <= 1)
                 )
-                valid_count += int(np.count_nonzero(valid))
-                dropped_count += int((stop - start) - np.count_nonzero(valid))
+                local_valid_count += int(np.count_nonzero(valid))
+                local_dropped_count += int((stop - start) - np.count_nonzero(valid))
                 if not np.any(valid):
                     continue
 
@@ -781,7 +805,7 @@ def compute_equation_tests(
                 # photon densities are converted to physical cgs units before
                 # the equation terms are accumulated.
                 volume = masses_code / density_code
-                total_volume += float(np.sum(volume, dtype=np.float64))
+                local_total_volume += float(np.sum(volume, dtype=np.float64))
                 density_g_cm3 = density_code * units["density_unit_g_cm3"]
                 n_h = hydrogen_fraction * density_g_cm3 / PROTON_MASS_G
                 x_hii = 1.0 - x_hi
@@ -821,20 +845,20 @@ def compute_equation_tests(
                     },
                 }
                 _add_mask_values(
-                    accumulators["all-gas"],
+                    local_accumulators["all-gas"],
                     np.ones_like(n_h, dtype=bool),
                     values,
                     volume,
                 )
                 _add_threshold_sweep_values(
-                    accumulators,
+                    local_accumulators,
                     threshold_array,
                     overdensity,
                     values,
                     volume,
                 )
                 _add_combined_sweep_values(
-                    accumulators,
+                    local_accumulators,
                     combined_threshold_array,
                     ionized_cut_array,
                     overdensity,
@@ -843,28 +867,59 @@ def compute_equation_tests(
                     volume,
                 )
 
-                if progress and (
-                    chunk_count % progress_interval == 0
-                    or input_count >= expected_count
-                ):
-                    elapsed = perf_counter() - total_t0
-                    rate = input_count / elapsed if elapsed > 0 else 0.0
-                    remaining = max(expected_count - input_count, 0)
-                    eta = remaining / rate if rate > 0 else np.nan
-                    eta_text = (
-                        "unknown"
-                        if not np.isfinite(eta)
-                        else f"{eta / 60.0:.1f} min"
-                    )
-                    progress(
-                        f"processed {input_count:,}/{expected_count:,} cells "
-                        f"({100.0 * input_count / expected_count:.1f}%), "
-                        f"valid {valid_count:,}, ETA {eta_text}"
-                    )
+        return {
+            "file_index": file_index,
+            "path": str(path),
+            "count": count,
+            "input_count": local_input_count,
+            "valid_count": local_valid_count,
+            "dropped_count": local_dropped_count,
+            "chunk_count": local_chunk_count,
+            "total_volume": local_total_volume,
+            "missing_hydrogen_abundance": local_missing_hydrogen_abundance,
+            "accumulators": local_accumulators,
+            "duration_seconds": perf_counter() - file_t0,
+        }
+
+    snapshot_paths = list(snapshot_file_paths(base_path, snapshot))
+    indexed_paths = list(enumerate(snapshot_paths))
+    if workers == 1 or len(indexed_paths) <= 1:
+        file_results = [process_snapshot_file(item) for item in indexed_paths]
+    else:
         if progress:
+            progress(f"processing snapshot files with {min(int(workers), len(indexed_paths))} workers")
+        with ThreadPoolExecutor(max_workers=min(int(workers), len(indexed_paths))) as executor:
+            file_results = list(executor.map(process_snapshot_file, indexed_paths))
+
+    file_results.sort(key=lambda row: int(row["file_index"]))
+    for result in file_results:
+        input_count += int(result["input_count"])
+        valid_count += int(result["valid_count"])
+        dropped_count += int(result["dropped_count"])
+        chunk_count += int(result["chunk_count"])
+        total_volume += float(result["total_volume"])
+        missing_hydrogen_abundance = missing_hydrogen_abundance or bool(result["missing_hydrogen_abundance"])
+        local_accumulators = result["accumulators"]
+        for mask_name, local in local_accumulators.items():
+            acc = accumulators[mask_name]
+            for key, value in local.items():
+                if key == "selected_cells":
+                    acc[key] = int(acc[key]) + int(value)
+                else:
+                    acc[key] = float(acc[key]) + float(value)
+        if progress:
+            elapsed = perf_counter() - total_t0
+            rate = input_count / elapsed if elapsed > 0 else 0.0
+            remaining = max(expected_count - input_count, 0)
+            eta = remaining / rate if rate > 0 else np.nan
+            eta_text = "unknown" if not np.isfinite(eta) else f"{eta / 60.0:.1f} min"
+            fraction = 100.0 * input_count / expected_count if expected_count else 100.0
             progress(
-                f"finished file {file_index + 1} in "
-                f"{perf_counter() - file_t0:.1f}s"
+                f"finished file {int(result['file_index']) + 1} in "
+                f"{float(result['duration_seconds']):.1f}s; "
+                f"processed {input_count:,}/{expected_count:,} cells "
+                f"({fraction:.1f}%), "
+                f"valid {valid_count:,}, ETA {eta_text}"
             )
     stream_seconds = perf_counter() - field_validate_t0
     if valid_count == 0 or total_volume <= 0:
@@ -1166,6 +1221,7 @@ def compute_equation_tests(
         },
         "parameters": {
             "chunk_size": int(chunk_size),
+            "workers": int(workers),
             "photon_groups": list(primary_groups),
             "primary_photon_group_test": primary_photon_label,
             "photon_group_tests": [

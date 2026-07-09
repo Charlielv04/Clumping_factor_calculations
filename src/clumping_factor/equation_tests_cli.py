@@ -95,6 +95,7 @@ def build_equation_tests_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ionized-cut-max", type=float, default=0.9999)
     parser.add_argument("--ionized-cut-count", type=int, default=200)
     parser.add_argument("--chunk-size", type=int, default=1_000_000)
+    parser.add_argument("--workers", type=int, default=1, help="Snapshot-piece worker threads for the streaming equation pass.")
     parser.add_argument("--hydrogen-mass-fraction", type=float, default=0.76)
     parser.add_argument("--chi-e", type=float, default=1.08)
     parser.add_argument("--output", required=True)
@@ -133,6 +134,8 @@ def run_equation_tests(args: argparse.Namespace) -> tuple[Path, Path]:
             allow_legacy=args.allow_legacy_ionizing_table,
             progress=progress if args.verbose else None,
             allow_mfp_los_redshift_mismatch=args.allow_mfp_los_redshift_mismatch,
+            gamma_workers=args.workers,
+            mfp_workers=args.workers,
         )
         if mfp_missing or args.refresh_ionizing_cache:
             mfp_file = str(generated_mfp)
@@ -218,6 +221,7 @@ def run_equation_tests(args: argparse.Namespace) -> tuple[Path, Path]:
         simulation_name=args.simulation_name,
         progress=progress if args.verbose else None,
         progress_interval=args.progress_interval,
+        workers=args.workers,
     )
     outputs = write_equation_tests_result(result, args.output)
     if args.verbose:

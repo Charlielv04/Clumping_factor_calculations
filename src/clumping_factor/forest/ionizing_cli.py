@@ -26,6 +26,7 @@ def build_ionizing_parser() -> argparse.ArgumentParser:
     mfp.add_argument("--seed", type=int, default=0)
     mfp.add_argument("--output", required=True)
     mfp.add_argument("--cross-check", action="store_true")
+    mfp.add_argument("--workers", type=int, default=1)
     gamma = sub.add_parser("gamma", help="Measure volume-weighted Gamma_HI from snapshot pieces.")
     gamma_source = gamma.add_mutually_exclusive_group(required=True)
     gamma_source.add_argument("--snapshot-files", nargs="+", help="Snapshot pieces or glob patterns.")
@@ -37,6 +38,7 @@ def build_ionizing_parser() -> argparse.ArgumentParser:
     gamma.add_argument("--verbose", action="store_true")
     gamma.add_argument("--progress-interval", type=int, default=10, help="Report every N snapshot files.")
     gamma.add_argument("--chunk-size", type=int, default=1_000_000)
+    gamma.add_argument("--workers", type=int, default=1)
     return parser
 
 
@@ -46,7 +48,8 @@ def run_ionizing(args: argparse.Namespace) -> Path:
     if args.quantity == "mfp":
         data = read_thesan_random_los(args.los_file, only_rays=args.only_rays)
         result = calculate_mean_free_paths(data, only_rays=args.only_rays,
-                                           starts_per_ray=args.starts_per_ray, seed=args.seed)
+                                           starts_per_ray=args.starts_per_ray, seed=args.seed,
+                                           workers=args.workers)
         reference = None
         if args.cross_check:
             reference = calculate_mean_free_paths_reference(data, result.starting_indices)
@@ -88,6 +91,7 @@ def run_ionizing(args: argparse.Namespace) -> Path:
             snapshot_files, hi_threshold=args.hi_threshold,
             cross_check=args.cross_check,
             chunk_size=args.chunk_size,
+            workers=args.workers,
             progress=report("primary") if args.verbose else None,
             progress_interval=args.progress_interval,
         )
