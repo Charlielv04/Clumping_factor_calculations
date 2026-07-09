@@ -181,9 +181,9 @@ def _relative_to_baseline(
     ordered = np.argsort(baseline_thresholds[finite_baseline])
     finite_thresholds = baseline_thresholds[finite_baseline][ordered]
     finite_values = baseline_values[finite_baseline][ordered]
-    if thresholds[0] < finite_thresholds[0] or thresholds[-1] > finite_thresholds[-1]:
-        raise ValueError(f"{result_path} has thresholds outside the finite baseline range in {baseline_path}.")
-    baseline = np.interp(thresholds, finite_thresholds, finite_values)
+    in_range = (thresholds >= finite_thresholds[0]) & (thresholds <= finite_thresholds[-1])
+    baseline = np.full(thresholds.shape, np.nan, dtype=np.float64)
+    baseline[in_range] = np.interp(thresholds[in_range], finite_thresholds, finite_values)
     relative = np.full(values.shape, np.nan, dtype=np.float64)
     finite = np.isfinite(values) & np.isfinite(baseline) & (baseline != 0.0)
     relative[finite] = (values[finite] - baseline[finite]) / baseline[finite]
