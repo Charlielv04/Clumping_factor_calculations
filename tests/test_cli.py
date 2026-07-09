@@ -374,6 +374,42 @@ def test_plot_command_writes_relative_to_baseline_plot(tmp_path):
     assert output.stat().st_size > 0
 
 
+def test_plot_command_writes_ionized_sweep_plot(tmp_path):
+    result_json = tmp_path / "equations.json"
+    result_json.write_text(
+        json.dumps(
+            {
+                "calculation": "thesan_clumping_equation_tests",
+                "simulation": {"name": "sim", "snapshot": 80},
+                "rows": [
+                    {
+                        "mask_name": "overdensity_lt_25__xHII_gt_0.9",
+                        "C_standard_raw_volume": 2.0,
+                    },
+                    {
+                        "mask_name": "overdensity_lt_25__xHII_gt_0.99",
+                        "C_standard_raw_volume": 2.5,
+                    },
+                ],
+            }
+        )
+    )
+    output = tmp_path / "ionized.png"
+    plot_main(
+        [
+            str(result_json),
+            "--sweep-axis",
+            "ionized",
+            "--ionized-density-threshold",
+            "25",
+            "--output",
+            str(output),
+        ]
+    )
+    assert output.exists()
+    assert output.stat().st_size > 0
+
+
 def test_relative_to_baseline_rejects_cell_count_quantity(tmp_path):
     result_json = tmp_path / "result.json"
     result_json.write_text(

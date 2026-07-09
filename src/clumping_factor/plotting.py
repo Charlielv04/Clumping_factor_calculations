@@ -17,6 +17,9 @@ _RUN_FILENAME_RE = re.compile(r"threads(?P<threads>\d+)_batch(?P<batch>\d+)_run(
 _SNAPSHOT_GRID_RE = re.compile(r"snapshot(?P<snapshot>\d+)_grid(?P<grid>\d+)$")
 _THESAN_SIM_RE = re.compile(r"(Thesan-[12])")
 _TNG_SIM_RE = re.compile(r"(tng\d+-\d+)", re.IGNORECASE)
+_IONIZED_MASK_RE = re.compile(
+    r"^overdensity_lt_(?P<density>[-+0-9.eE]+)__xHII_gt_(?P<ionized>[-+0-9.eE]+)$"
+)
 
 
 def _result_arrays(document: dict, result_path: str | Path) -> tuple[np.ndarray, np.ndarray]:
@@ -190,11 +193,130 @@ def _relative_to_baseline(
     return relative
 
 
+def _finite_value(value: object) -> float:
+    if value is None:
+        return math.nan
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return math.nan
+    return number if math.isfinite(number) else math.nan
+
+
+def _ionized_sweep_curves(
+    document: dict,
+    result_path: str | Path,
+    quantity: str,
+    density_thresholds: list[float] | None,
+) -> list[tuple[float, np.ndarray, np.ndarray]]:
+    if document.get("calculation") != "thesan_clumping_equation_tests":
+        raise ValueError(f"{result_path} is not an equation-test JSON with ionized mask rows.")
+    rows = []
+    for row in document.get("rows", []):
+        match = _IONIZED_MASK_RE.match(str(row.get("mask_name", "")))
+        if match is None:
+            continue
+        if quantity not in row:
+            raise ValueError(f"{result_path} does not contain ionized quantity {quantity!r}.")
+        rows.append(
+            (
+                float(match.group("density")),
+                float(match.group("ionized")),
+                _finite_value(row.get(quantity)),
+            )
+        )
+    if not rows:
+        raise ValueError(f"{result_path} has no combined overdensity and ionized-fraction mask rows.")
+
+    available = sorted({density for density, _ionized, _value in rows})
+    requested = density_thresholds or available
+    curves = []
+    for requested_density in requested:
+        if not any(np.isclose(requested_density, density, rtol=0.0, atol=1.0e-10) for density in available):
+            raise ValueError(
+                f"Requested ionized density threshold {requested_density:g} is unavailable in {result_path}; "
+                f"available thresholds are {available}."
+            )
+        selected = sorted(
+            [(ionized, value) for density, ionized, value in rows if np.isclose(requested_density, density, rtol=0.0, atol=1.0e-10)],
+            key=lambda item: item[0],
+        )
+        x = np.asarray([ionized for ionized, _value in selected], dtype=np.float64)
+        y = np.asarray([value for _ionized, value in selected], dtype=np.float64)
+        curves.append((float(requested_density), x, y))
+    return curves
+
+
+def _equation_context_label(document: dict, result_path: str | Path) -> str:
+    simulation = document.get("simulation", {})
+    name = simulation.get("name")
+    snapshot = simulation.get("snapshot")
+    if name and isinstance(snapshot, (int, np.integer)):
+        return f"{name} snapshot {int(snapshot):03d}"
+    if name:
+        return str(name)
+    return Path(result_path).stem
+
+
+def plot_ionized_sweep_files(
+    result_paths: list[str | Path],
+    output_path: str | Path,
+    *,
+    quantity: str = "C_standard_raw_volume",
+    density_thresholds: list[float] | None = None,
+    title: str | None = None,
+    alternate_linestyles: bool = False,
+) -> Path:
+    if not result_paths:
+        raise ValueError("At least one equation-test JSON result file is required.")
+
+    documents = [(result_path, read_json_result(result_path)) for result_path in result_paths]
+    fig, ax = plt.subplots(figsize=(8, 5))
+    colors = plt.rcParams["axes.prop_cycle"].by_key().get("color", ["#1f77b4"])
+    linestyles = ["-", "--", ":", "-."]
+    plotted = 0
+    multiple_documents = len(documents) > 1
+    for document_index, (result_path, document) in enumerate(documents):
+        context = _equation_context_label(document, result_path)
+        for curve_index, (density, x, y) in enumerate(
+            _ionized_sweep_curves(document, result_path, quantity, density_thresholds)
+        ):
+            finite = np.isfinite(x) & np.isfinite(y)
+            if not np.any(finite):
+                continue
+            label = rf"$\delta < {density:g}$"
+            if multiple_documents:
+                label = f"{context}; " + label
+            linestyle = linestyles[(document_index + curve_index) % len(linestyles)] if alternate_linestyles else "-"
+            color = colors[(document_index + curve_index) % len(colors)]
+            ax.plot(x[finite], y[finite], label=label, linestyle=linestyle, color=color)
+            plotted += 1
+    if plotted == 0:
+        plt.close(fig)
+        raise ValueError(f"No finite {quantity} values remain to plot.")
+
+    ax.set_xlabel(r"Minimum ionized fraction, $x_{\mathrm{HII,min}}$")
+    ax.set_ylabel(quantity)
+    ax.set_xscale("logit")
+    ax.grid(True, alpha=0.35)
+    ax.legend(title="Ionized IGM mask")
+    ax.set_title(title or f"Ionized-fraction sweep: {quantity}")
+
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    return output
+
+
 def plot_result_files(
     result_paths: list[str | Path],
     output_path: str | Path,
     title: str | None = None,
     quantity: str = "clumping-factor",
+    sweep_axis: str = "overdensity",
+    ionized_density_thresholds: list[float] | None = None,
+    ionized_quantity: str = "C_standard_raw_volume",
     min_selected_density_fraction: float = 0.0,
     x_min: float = -0.9,
     alternate_linestyles: bool = False,
@@ -204,6 +326,19 @@ def plot_result_files(
         raise ValueError("At least one JSON result file is required.")
     if min_selected_density_fraction < 0 or min_selected_density_fraction > 1:
         raise ValueError("min_selected_density_fraction must be between 0 and 1.")
+    if sweep_axis not in {"overdensity", "ionized"}:
+        raise ValueError("sweep_axis must be 'overdensity' or 'ionized'.")
+    if sweep_axis == "ionized":
+        if relative_to_baseline is not None:
+            raise ValueError("--relative-to-baseline is not supported with --sweep-axis ionized.")
+        return plot_ionized_sweep_files(
+            result_paths,
+            output_path,
+            quantity=ionized_quantity,
+            density_thresholds=ionized_density_thresholds,
+            title=title,
+            alternate_linestyles=alternate_linestyles,
+        )
     if quantity not in {"clumping-factor", "cell-count"}:
         raise ValueError("quantity must be 'clumping-factor' or 'cell-count'.")
     if relative_to_baseline is not None and quantity != "clumping-factor":

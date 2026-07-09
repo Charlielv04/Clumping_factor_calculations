@@ -211,6 +211,24 @@ def build_plot_parser() -> argparse.ArgumentParser:
         help="Quantity to plot against overdensity threshold.",
     )
     parser.add_argument(
+        "--sweep-axis",
+        choices=["overdensity", "ionized"],
+        default="overdensity",
+        help="Plot against overdensity threshold or ionized-fraction cut. Ionized sweeps expect equation-test JSONs.",
+    )
+    parser.add_argument(
+        "--ionized-density-threshold",
+        type=float,
+        action="append",
+        dest="ionized_density_thresholds",
+        help="Density threshold to plot for --sweep-axis ionized. Repeat for multiple density masks.",
+    )
+    parser.add_argument(
+        "--ionized-quantity",
+        default="C_standard_raw_volume",
+        help="Equation-test row quantity to plot for --sweep-axis ionized.",
+    )
+    parser.add_argument(
         "--min-selected-density-fraction",
         type=float,
         default=0.0,
@@ -1049,6 +1067,9 @@ def plot_main(argv: list[str] | None = None) -> None:
         args.output,
         title=args.title,
         quantity=args.quantity,
+        sweep_axis=args.sweep_axis,
+        ionized_density_thresholds=args.ionized_density_thresholds,
+        ionized_quantity=args.ionized_quantity,
         min_selected_density_fraction=args.min_selected_density_fraction,
         x_min=args.x_min,
         alternate_linestyles=args.alternate_linestyles,
