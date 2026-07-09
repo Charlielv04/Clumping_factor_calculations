@@ -259,6 +259,17 @@ def _equation_context_label(document: dict, result_path: str | Path) -> str:
     return Path(result_path).stem
 
 
+def _unique_equation_context_labels(documents: list[tuple[str | Path, dict]]) -> list[str]:
+    base_labels = [_equation_context_label(document, result_path) for result_path, document in documents]
+    duplicate_labels = {label for label in base_labels if base_labels.count(label) > 1}
+    if not duplicate_labels:
+        return base_labels
+    return [
+        f"{label} ({Path(result_path).stem})" if label in duplicate_labels else label
+        for (result_path, _document), label in zip(documents, base_labels)
+    ]
+
+
 def _density_panel_key(density: float, existing: list[float]) -> float:
     for key in existing:
         if np.isclose(density, key, rtol=0.0, atol=1.0e-10):
@@ -296,10 +307,11 @@ def plot_ionized_sweep_files(
     colors = plt.rcParams["axes.prop_cycle"].by_key().get("color", ["#1f77b4"])
     linestyles = ["-", "--", ":", "-."]
     multiple_documents = len(documents) > 1
+    context_labels = _unique_equation_context_labels(documents)
     density_order: list[float] = []
     panel_series: OrderedDict[float, list[tuple[np.ndarray, np.ndarray, str, int]]] = OrderedDict()
     for document_index, (result_path, document) in enumerate(documents):
-        context = _equation_context_label(document, result_path)
+        context = context_labels[document_index]
         for density, x, y in _ionized_sweep_curves(document, result_path, quantity, density_thresholds):
             if baseline_curves is not None:
                 baseline = next(
