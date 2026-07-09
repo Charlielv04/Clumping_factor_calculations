@@ -167,6 +167,29 @@ def _auto_plot_context(documents: list[tuple[str | Path, dict]], quantity: str) 
     return label_mode, legend_title, title
 
 
+def _relative_to_baseline(
+    thresholds: np.ndarray,
+    values: np.ndarray,
+    baseline_thresholds: np.ndarray,
+    baseline_values: np.ndarray,
+    result_path: str | Path,
+    baseline_path: str | Path,
+) -> np.ndarray:
+    finite_baseline = np.isfinite(baseline_thresholds) & np.isfinite(baseline_values) & (baseline_values != 0.0)
+    if np.count_nonzero(finite_baseline) < 2:
+        raise ValueError(f"{baseline_path} needs at least two finite nonzero baseline values.")
+    ordered = np.argsort(baseline_thresholds[finite_baseline])
+    finite_thresholds = baseline_thresholds[finite_baseline][ordered]
+    finite_values = baseline_values[finite_baseline][ordered]
+    if thresholds[0] < finite_thresholds[0] or thresholds[-1] > finite_thresholds[-1]:
+        raise ValueError(f"{result_path} has thresholds outside the finite baseline range in {baseline_path}.")
+    baseline = np.interp(thresholds, finite_thresholds, finite_values)
+    relative = np.full(values.shape, np.nan, dtype=np.float64)
+    finite = np.isfinite(values) & np.isfinite(baseline) & (baseline != 0.0)
+    relative[finite] = (values[finite] - baseline[finite]) / baseline[finite]
+    return relative
+
+
 def plot_result_files(
     result_paths: list[str | Path],
     output_path: str | Path,
@@ -175,6 +198,7 @@ def plot_result_files(
     min_selected_density_fraction: float = 0.0,
     x_min: float = -0.9,
     alternate_linestyles: bool = False,
+    relative_to_baseline: str | Path | None = None,
 ) -> Path:
     if not result_paths:
         raise ValueError("At least one JSON result file is required.")
@@ -182,10 +206,16 @@ def plot_result_files(
         raise ValueError("min_selected_density_fraction must be between 0 and 1.")
     if quantity not in {"clumping-factor", "cell-count"}:
         raise ValueError("quantity must be 'clumping-factor' or 'cell-count'.")
+    if relative_to_baseline is not None and quantity != "clumping-factor":
+        raise ValueError("--relative-to-baseline is only valid with --quantity clumping-factor.")
     if not np.isfinite(x_min):
         raise ValueError("x_min must be finite.")
 
     documents = [(result_path, read_json_result(result_path)) for result_path in result_paths]
+    baseline_arrays = None
+    if relative_to_baseline is not None:
+        baseline_document = read_json_result(relative_to_baseline)
+        baseline_arrays = _result_arrays(baseline_document, relative_to_baseline)
     label_mode, legend_title, auto_title = _auto_plot_context(documents, quantity)
     include_simulation = len(
         {
@@ -215,6 +245,15 @@ def plot_result_files(
                     raise ValueError(f"{result_path} selected_density_fractions must match clumping_factors length.")
                 values = values.copy()
                 values[density_fractions < min_selected_density_fraction] = np.nan
+            if baseline_arrays is not None:
+                values = _relative_to_baseline(
+                    thresholds,
+                    values,
+                    baseline_arrays[0],
+                    baseline_arrays[1],
+                    result_path,
+                    relative_to_baseline,
+                )
         if not np.any(np.isfinite(values)):
             continue
         label = _plot_label(
@@ -233,8 +272,16 @@ def plot_result_files(
         raise ValueError(f"No finite {quantity} values remain to plot.")
 
     ax.set_xlabel("Overdensity threshold")
-    ax.set_ylabel("Number of cells in IGM mask" if quantity == "cell-count" else "Clumping factor")
+    if quantity == "cell-count":
+        ylabel = "Number of cells in IGM mask"
+    elif baseline_arrays is not None:
+        ylabel = r"Proportional difference, $(C - C_{\rm baseline}) / C_{\rm baseline}$"
+    else:
+        ylabel = "Clumping factor"
+    ax.set_ylabel(ylabel)
     ax.set_xlim(left=x_min)
+    if title is None and baseline_arrays is not None:
+        auto_title = auto_title.replace("Clumping factor", "Proportional clumping difference")
     ax.set_title(title or auto_title)
     ax.grid(True)
     ax.legend(title=legend_title)

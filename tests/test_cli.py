@@ -336,6 +336,73 @@ def test_plot_command_writes_selected_cell_count_plot(tmp_path):
     assert output.stat().st_size > 0
 
 
+def test_plot_command_writes_relative_to_baseline_plot(tmp_path):
+    baseline = tmp_path / "baseline.json"
+    comparison = tmp_path / "comparison.json"
+    baseline.write_text(
+        json.dumps(
+            {
+                "particle_type": "gas",
+                "backend": {"backend": "pylians"},
+                "thresholds": [-1.0, 0.0, 1.0],
+                "clumping_factors": [1.0, 2.0, 4.0],
+            }
+        )
+    )
+    comparison.write_text(
+        json.dumps(
+            {
+                "particle_type": "gas",
+                "backend": {"backend": "pylians"},
+                "thresholds": [-1.0, 0.0, 1.0],
+                "clumping_factors": [1.5, 1.0, 8.0],
+            }
+        )
+    )
+    output = tmp_path / "relative.png"
+    plot_main(
+        [
+            str(baseline),
+            str(comparison),
+            "--relative-to-baseline",
+            str(baseline),
+            "--output",
+            str(output),
+        ]
+    )
+    assert output.exists()
+    assert output.stat().st_size > 0
+
+
+def test_relative_to_baseline_rejects_cell_count_quantity(tmp_path):
+    result_json = tmp_path / "result.json"
+    result_json.write_text(
+        json.dumps(
+            {
+                "thresholds": [-1.0, 0.0],
+                "clumping_factors": [1.0, 2.0],
+                "diagnostics": {"clumping": {"selected_cell_counts": [1, 2]}},
+            }
+        )
+    )
+    try:
+        plot_main(
+            [
+                str(result_json),
+                "--quantity",
+                "cell-count",
+                "--relative-to-baseline",
+                str(result_json),
+                "--output",
+                str(tmp_path / "bad.png"),
+            ]
+        )
+    except ValueError as exc:
+        assert "relative-to-baseline" in str(exc)
+    else:
+        raise AssertionError("relative baseline plotting should reject cell-count plots")
+
+
 def test_cell_count_plot_rejects_missing_diagnostics(tmp_path):
     result_json = tmp_path / "result.json"
     result_json.write_text(json.dumps({"thresholds": [-1.0, 0.0], "clumping_factors": [None, 1.0]}))

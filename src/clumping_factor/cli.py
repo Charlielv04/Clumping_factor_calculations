@@ -227,6 +227,13 @@ def build_plot_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Cycle through solid, dashed, dotted, and dash-dot line styles so overlapping curves are easier to see.",
     )
+    parser.add_argument(
+        "--relative-to-baseline",
+        help=(
+            "Plot proportional difference from this baseline JSON as "
+            "(C - C_baseline) / C_baseline. Only valid with --quantity clumping-factor."
+        ),
+    )
     return parser
 
 
@@ -1045,6 +1052,7 @@ def plot_main(argv: list[str] | None = None) -> None:
         min_selected_density_fraction=args.min_selected_density_fraction,
         x_min=args.x_min,
         alternate_linestyles=args.alternate_linestyles,
+        relative_to_baseline=args.relative_to_baseline,
     )
     print(f"Wrote plot: {output_path}")
 
