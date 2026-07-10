@@ -37,8 +37,9 @@ DRY_RUN=1 bash scripts/submit_aida_tng_power_spectrum_jobs.sh
 bash scripts/submit_aida_tng_power_spectrum_jobs.sh
 ```
 
-By default this submits dark-matter, grid-256, MAS-only spectra and runs both
-the NumPy and Pylians spectrum engines on the same density grid:
+By default this submits one PBS array job whose tasks cover dark-matter,
+grid-256, MAS-only spectra and run both the NumPy and Pylians spectrum engines
+on the same density grid:
 
 ```text
 PARTICLES=dm GRIDS=256 SMOOTHINGS=none SPECTRUM_ENGINES=both

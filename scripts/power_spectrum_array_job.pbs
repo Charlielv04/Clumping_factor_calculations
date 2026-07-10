@@ -1,0 +1,27 @@
+#!/bin/bash
+
+set -euo pipefail
+
+: "${TASK_MANIFEST:?TASK_MANIFEST must point to a tab-separated task manifest.}"
+array_index="${PBS_ARRAY_INDEX:-${PBS_ARRAYID:-}}"
+if [[ -z "${array_index}" ]]; then
+  echo "PBS array index is not available." >&2
+  exit 1
+fi
+
+task_line="$(sed -n "$((array_index + 1))p" "${TASK_MANIFEST}")"
+if [[ -z "${task_line}" ]]; then
+  echo "No task line found for PBS array index ${array_index} in ${TASK_MANIFEST}." >&2
+  exit 1
+fi
+
+IFS=$'\t' read -r BASE_PATH SIMULATION_NAME SNAPSHOT PARTICLE GRID SMOOTHING SPECTRUM_ENGINE RUN_LABEL <<< "${task_line}"
+if [[ -z "${BASE_PATH}" || -z "${SIMULATION_NAME}" || -z "${SNAPSHOT}" || -z "${PARTICLE}" || -z "${GRID}" || -z "${SMOOTHING}" || -z "${SPECTRUM_ENGINE}" || -z "${RUN_LABEL}" ]]; then
+  echo "Malformed task line for array index ${array_index}: ${task_line}" >&2
+  exit 1
+fi
+
+export BASE_PATH SIMULATION_NAME SNAPSHOT PARTICLE GRID SMOOTHING SPECTRUM_ENGINE RUN_LABEL
+
+cd "${PROJECT_DIR:-$PBS_O_WORKDIR}"
+source scripts/power_spectrum_job.pbs
