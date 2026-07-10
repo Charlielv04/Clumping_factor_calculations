@@ -30,6 +30,34 @@ results/aida-tng/<simulation>/<particle>/<backend>/snapshot<SNAPSHOT>_grid<GRID>
 
 Logs remain outside the result tree under `logs/<simulation>/`.
 
+Submit density power spectra for every available AIDA-TNG snapshot:
+
+```bash
+DRY_RUN=1 bash scripts/submit_aida_tng_power_spectrum_jobs.sh
+bash scripts/submit_aida_tng_power_spectrum_jobs.sh
+```
+
+By default this submits dark-matter, grid-256, MAS-only spectra and runs both
+the NumPy and Pylians spectrum engines on the same density grid:
+
+```text
+PARTICLES=dm GRIDS=256 SMOOTHINGS=none SPECTRUM_ENGINES=both
+```
+
+Use the same environment-variable style to broaden the campaign:
+
+```bash
+PARTICLES="dm gas both" GRIDS="256 512" SMOOTHINGS="none sphere" \
+SPECTRUM_ENGINES="numpy pylians both" NCPUS=8 THREADS=8 \
+bash scripts/submit_aida_tng_power_spectrum_jobs.sh
+```
+
+Outputs use the canonical layout:
+
+```text
+results/aida-tng/<simulation>/<particle>/power-spectrum/<smoothing>_<engine>/snapshot<SNAPSHOT>_grid<GRID>/threads<THREADS>_run<RUN>.json
+```
+
 The IPMU idark documentation uses PBS resource requests of the form `select=1:ncpus=<n>:mem=<size>`. The submission helpers use `QUEUE=auto` by default:
 
 - one-CPU jobs are submitted to `tiny`;

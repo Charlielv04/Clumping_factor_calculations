@@ -1,0 +1,155 @@
+#!/bin/bash
+
+set -euo pipefail
+
+set +u
+source ~/.bashrc
+set -u
+conda activate "${CONDA_ENV:-clumping-factor}"
+
+cd "${PROJECT_DIR:-$PBS_O_WORKDIR}"
+mkdir -p results logs
+
+: "${PARTICLE:?PARTICLE must be set to gas, dm, or both}"
+: "${GRID:?GRID must be set to a positive grid size}"
+
+BASE_PATH="${BASE_PATH:-../tng100-3/output}"
+SIMULATION_NAME="${SIMULATION_NAME:-}"
+RESULTS_LAYOUT="${RESULTS_LAYOUT:-auto}"
+RESULTS_FAMILY="${RESULTS_FAMILY:-}"
+SNAPSHOT="${SNAPSHOT:-98}"
+SMOOTHING="${SMOOTHING:-none}"
+SPECTRUM_ENGINE="${SPECTRUM_ENGINE:-numpy}"
+PYLIANS_AXIS="${PYLIANS_AXIS:-0}"
+RADIUS_BINS="${RADIUS_BINS:-10}"
+RADIUS_BIN_BATCH_SIZE="${RADIUS_BIN_BATCH_SIZE:-1}"
+RADIUS_MODE="${RADIUS_MODE:-sphere}"
+FILTER_TYPE="${FILTER_TYPE:-Top-Hat}"
+MAS="${MAS:-CIC}"
+MAS="${MAS^^}"
+THREADS="${THREADS:-1}"
+NCPUS="${NCPUS:-${THREADS}}"
+RESOURCE_SIZE="${RESOURCE_SIZE:-unknown}"
+LOAD_MODE="${LOAD_MODE:-auto}"
+CHUNK_SIZE="${CHUNK_SIZE:-1000000}"
+MAX_FULL_LOAD_GB="${MAX_FULL_LOAD_GB:-16}"
+BIN_COUNT="${BIN_COUNT:-40}"
+BINNING="${BINNING:-log}"
+K_MIN="${K_MIN:-}"
+K_MAX="${K_MAX:-}"
+RUN_LABEL="${RUN_LABEL:-1}"
+VERBOSE="${VERBOSE:-1}"
+
+if [[ "${MAS}" != "CIC" && "${MAS}" != "TSC" ]]; then
+  echo "MAS must be CIC or TSC, got: ${MAS}" >&2
+  exit 1
+fi
+if [[ "${SMOOTHING}" != "none" && "${SMOOTHING}" != "sphere" && "${SMOOTHING}" != "cube" && "${SMOOTHING}" != "pylians" ]]; then
+  echo "SMOOTHING must be none, sphere, cube, or pylians, got: ${SMOOTHING}" >&2
+  exit 1
+fi
+if [[ "${SPECTRUM_ENGINE}" != "numpy" && "${SPECTRUM_ENGINE}" != "pylians" && "${SPECTRUM_ENGINE}" != "both" ]]; then
+  echo "SPECTRUM_ENGINE must be numpy, pylians, or both, got: ${SPECTRUM_ENGINE}" >&2
+  exit 1
+fi
+if [[ -z "${SIMULATION_NAME}" ]]; then
+  base_trimmed="${BASE_PATH%/}"
+  SIMULATION_NAME="$(basename "${base_trimmed}")"
+  if [[ "${SIMULATION_NAME}" == "output" ]]; then
+    SIMULATION_NAME="$(basename "$(dirname "${base_trimmed}")")"
+  fi
+fi
+
+base_trimmed="${BASE_PATH%/}"
+PHYSICAL_SIMULATION_NAME="$(basename "${base_trimmed}")"
+if [[ "${PHYSICAL_SIMULATION_NAME}" == "output" ]]; then
+  PHYSICAL_SIMULATION_NAME="$(basename "$(dirname "${base_trimmed}")")"
+fi
+
+SNAPSHOT_PADDED="$(printf '%03d' "${SNAPSHOT}")"
+RUN_PADDED="$(printf '%03d' "${RUN_LABEL}")"
+SMOOTHING_LABEL="mas-only"
+if [[ "${SMOOTHING}" != "none" ]]; then
+  SMOOTHING_LABEL="smoothed-${SMOOTHING}"
+fi
+
+USE_CANONICAL_LAYOUT=0
+CANONICAL_FAMILY=""
+if [[ "${RESULTS_LAYOUT}" == "canonical" ]]; then
+  USE_CANONICAL_LAYOUT=1
+elif [[ "${RESULTS_LAYOUT}" == "auto" && ( "${PHYSICAL_SIMULATION_NAME}" =~ ^Thesan-[12]$ || "${PHYSICAL_SIMULATION_NAME}" =~ ^tng[0-9]+-[0-9]+$ || "${PHYSICAL_SIMULATION_NAME}" =~ ^L(35n1080|75n910)_(CDM|SIDM1|vSIDM|WDM3)$ ) ]]; then
+  USE_CANONICAL_LAYOUT=1
+fi
+if [[ -n "${RESULTS_FAMILY}" ]]; then
+  CANONICAL_FAMILY="${RESULTS_FAMILY}"
+elif [[ "${PHYSICAL_SIMULATION_NAME}" =~ ^Thesan-[12]$ ]]; then
+  CANONICAL_FAMILY="thesan"
+elif [[ "${PHYSICAL_SIMULATION_NAME}" =~ ^tng[0-9]+-[0-9]+$ ]]; then
+  CANONICAL_FAMILY="tng"
+elif [[ "${PHYSICAL_SIMULATION_NAME}" =~ ^L(35n1080|75n910)_(CDM|SIDM1|vSIDM|WDM3)$ ]]; then
+  CANONICAL_FAMILY="aida-tng"
+fi
+if (( USE_CANONICAL_LAYOUT == 1 )) && [[ -z "${CANONICAL_FAMILY}" ]]; then
+  echo "No canonical results family is defined for ${PHYSICAL_SIMULATION_NAME}; set RESULTS_FAMILY." >&2
+  exit 1
+fi
+
+if (( USE_CANONICAL_LAYOUT == 1 )); then
+  OUTPUT_DIR="results/${CANONICAL_FAMILY}/${PHYSICAL_SIMULATION_NAME}/${PARTICLE}/power-spectrum/${SMOOTHING_LABEL}_${SPECTRUM_ENGINE}/snapshot${SNAPSHOT_PADDED}_grid${GRID}"
+  mkdir -p "${OUTPUT_DIR}"
+  OUTPUT="${OUTPUT_DIR}/threads${THREADS}_run${RUN_PADDED}.json"
+else
+  mkdir -p "results/${SIMULATION_NAME}/power-spectrum"
+  OUTPUT="results/${SIMULATION_NAME}/power-spectrum/${PARTICLE}_${SMOOTHING_LABEL}_${SPECTRUM_ENGINE}_snapshot${SNAPSHOT_PADDED}_grid${GRID}_threads${THREADS}_run${RUN_PADDED}.json"
+fi
+
+ARGS=(
+  --base-path "${BASE_PATH}"
+  --simulation-name "${PHYSICAL_SIMULATION_NAME}"
+  --snapshot "${SNAPSHOT}"
+  --particle-type "${PARTICLE}"
+  --grid-size "${GRID}"
+  --load-mode "${LOAD_MODE}"
+  --chunk-size "${CHUNK_SIZE}"
+  --max-full-load-gb "${MAX_FULL_LOAD_GB}"
+  --mas "${MAS}"
+  --smoothing "${SMOOTHING}"
+  --radius-mode "${RADIUS_MODE}"
+  --radius-bins "${RADIUS_BINS}"
+  --radius-bin-batch-size "${RADIUS_BIN_BATCH_SIZE}"
+  --filter-type "${FILTER_TYPE}"
+  --spectrum-engine "${SPECTRUM_ENGINE}"
+  --pylians-axis "${PYLIANS_AXIS}"
+  --bin-count "${BIN_COUNT}"
+  --binning "${BINNING}"
+  --threads "${THREADS}"
+  --output "${OUTPUT}"
+)
+if [[ -n "${K_MIN}" ]]; then
+  ARGS+=(--k-min "${K_MIN}")
+fi
+if [[ -n "${K_MAX}" ]]; then
+  ARGS+=(--k-max "${K_MAX}")
+fi
+if [[ "${VERBOSE}" == "1" ]]; then
+  ARGS+=(--verbose)
+fi
+
+echo "Started: $(date)"
+echo "Host: $(hostname)"
+echo "Simulation: ${PHYSICAL_SIMULATION_NAME}"
+echo "Snapshot: ${SNAPSHOT}"
+echo "Particle type: ${PARTICLE}"
+echo "Grid size: ${GRID}"
+echo "Smoothing: ${SMOOTHING}"
+echo "Spectrum engine: ${SPECTRUM_ENGINE}"
+echo "Mass assignment: ${MAS}"
+echo "Load mode: ${LOAD_MODE}"
+echo "Threads: ${THREADS}"
+echo "Allocated CPUs requested: ${NCPUS}"
+echo "Resource size: ${RESOURCE_SIZE}"
+echo "Output: ${OUTPUT}"
+
+clumping-power-spectrum "${ARGS[@]}"
+
+echo "Finished: $(date)"
