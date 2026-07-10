@@ -496,6 +496,8 @@ def compute_equation_tests(
     chunk_size: int = 1_000_000,
     hydrogen_mass_fraction: float = 0.76,
     chi_e: float = 1.08,
+    recombination_temperature_mode: str = "tigm",
+    mean_molecular_weight: float = 1.6,
     simulation_name: str | None = None,
     progress: Callable[[str], None] | None = None,
     progress_interval: int = 10,
@@ -550,6 +552,10 @@ def compute_equation_tests(
         raise ValueError("chunk_size must be at least 1.")
     if workers < 1:
         raise ValueError("workers must be at least 1.")
+    if recombination_temperature_mode not in {"tigm", "cell"}:
+        raise ValueError("recombination_temperature_mode must be 'tigm' or 'cell'.")
+    if mean_molecular_weight <= 0 or not np.isfinite(mean_molecular_weight):
+        raise ValueError("mean_molecular_weight must be positive and finite.")
     group_tests = _normalize_photon_group_tests(
         photon_groups,
         photon_group_tests,
@@ -634,9 +640,6 @@ def compute_equation_tests(
     )
     warnings.extend(c_warnings)
 
-    # The diagnostic now uses the tabulated IGM temperature rather than a
-    # per-cell gas temperature.  This keeps alpha_B fixed for a snapshot and
-    # matches the available THESAN post-processing products.
     temperature_igm_k, temperature_metadata = interpolate_redshift_value(
         redshift,
         temperature_file,
@@ -655,6 +658,11 @@ def compute_equation_tests(
         "Tigm value was selected with "
         f"{temperature_metadata['Tigm_interpolation']} from the input table"
     )
+    if recombination_temperature_mode == "cell":
+        warnings.append(
+            "cell-local InternalEnergy temperatures were used inside "
+            "<alpha_B(T) n_e n_HII> for R_rec"
+        )
     if gamma_metadata.get("GammaHI_source") == "redshift_table":
         warnings.append(
             "Gamma_HI value was selected with "
@@ -698,6 +706,8 @@ def compute_equation_tests(
         "ElectronAbundance",
         "PhotonDensity",
     }
+    if recombination_temperature_mode == "cell":
+        required.add("InternalEnergy")
     input_count = valid_count = dropped_count = chunk_count = 0
     total_volume = 0.0
     missing_hydrogen_abundance = False
@@ -760,6 +770,10 @@ def compute_equation_tests(
                     gas["PhotonDensity"][start:stop, list(requested_groups)],
                     dtype=np.float64,
                 )
+                if recombination_temperature_mode == "cell":
+                    internal_energy = np.asarray(gas["InternalEnergy"][start:stop], dtype=np.float64)
+                else:
+                    internal_energy = None
                 if (
                     "GFM_Metals" in gas
                     and gas["GFM_Metals"].ndim == 2
@@ -787,6 +801,8 @@ def compute_equation_tests(
                     & (hydrogen_fraction > 0)
                     & (hydrogen_fraction <= 1)
                 )
+                if internal_energy is not None:
+                    valid &= np.isfinite(internal_energy) & (internal_energy > 0)
                 local_valid_count += int(np.count_nonzero(valid))
                 local_dropped_count += int((stop - start) - np.count_nonzero(valid))
                 if not np.any(valid):
@@ -800,6 +816,8 @@ def compute_equation_tests(
                 electron_abundance = electron_abundance[valid]
                 photon_density_code = photon_density_code[valid]
                 hydrogen_fraction = hydrogen_fraction[valid]
+                if internal_energy is not None:
+                    internal_energy = internal_energy[valid]
 
                 # Native cell volumes are used only as weights.  Densities and
                 # photon densities are converted to physical cgs units before
@@ -812,6 +830,17 @@ def compute_equation_tests(
                 n_hi = x_hi * n_h
                 n_hii = x_hii * n_h
                 n_e = electron_abundance * n_h
+                if internal_energy is not None:
+                    from .temperature import _simloader_temperature
+
+                    temperature_cell = _simloader_temperature(
+                        internal_energy,
+                        unit_velocity_cm_s=float(header["unit_velocity_cm_s"]),
+                        mean_molecular_weight=mean_molecular_weight,
+                    )
+                    alpha_ne_nhii = alpha_b_hii_cm3_s(temperature_cell) * n_e * n_hii
+                else:
+                    alpha_ne_nhii = alpha_b_igm * n_e * n_hii
                 n_gamma_by_label = {
                     label: np.sum(
                         photon_density_code[
@@ -838,7 +867,7 @@ def compute_equation_tests(
                     "gas_density_squared": density_g_cm3**2,
                     "n_e_n_hii": n_e * n_hii,
                     "n_hi_gamma": n_hi * gamma_hi,
-                    "alpha_ne_nhii": alpha_b_igm * n_e * n_hii,
+                    "alpha_ne_nhii": alpha_ne_nhii,
                     **{
                         f"n_gamma__{label}": n_gamma
                         for label, n_gamma in n_gamma_by_label.items()
@@ -1273,6 +1302,8 @@ def compute_equation_tests(
             "alpha_B_T_model": "2.59e-13 * (Tigm(z) / 1e4 K)^-0.7",
             "Tigm_K": float(temperature_igm_k),
             "alpha_B_Tigm_cm3_s": float(alpha_b_igm),
+            "recombination_temperature_mode": recombination_temperature_mode,
+            "temperature_mean_molecular_weight": float(mean_molecular_weight),
             **gamma_metadata,
             **temperature_metadata,
             **mfp_metadata,

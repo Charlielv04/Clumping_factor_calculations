@@ -36,6 +36,7 @@ def _write_snapshot(base_path):
         gas = handle.create_group("PartType0")
         gas.create_dataset("Density", data=np.array([1e-7, 2e-7, 4e-7], dtype=np.float64))
         gas.create_dataset("Masses", data=np.array([1.0, 2.0, 4.0], dtype=np.float64))
+        gas.create_dataset("InternalEnergy", data=np.array([1.0, 2.0, 4.0], dtype=np.float64))
         gas.create_dataset("HI_Fraction", data=np.array([0.1, 0.2, 0.4], dtype=np.float64))
         gas.create_dataset("ElectronAbundance", data=np.array([1.0, 1.1, 1.2], dtype=np.float64))
         gas.create_dataset(

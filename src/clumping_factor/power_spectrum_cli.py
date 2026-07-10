@@ -9,7 +9,7 @@ import numpy as np
 
 from .grid import build_density_grid_mass_assignment, build_density_grid_mass_assignment_chunked
 from .loaders import estimate_full_load_bytes, iter_particle_chunks, load_tng_particles, read_snapshot_metadata
-from .power_spectrum import density_power_spectrum
+from .power_spectrum import PowerSpectrumResult, density_power_spectrum, density_power_spectrum_pylians
 from .results import build_provenance, resolve_simulation_name, sanitize_simulation_name, write_json_result
 
 
@@ -34,6 +34,18 @@ def build_power_spectrum_parser() -> argparse.ArgumentParser:
     parser.add_argument("--radius-bins", type=int, default=10)
     parser.add_argument("--radius-bin-batch-size", type=int, default=1)
     parser.add_argument("--filter-type", default="Top-Hat")
+    parser.add_argument(
+        "--spectrum-engine",
+        choices=["numpy", "pylians", "both"],
+        default="numpy",
+        help="Power-spectrum estimator to use. 'both' runs both estimators on the same density grid.",
+    )
+    parser.add_argument(
+        "--pylians-axis",
+        type=int,
+        default=0,
+        help="Axis argument passed to Pylians Pk_library.Pk. Use 0 for real-space spectra.",
+    )
     parser.add_argument("--bin-count", type=int, default=40)
     parser.add_argument("--binning", choices=["log", "linear"], default="log")
     parser.add_argument("--k-min", type=float)
@@ -182,8 +194,48 @@ def _default_output_path(args: argparse.Namespace, simulation_name: str) -> Path
         Path(args.output_dir)
         / sanitize_simulation_name(simulation_name)
         / "power-spectrum"
-        / f"{args.particle_type}_{smoothing}_snapshot{int(args.snapshot):03d}_grid{int(args.grid_size)}.json"
+        / (
+            f"{args.particle_type}_{smoothing}_{args.spectrum_engine}"
+            f"_snapshot{int(args.snapshot):03d}_grid{int(args.grid_size)}.json"
+        )
     )
+
+
+def _spectrum_payload(result: PowerSpectrumResult) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "k": result.k,
+        "power": result.power,
+        "dimensionless_power": result.dimensionless_power,
+        "mode_counts": result.mode_counts,
+        "diagnostics": result.diagnostics,
+        "timings": result.timings,
+    }
+    if result.k_edges.size:
+        payload["k_edges"] = result.k_edges
+    return payload
+
+
+def _compute_spectra(args: argparse.Namespace, density_grid: np.ndarray, box_size: float) -> dict[str, PowerSpectrumResult]:
+    spectra: dict[str, PowerSpectrumResult] = {}
+    if args.spectrum_engine in {"numpy", "both"}:
+        spectra["numpy"] = density_power_spectrum(
+            density_grid,
+            box_size,
+            bin_count=args.bin_count,
+            binning=args.binning,
+            k_min=args.k_min,
+            k_max=args.k_max,
+        )
+    if args.spectrum_engine in {"pylians", "both"}:
+        spectra["pylians"] = density_power_spectrum_pylians(
+            density_grid,
+            box_size,
+            mas=args.mas,
+            threads=args.threads,
+            axis=args.pylians_axis,
+            verbose=args.verbose,
+        )
+    return spectra
 
 
 def run_power_spectrum(args: argparse.Namespace) -> Path:
@@ -193,15 +245,10 @@ def run_power_spectrum(args: argparse.Namespace) -> Path:
     _progress(args, f"building {args.particle_type} density field with smoothing={args.smoothing}, load_mode={selected_load_mode}")
     density_grid, grid_spec, grid_timings = _build_density_field(args, selected_load_mode)
     metadata = read_snapshot_metadata(args.base_path, args.snapshot)
-    _progress(args, "computing FFT power spectrum")
-    spectrum = density_power_spectrum(
-        density_grid,
-        metadata.lbox,
-        bin_count=args.bin_count,
-        binning=args.binning,
-        k_min=args.k_min,
-        k_max=args.k_max,
-    )
+    _progress(args, f"computing power spectrum with engine={args.spectrum_engine}")
+    spectra = _compute_spectra(args, density_grid, metadata.lbox)
+    primary_engine = "numpy" if args.spectrum_engine == "both" else args.spectrum_engine
+    primary_spectrum = spectra[primary_engine]
 
     parameters: dict[str, Any] = {
         "base_path": args.base_path,
@@ -218,6 +265,9 @@ def run_power_spectrum(args: argparse.Namespace) -> Path:
         "radius_bins": int(args.radius_bins) if args.smoothing != "none" else None,
         "radius_bin_batch_size": int(args.radius_bin_batch_size) if args.smoothing != "none" else None,
         "filter_type": args.filter_type if args.smoothing == "pylians" else None,
+        "spectrum_engine": args.spectrum_engine,
+        "primary_spectrum_engine": primary_engine,
+        "pylians_axis": int(args.pylians_axis),
         "bin_count": int(args.bin_count),
         "binning": args.binning,
         "k_min": args.k_min,
@@ -226,7 +276,11 @@ def run_power_spectrum(args: argparse.Namespace) -> Path:
     }
     timings = {
         **{f"grid_{key}": value for key, value in grid_timings.items()},
-        **{f"spectrum_{key}": value for key, value in spectrum.timings.items()},
+        **{
+            f"spectrum_{engine}_{key}": value
+            for engine, result in spectra.items()
+            for key, value in result.timings.items()
+        },
         "total": perf_counter() - total_t0,
     }
     document = {
@@ -236,15 +290,22 @@ def run_power_spectrum(args: argparse.Namespace) -> Path:
         "particle_type": args.particle_type,
         "parameters": parameters,
         "grid": grid_spec,
-        "k": spectrum.k,
-        "power": spectrum.power,
-        "dimensionless_power": spectrum.dimensionless_power,
-        "mode_counts": spectrum.mode_counts,
-        "k_edges": spectrum.k_edges,
-        "diagnostics": {"power_spectrum": spectrum.diagnostics},
+        "spectrum_engine": args.spectrum_engine,
+        "primary_spectrum_engine": primary_engine,
+        "spectra": {engine: _spectrum_payload(result) for engine, result in spectra.items()},
+        "k": primary_spectrum.k,
+        "power": primary_spectrum.power,
+        "dimensionless_power": primary_spectrum.dimensionless_power,
+        "mode_counts": primary_spectrum.mode_counts,
+        "diagnostics": {
+            "power_spectrum": primary_spectrum.diagnostics,
+            "power_spectra": {engine: result.diagnostics for engine, result in spectra.items()},
+        },
         "timings": timings,
         "provenance": build_provenance(parameters),
     }
+    if primary_spectrum.k_edges.size:
+        document["k_edges"] = primary_spectrum.k_edges
     output_path = Path(args.output) if args.output else _default_output_path(args, simulation_name)
     return write_json_result(document, output_path)
 

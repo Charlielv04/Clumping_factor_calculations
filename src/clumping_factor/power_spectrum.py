@@ -149,3 +149,82 @@ def density_power_spectrum(
         diagnostics=diagnostics,
         timings=timings,
     )
+
+
+def density_power_spectrum_pylians(
+    density_grid: np.ndarray,
+    box_size: float,
+    *,
+    mas: str = "CIC",
+    threads: int = 1,
+    axis: int = 0,
+    verbose: bool = False,
+) -> PowerSpectrumResult:
+    """Estimate the isotropic 3D power spectrum using Pylians3 Pk_library."""
+    try:
+        import Pk_library as PKL
+    except ImportError as exc:
+        raise ImportError(
+            "Pylians spectrum engine requested, but Pk_library could not be imported. "
+            "Install Pylians or use --spectrum-engine numpy."
+        ) from exc
+
+    total_t0 = perf_counter()
+    density = np.asarray(density_grid)
+    if density.ndim != 3 or len(set(density.shape)) != 1:
+        raise ValueError("density_grid must be a cubic 3D array.")
+    if not np.all(np.isfinite(density)):
+        raise ValueError("density_grid must contain only finite values.")
+    if box_size <= 0 or not np.isfinite(box_size):
+        raise ValueError("box_size must be positive and finite.")
+    if mas not in {"CIC", "TSC"}:
+        raise ValueError("mas must be 'CIC' or 'TSC'.")
+
+    grid_size = int(density.shape[0])
+    mean_density = float(np.mean(density, dtype=np.float64))
+    if mean_density == 0.0 or not np.isfinite(mean_density):
+        raise ValueError("density_grid mean must be non-zero and finite.")
+
+    timings: dict[str, float] = {}
+    t0 = perf_counter()
+    delta = (density.astype(np.float32, copy=False) / np.float32(mean_density)) - np.float32(1.0)
+    timings["overdensity"] = perf_counter() - t0
+
+    t0 = perf_counter()
+    pk = PKL.Pk(delta, float(box_size), int(axis), mas, int(threads), bool(verbose))
+    timings["pylians_pk"] = perf_counter() - t0
+    timings["total"] = perf_counter() - total_t0
+
+    k = np.asarray(pk.k3D, dtype=np.float64)
+    power = np.asarray(pk.Pk[:, 0], dtype=np.float64)
+    mode_counts = np.asarray(pk.Nmodes3D, dtype=np.int64)
+    valid = np.isfinite(k) & np.isfinite(power) & (mode_counts > 0)
+    k = k[valid]
+    power = power[valid]
+    mode_counts = mode_counts[valid]
+    dimensionless_power = k**3 * power / (2.0 * np.pi**2)
+
+    diagnostics = {
+        "engine": "pylians",
+        "grid_size": grid_size,
+        "box_size": float(box_size),
+        "volume": float(box_size) ** 3,
+        "mean_density": mean_density,
+        "overdensity_mean": float(np.mean(delta, dtype=np.float64)),
+        "overdensity_variance": float(np.mean(delta.astype(np.float64, copy=False) ** 2, dtype=np.float64)),
+        "axis": int(axis),
+        "mas": mas,
+        "threads": int(threads),
+        "nonempty_bin_count": int(k.size),
+        "normalization": "Pylians3 Pk_library.Pk",
+        "mas_window_correction": True,
+    }
+    return PowerSpectrumResult(
+        k=k,
+        power=power,
+        dimensionless_power=dimensionless_power,
+        mode_counts=mode_counts,
+        k_edges=np.empty(0, dtype=np.float64),
+        diagnostics=diagnostics,
+        timings=timings,
+    )

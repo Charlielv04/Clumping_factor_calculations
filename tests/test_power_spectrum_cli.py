@@ -1,4 +1,5 @@
 import json
+import sys
 
 import numpy as np
 
@@ -14,6 +15,8 @@ class Metadata:
 def test_power_spectrum_help_mentions_smoothing():
     help_text = build_power_spectrum_parser().format_help()
     assert "--smoothing" in help_text
+    assert "--spectrum-engine" in help_text
+    assert "pylians" in help_text
     assert "none" in help_text
     assert "sphere" in help_text
 
@@ -94,3 +97,49 @@ def test_run_power_spectrum_can_request_smoothed_grid(monkeypatch, tmp_path):
 
     assert document["parameters"]["smoothing"] == "sphere"
     assert document["grid"]["backend"]["backend"] == "sphere"
+
+
+def test_run_power_spectrum_can_write_both_engines(monkeypatch, tmp_path):
+    particles = ParticleData(
+        coords=np.array([[0.1, 0.1, 0.1]], dtype=np.float32),
+        radii=np.array([0.25], dtype=np.float32),
+        masses=np.array([1.0], dtype=np.float32),
+        lbox=1.0,
+        particle_type="dm",
+    )
+
+    class FakePk:
+        k3D = np.array([1.0])
+        Pk = np.array([[2.0, 0.0, 0.0]])
+        Nmodes3D = np.array([6])
+
+    class FakePkLibrary:
+        @staticmethod
+        def Pk(*_args, **_kwargs):
+            return FakePk()
+
+    monkeypatch.setitem(sys.modules, "Pk_library", FakePkLibrary)
+    monkeypatch.setattr("clumping_factor.power_spectrum_cli.read_snapshot_metadata", lambda *_args: Metadata())
+    monkeypatch.setattr("clumping_factor.power_spectrum_cli.estimate_full_load_bytes", lambda *_args: 1)
+    monkeypatch.setattr(
+        "clumping_factor.power_spectrum_cli.load_tng_particles",
+        lambda *_args, **_kwargs: (particles, {"load_data": 0.0}),
+    )
+
+    output = tmp_path / "pk-both.json"
+    args = build_power_spectrum_parser().parse_args(
+        [
+            "--particle-type", "dm",
+            "--grid-size", "4",
+            "--spectrum-engine", "both",
+            "--output", str(output),
+        ]
+    )
+    written = run_power_spectrum(args)
+    document = json.loads(written.read_text())
+
+    assert written == output
+    assert document["parameters"]["spectrum_engine"] == "both"
+    assert document["primary_spectrum_engine"] == "numpy"
+    assert sorted(document["spectra"]) == ["numpy", "pylians"]
+    assert document["spectra"]["pylians"]["power"] == [2.0]

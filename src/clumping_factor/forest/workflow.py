@@ -47,6 +47,10 @@ class SnapshotWorkflowConfig:
     progress_interval: int = 10
     sigma_hi_cm2: float = 6.3e-18
     temperature_file: str | Path | None = None
+    compute_missing_temperature: bool = True
+    mean_molecular_weight: float = 1.6
+    temperature_weighting: str = "volume"
+    recombination_temperature_mode: str = "tigm"
     reduced_speed_of_light_fraction: float = 0.2
     photon_groups: Sequence[int] = (0,)
     photon_group_tests: Sequence[str] | None = None
@@ -256,7 +260,22 @@ def run_snapshot_workflow(
                     gamma_chunk_size=config.gamma_chunk_size, mfp_los_data=los_data,
                     gamma_workers=gamma_workers, mfp_workers=mfp_workers,
                 )
-                temperature = Path(config.temperature_file) if config.temperature_file else snapshot_files[0].parent / "Tigm_Thesan1.dat"
+                if config.temperature_file:
+                    temperature = Path(config.temperature_file)
+                else:
+                    temperature = snapshot_files[0].parent / "Tigm_Thesan1.dat"
+                    if not temperature.exists() and config.compute_missing_temperature:
+                        from ..temperature import compute_and_cache_snapshot_temperature
+
+                        temperature = compute_and_cache_snapshot_temperature(
+                            config.base_path,
+                            config.snapshot,
+                            mean_molecular_weight=config.mean_molecular_weight,
+                            weighting=config.temperature_weighting,
+                            chunk_size=config.equation_chunk_size,
+                            workers=equation_workers,
+                            progress=progress,
+                        )
                 from ..equation_tests import compute_equation_tests, write_equation_tests_result
                 result = compute_equation_tests(
                     config.base_path, config.snapshot, mfp_table, sigma_hi_cm2=config.sigma_hi_cm2,
@@ -270,6 +289,8 @@ def run_snapshot_workflow(
                     ionized_cuts=config.ionized_cuts, ionized_sweep=config.ionized_sweep,
                     ionized_cut_min=config.ionized_cut_min, ionized_cut_max=config.ionized_cut_max,
                     ionized_cut_count=config.ionized_cut_count, chunk_size=config.equation_chunk_size,
+                    recombination_temperature_mode=config.recombination_temperature_mode,
+                    mean_molecular_weight=config.mean_molecular_weight,
                     simulation_name=config.simulation_name, progress=progress,
                     progress_interval=config.progress_interval, workers=equation_workers,
                 )

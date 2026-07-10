@@ -8,6 +8,7 @@ from clumping_factor.forest.workflow import SnapshotWorkflowConfig, run_snapshot
 from clumping_factor.forest.workflow_cli import build_snapshot_parser
 from test_equation_tests import _write_snapshot, _write_tigm
 from test_forest import _write_los
+from test_temperature import _install_fake_simloader
 
 
 def _inputs(tmp_path):
@@ -84,6 +85,24 @@ def test_threaded_workflow_records_worker_counts(tmp_path):
     assert result.document["products"]["mfp"]["details"]["workers"] == 2
     assert result.document["products"]["gamma"]["details"]["workers"] == 2
     assert result.document["products"]["equations"]["details"]["workers"] == 2
+
+
+def test_workflow_computes_missing_temperature_table(tmp_path, monkeypatch):
+    _install_fake_simloader(monkeypatch)
+    base, los = _inputs(tmp_path)
+    (base / "snapdir_080" / "Tigm_Thesan1.dat").unlink()
+    result = run_snapshot_workflow(SnapshotWorkflowConfig(
+        base, 80, "Thesan-1", ["equations"], los_file=los,
+        output_root=tmp_path / "results", mfp_starts_per_ray=2,
+        thresholds=[1e9], ionized_density_thresholds=[1e9],
+        ionized_cuts=[0.7], photon_group_tests=["0"],
+        equation_chunk_size=1, gamma_chunk_size=1,
+    ))
+    assert result.succeeded, result.failures
+    assert (base / "snapdir_080" / "Tigm_from_sim.dat").exists()
+    root = tmp_path / "results" / "thesan" / "Thesan-1" / "snapshot080"
+    equations = json.loads((root / "equations" / "equations.json").read_text())
+    assert equations["parameters"]["Tigm_table"].endswith("Tigm_from_sim.dat")
 
 
 def test_product_only_rerun_preserves_other_manifest_products(tmp_path):

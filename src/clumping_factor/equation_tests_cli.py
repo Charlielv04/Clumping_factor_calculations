@@ -42,6 +42,12 @@ def build_equation_tests_parser() -> argparse.ArgumentParser:
             "next to --mfp-file."
         ),
     )
+    parser.add_argument(
+        "--compute-missing-temperature",
+        action="store_true",
+        help="Compute and cache Tigm_from_sim.dat beside the snapshot when the default temperature table is missing.",
+    )
+    parser.add_argument("--mean-molecular-weight", type=float, default=1.6)
     parser.add_argument("--mfp-file", help="MFP table. With --compute-missing-ionizing, defaults to a generated table beside the snapshot.")
     parser.add_argument("--compute-missing-ionizing", action="store_true", help="Compute and cache missing MFP/Gamma_HI tables from simulation data.")
     parser.add_argument("--mfp-los-file", help="Matching COLT ray file required when MFP must be computed.")
@@ -98,6 +104,12 @@ def build_equation_tests_parser() -> argparse.ArgumentParser:
     parser.add_argument("--workers", type=int, default=1, help="Snapshot-piece worker threads for the streaming equation pass.")
     parser.add_argument("--hydrogen-mass-fraction", type=float, default=0.76)
     parser.add_argument("--chi-e", type=float, default=1.08)
+    parser.add_argument(
+        "--recombination-temperature-mode",
+        choices=["tigm", "cell"],
+        default="tigm",
+        help="Use alpha_B(Tigm) outside <n_e n_HII> or cell-local alpha_B(T_cell) inside the average.",
+    )
     parser.add_argument("--output", required=True)
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--progress-interval", type=int, default=10)
@@ -155,8 +167,19 @@ def run_equation_tests(args: argparse.Namespace) -> tuple[Path, Path]:
     temperature_file = args.temperature_file
     if temperature_file is None:
         temperature_file = str(Path(mfp_file).parent / "Tigm_Thesan1.dat")
+        if not Path(temperature_file).exists() and args.compute_missing_temperature:
+            from .temperature import compute_and_cache_snapshot_temperature
+
+            temperature_file = str(compute_and_cache_snapshot_temperature(
+                args.base_path,
+                args.snapshot,
+                mean_molecular_weight=args.mean_molecular_weight,
+                chunk_size=args.chunk_size,
+                workers=args.workers,
+                progress=progress if args.verbose else None,
+            ))
         if args.verbose:
-            progress(f"using default Tigm table next to MFP file: {temperature_file}")
+            progress(f"using default/generated Tigm table: {temperature_file}")
     if (
         args.c_tilde_cm_s is None
         and args.reduced_speed_of_light_fraction == 0.2
@@ -218,6 +241,8 @@ def run_equation_tests(args: argparse.Namespace) -> tuple[Path, Path]:
         chunk_size=args.chunk_size,
         hydrogen_mass_fraction=args.hydrogen_mass_fraction,
         chi_e=args.chi_e,
+        recombination_temperature_mode=args.recombination_temperature_mode,
+        mean_molecular_weight=args.mean_molecular_weight,
         simulation_name=args.simulation_name,
         progress=progress if args.verbose else None,
         progress_interval=args.progress_interval,

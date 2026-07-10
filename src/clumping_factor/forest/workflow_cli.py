@@ -32,6 +32,19 @@ def build_snapshot_parser() -> argparse.ArgumentParser:
     parser.add_argument("--progress-interval", type=int, default=10)
     parser.add_argument("--sigma-hi-cm2", type=float, default=6.3e-18)
     parser.add_argument("--temperature-file")
+    parser.add_argument(
+        "--no-compute-missing-temperature",
+        action="store_true",
+        help="Fail instead of generating Tigm_from_sim.dat when the default temperature table is missing.",
+    )
+    parser.add_argument("--mean-molecular-weight", type=float, default=1.6)
+    parser.add_argument("--temperature-weighting", choices=["volume", "mass", "mean"], default="volume")
+    parser.add_argument(
+        "--recombination-temperature-mode",
+        choices=["tigm", "cell"],
+        default="tigm",
+        help="Use alpha_B(Tigm) outside <n_e n_HII> or cell-local alpha_B(T_cell) inside the average.",
+    )
     parser.add_argument("--reduced-speed-of-light-fraction", type=float, default=0.2)
     parser.add_argument("--photon-groups", nargs="+", type=int, default=[0])
     parser.add_argument(
@@ -72,6 +85,10 @@ def snapshot_main(argv: list[str] | None = None) -> None:
         gamma_cross_check=args.gamma_cross_check, gamma_chunk_size=args.gamma_chunk_size,
         progress_interval=args.progress_interval, sigma_hi_cm2=args.sigma_hi_cm2,
         temperature_file=args.temperature_file,
+        compute_missing_temperature=not args.no_compute_missing_temperature,
+        mean_molecular_weight=args.mean_molecular_weight,
+        temperature_weighting=args.temperature_weighting,
+        recombination_temperature_mode=args.recombination_temperature_mode,
         reduced_speed_of_light_fraction=args.reduced_speed_of_light_fraction,
         photon_groups=args.photon_groups, photon_group_tests=args.photon_group_tests,
         thresholds=args.thresholds,

@@ -80,6 +80,7 @@ def _read_header_cosmology(path: Path) -> dict[str, float]:
             "omega_baryon": float(header["OmegaBaryon"]) if "OmegaBaryon" in header else np.nan,
             "unit_length_cm": float(header["UnitLength_in_cm"]),
             "unit_mass_g": float(header["UnitMass_in_g"]),
+            "unit_velocity_cm_s": float(header.get("UnitVelocity_in_cm_per_s", 1.0e5)),
             "hubble_param": float(header["HubbleParam"]),
             "scale_factor": float(header["Time"]),
             "redshift": float(header["Redshift"]),

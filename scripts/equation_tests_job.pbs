@@ -28,6 +28,9 @@ OUTPUT="${OUTPUT:-}"
 CONDA_ENV="${CONDA_ENV:-clumping-factor}"
 GAMMA_HI_FILE="${GAMMA_HI_FILE:-}"
 TEMPERATURE_FILE="${TEMPERATURE_FILE:-}"
+COMPUTE_MISSING_TEMPERATURE="${COMPUTE_MISSING_TEMPERATURE:-0}"
+MEAN_MOLECULAR_WEIGHT="${MEAN_MOLECULAR_WEIGHT:-1.6}"
+RECOMBINATION_TEMPERATURE_MODE="${RECOMBINATION_TEMPERATURE_MODE:-tigm}"
 REDUCED_SPEED_OF_LIGHT_FRACTION="${REDUCED_SPEED_OF_LIGHT_FRACTION:-0.2}"
 C_TILDE_CM_S="${C_TILDE_CM_S:-}"
 PHOTON_GROUPS_CSV="${PHOTON_GROUPS_CSV:-0}"
@@ -96,6 +99,10 @@ fi
 if [[ -n "${TEMPERATURE_FILE}" ]]; then
   EXTRA_ARGS+=(--temperature-file "${TEMPERATURE_FILE}")
 fi
+if [[ "${COMPUTE_MISSING_TEMPERATURE}" == "1" ]]; then
+  EXTRA_ARGS+=(--compute-missing-temperature --mean-molecular-weight "${MEAN_MOLECULAR_WEIGHT}")
+fi
+EXTRA_ARGS+=(--recombination-temperature-mode "${RECOMBINATION_TEMPERATURE_MODE}")
 if [[ -n "${C_TILDE_CM_S}" ]]; then
   EXTRA_ARGS+=(--c-tilde-cm-s "${C_TILDE_CM_S}")
 else
@@ -160,6 +167,8 @@ fi
 echo "Ionized density thresholds: ${IONIZED_DENSITY_THRESHOLDS_CSV//:/ }"
 echo "Output: ${OUTPUT}"
 echo "Worker threads: ${THREADS}"
+echo "Mean molecular weight for computed temperature: ${MEAN_MOLECULAR_WEIGHT}"
+echo "Recombination temperature mode: ${RECOMBINATION_TEMPERATURE_MODE}"
 
 clumping-equation-tests \
   --base-path "${BASE_PATH}" \

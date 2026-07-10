@@ -35,6 +35,10 @@ GAMMA_CHUNK_SIZE="${GAMMA_CHUNK_SIZE:-1000000}"
 PROGRESS_INTERVAL="${PROGRESS_INTERVAL:-10}"
 SIGMA_HI_CM2="${SIGMA_HI_CM2:-6.3e-18}"
 TEMPERATURE_FILE="${TEMPERATURE_FILE:-}"
+COMPUTE_MISSING_TEMPERATURE="${COMPUTE_MISSING_TEMPERATURE:-1}"
+MEAN_MOLECULAR_WEIGHT="${MEAN_MOLECULAR_WEIGHT:-1.6}"
+TEMPERATURE_WEIGHTING="${TEMPERATURE_WEIGHTING:-volume}"
+RECOMBINATION_TEMPERATURE_MODE="${RECOMBINATION_TEMPERATURE_MODE:-tigm}"
 REDUCED_SPEED_OF_LIGHT_FRACTION="${REDUCED_SPEED_OF_LIGHT_FRACTION:-0.2}"
 PHOTON_GROUPS_CSV="${PHOTON_GROUPS_CSV:-0}"
 PHOTON_GROUP_TESTS_CSV="${PHOTON_GROUP_TESTS_CSV:-}"
@@ -116,6 +120,12 @@ fi
 if [[ -n "${TEMPERATURE_FILE}" ]]; then
   ARGS+=(--temperature-file "${TEMPERATURE_FILE}")
 fi
+if [[ "${COMPUTE_MISSING_TEMPERATURE}" != "1" ]]; then
+  ARGS+=(--no-compute-missing-temperature)
+fi
+ARGS+=(--mean-molecular-weight "${MEAN_MOLECULAR_WEIGHT}")
+ARGS+=(--temperature-weighting "${TEMPERATURE_WEIGHTING}")
+ARGS+=(--recombination-temperature-mode "${RECOMBINATION_TEMPERATURE_MODE}")
 if [[ -n "${ONLY_RAYS_CSV}" ]]; then
   IFS=':' read -r -a only_rays <<< "${ONLY_RAYS_CSV}"
   ARGS+=(--only-rays "${only_rays[@]}")
@@ -152,6 +162,10 @@ echo "Snapshot: ${SNAPSHOT}"
 echo "Products: ${PRODUCTS_CSV//:/ }"
 echo "Threads: ${THREADS}"
 echo "Output dir: ${OUTPUT_DIR}"
+echo "Computed temperature enabled: ${COMPUTE_MISSING_TEMPERATURE}"
+echo "Mean molecular weight: ${MEAN_MOLECULAR_WEIGHT}"
+echo "Temperature weighting: ${TEMPERATURE_WEIGHTING}"
+echo "Recombination temperature mode: ${RECOMBINATION_TEMPERATURE_MODE}"
 
 clumping-snapshot "${ARGS[@]}"
 
