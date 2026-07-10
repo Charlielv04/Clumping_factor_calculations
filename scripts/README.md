@@ -38,17 +38,17 @@ bash scripts/submit_aida_tng_power_spectrum_jobs.sh
 ```
 
 By default this submits one PBS array job whose tasks cover dark-matter,
-grid-256, MAS-only spectra and run both the NumPy and Pylians spectrum engines
-on the same density grid:
+grid-256 spectra for both MAS-only and Pylians-smoothed density grids, and runs
+both the NumPy and Pylians spectrum engines on each grid:
 
 ```text
-PARTICLES=dm GRIDS=256 SMOOTHINGS=none SPECTRUM_ENGINES=both
+PARTICLES=dm GRIDS=256 SMOOTHINGS="none pylians" SPECTRUM_ENGINES=both
 ```
 
 Use the same environment-variable style to broaden the campaign:
 
 ```bash
-PARTICLES="dm gas both" GRIDS="256 512" SMOOTHINGS="none sphere" \
+PARTICLES="dm gas both" GRIDS="256 512" SMOOTHINGS="none pylians sphere" \
 SPECTRUM_ENGINES="numpy pylians both" NCPUS=8 THREADS=8 \
 bash scripts/submit_aida_tng_power_spectrum_jobs.sh
 ```

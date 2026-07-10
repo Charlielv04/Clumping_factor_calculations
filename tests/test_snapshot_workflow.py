@@ -8,7 +8,6 @@ from clumping_factor.forest.workflow import SnapshotWorkflowConfig, run_snapshot
 from clumping_factor.forest.workflow_cli import build_snapshot_parser
 from test_equation_tests import _write_snapshot, _write_tigm
 from test_forest import _write_los
-from test_temperature import _install_fake_simloader
 
 
 def _inputs(tmp_path):
@@ -87,8 +86,7 @@ def test_threaded_workflow_records_worker_counts(tmp_path):
     assert result.document["products"]["equations"]["details"]["workers"] == 2
 
 
-def test_workflow_computes_missing_temperature_table(tmp_path, monkeypatch):
-    _install_fake_simloader(monkeypatch)
+def test_workflow_computes_missing_temperature_table(tmp_path):
     base, los = _inputs(tmp_path)
     (base / "snapdir_080" / "Tigm_Thesan1.dat").unlink()
     result = run_snapshot_workflow(SnapshotWorkflowConfig(

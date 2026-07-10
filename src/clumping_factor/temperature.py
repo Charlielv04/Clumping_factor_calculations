@@ -38,21 +38,33 @@ class SnapshotTemperatureResult:
         }
 
 
-def _simloader_temperature(internal_energy: np.ndarray, *, unit_velocity_cm_s: float, mean_molecular_weight: float) -> np.ndarray:
-    try:
-        import simloader as sl
-    except ImportError as exc:
-        raise ImportError(
-            "Temperature calculation requires simloader. Install simloader or "
-            "make simloader.zip importable, then rerun with the same command."
-        ) from exc
-    return np.asarray(
-        sl.gadget.computeParticlesTemperature(
-            internal_energy,
-            UnitVelocity_in_cm_per_s=unit_velocity_cm_s,
-            MeanMolecularWeight=mean_molecular_weight,
-        ),
-        dtype=np.float64,
+def compute_particles_temperature(
+    internal_energy: np.ndarray,
+    *,
+    unit_velocity_cm_s: float = 1.0e5,
+    mean_molecular_weight: float = DEFAULT_MEAN_MOLECULAR_WEIGHT,
+    gamma: float = 5.0 / 3.0,
+) -> np.ndarray:
+    """Compute gas-particle temperature from GADGET internal energy.
+
+    This is the same formula used by
+    ``simloader.gadget.computeParticlesTemperature``:
+
+    ``T = mu * m_p / k_B * (gamma - 1) * u * UnitVelocity_in_cm_per_s**2``.
+
+    The default mean molecular weight is set to 1.6 for the THESAN
+    temperature diagnostic, matching the project convention.
+    """
+
+    boltzmann_cgs = 1.3806e-16
+    proton_mass_g = 1.6726e-24
+    return (
+        float(mean_molecular_weight)
+        * proton_mass_g
+        / boltzmann_cgs
+        * (float(gamma) - 1.0)
+        * np.asarray(internal_energy, dtype=np.float64)
+        * float(unit_velocity_cm_s) ** 2
     )
 
 
@@ -171,7 +183,7 @@ def compute_snapshot_temperature_result(
                     weight = masses[valid]
                 else:
                     weight = np.ones_like(volume)
-                temperature = _simloader_temperature(
+                temperature = compute_particles_temperature(
                     internal_energy[valid],
                     unit_velocity_cm_s=unit_velocity_cm_s,
                     mean_molecular_weight=mean_molecular_weight,
@@ -257,7 +269,8 @@ def compute_and_cache_snapshot_temperature(
             "mean_molecular_weight": float(mean_molecular_weight),
             "weighting": weighting,
             "chunk_size": int(chunk_size),
-            "source": "simloader.gadget.computeParticlesTemperature",
+            "source": "clumping_factor.temperature.compute_particles_temperature",
+            "formula_reference": "same equation as simloader.gadget.computeParticlesTemperature",
         },
     }
     if not refresh and table_path.exists() and meta_path.exists():

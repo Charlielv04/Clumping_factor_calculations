@@ -831,9 +831,9 @@ def compute_equation_tests(
                 n_hii = x_hii * n_h
                 n_e = electron_abundance * n_h
                 if internal_energy is not None:
-                    from .temperature import _simloader_temperature
+                    from .temperature import compute_particles_temperature
 
-                    temperature_cell = _simloader_temperature(
+                    temperature_cell = compute_particles_temperature(
                         internal_energy,
                         unit_velocity_cm_s=float(header["unit_velocity_cm_s"]),
                         mean_molecular_weight=mean_molecular_weight,
