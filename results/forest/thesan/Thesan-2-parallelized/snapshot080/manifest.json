@@ -1,9 +1,9 @@
 {
   "workflow_version": 1,
   "status": "success",
-  "started_at": "2026-07-10T13:21:48.305549+00:00",
-  "updated_at": "2026-07-10T15:14:32.425057+00:00",
-  "simulation": "Thesan-1",
+  "started_at": "2026-07-10T13:22:09.052647+00:00",
+  "updated_at": "2026-07-10T13:31:57.686285+00:00",
+  "simulation": "Thesan-2",
   "snapshot": 80,
   "requested_products": [
     "lya",
@@ -12,17 +12,17 @@
     "equations"
   ],
   "configuration": {
-    "base_path": "/lustre/work/carlos.lopez/Thesan-1/output",
+    "base_path": "/lustre/work/carlos.lopez/Thesan-2/output",
     "snapshot": 80,
-    "simulation_name": "Thesan-1",
+    "simulation_name": "Thesan-2",
     "products": [
       "lya",
       "mfp",
       "gamma",
       "equations"
     ],
-    "los_file": "/lustre/work/carlos.lopez/Thesan-1/postprocessing/los/rays_080.hdf5",
-    "output_root": "/lustre/work/carlos.lopez/Thesan-1/results/forest_parallelized",
+    "los_file": "/lustre/work/carlos.lopez/Thesan-2/postprocessing/los/rays_080.hdf5",
+    "output_root": "/lustre/work/carlos.lopez/Thesan-2/results/forest_parallelized",
     "refresh_products": true,
     "verbose": true,
     "threads": 8,
@@ -82,11 +82,11 @@
   "products": {
     "lya": {
       "status": "success",
-      "fingerprint": "726e42b9b461c1974a8ff4958db253e98297e78d5adfbee88ee9820eebadce8a",
+      "fingerprint": "b4d908a4297bf87eab3f619f37ec82dcea9e38d49218eab2f265273dde82f916",
       "outputs": [
-        "/lustre/work/carlos.lopez/Thesan-1/results/forest_parallelized/thesan/Thesan-1/snapshot080/lya/rays_080_lya.hdf5"
+        "/lustre/work/carlos.lopez/Thesan-2/results/forest_parallelized/thesan/Thesan-2/snapshot080/lya/rays_080_lya.hdf5"
       ],
-      "duration_seconds": 63.443245865404606,
+      "duration_seconds": 27.682860976085067,
       "details": {
         "line": "Ly a",
         "ray_count": 150
@@ -94,48 +94,48 @@
     },
     "mfp": {
       "status": "success",
-      "fingerprint": "4d43f8f7141ffa2ca96425b172324afb52c6271b84ac30badc4bab079dc120f2",
+      "fingerprint": "f77f12f1fed62d00247eba332a24e5257665d9887b6034610d3d5662d993e45a",
       "outputs": [
-        "/lustre/work/carlos.lopez/Thesan-1/results/forest_parallelized/thesan/Thesan-1/snapshot080/mfp912/rays_080_mfp912.json"
+        "/lustre/work/carlos.lopez/Thesan-2/results/forest_parallelized/thesan/Thesan-2/snapshot080/mfp912/rays_080_mfp912.json"
       ],
-      "duration_seconds": 3.948598312214017,
+      "duration_seconds": 2.686792589724064,
       "details": {
-        "redshift": 5.511772431496886,
+        "redshift": 5.4911591607170775,
         "sample_count": 15000,
-        "mfp_avg_pMpc_h": 4.686775546507418,
-        "sigma_pMpc_h": 3.0520821498474326,
-        "p2_5_pMpc_h": 0.1803313360494196,
-        "p16_pMpc_h": 1.3811780248511483,
-        "mfp_med_pMpc_h": 4.467443555834972,
-        "p84_pMpc_h": 7.8003044267758685,
-        "p97_5_pMpc_h": 11.261291795893051,
+        "mfp_avg_pMpc_h": 4.415947949304734,
+        "sigma_pMpc_h": 3.1683123891449188,
+        "p2_5_pMpc_h": 0.13477573407348273,
+        "p16_pMpc_h": 1.2399741253365026,
+        "mfp_med_pMpc_h": 3.9889533702874447,
+        "p84_pMpc_h": 7.3352685014793595,
+        "p97_5_pMpc_h": 12.272282643757833,
         "workers": 8
       }
     },
     "gamma": {
       "status": "success",
-      "fingerprint": "e0ab5c6ba3cf9b5284b700e75ba779bc1b825d8d55188c7e3fb4ba757a9edf81",
+      "fingerprint": "9a5157430cca43a3257a502cb806a4fef5b4feb320fac9d2969255bd4a53bb24",
       "outputs": [
-        "/lustre/work/carlos.lopez/Thesan-1/results/forest_parallelized/thesan/Thesan-1/snapshot080/gamma_hi/gamma_hi.json"
+        "/lustre/work/carlos.lopez/Thesan-2/results/forest_parallelized/thesan/Thesan-2/snapshot080/gamma_hi/gamma_hi.json"
       ],
-      "duration_seconds": 1609.8652074476704,
+      "duration_seconds": 130.5588551480323,
       "details": {
-        "scale_factor": 0.1535680201542495,
-        "redshift": 5.511772431496886,
-        "Gamma_HI_s_1": 3.8534514182948477e-13,
-        "selected_volume_code": 269689105726838.62,
-        "selected_cells": 9064654292,
+        "scale_factor": 0.15405568947558052,
+        "redshift": 5.4911591607170775,
+        "Gamma_HI_s_1": 3.0933419445098867e-13,
+        "selected_volume_code": 267786510090850.47,
+        "selected_cells": 1138462029,
         "workers": 8
       }
     },
     "equations": {
       "status": "success",
-      "fingerprint": "8ea8eff6b263cd6b188bf086a7372191ae471acd9a03d8a18d53188782d18f00",
+      "fingerprint": "6a02d7fbd24071daf0a7582837dbd801b7ec72f9988a5bb6bf26c08fbb0fb238",
       "outputs": [
-        "/lustre/work/carlos.lopez/Thesan-1/results/forest_parallelized/thesan/Thesan-1/snapshot080/equations/equations.json",
-        "/lustre/work/carlos.lopez/Thesan-1/results/forest_parallelized/thesan/Thesan-1/snapshot080/equations/equations.csv"
+        "/lustre/work/carlos.lopez/Thesan-2/results/forest_parallelized/thesan/Thesan-2/snapshot080/equations/equations.json",
+        "/lustre/work/carlos.lopez/Thesan-2/results/forest_parallelized/thesan/Thesan-2/snapshot080/equations/equations.csv"
       ],
-      "duration_seconds": 5081.598285297863,
+      "duration_seconds": 426.8700388269499,
       "details": {
         "row_count": 1401,
         "workers": 8
@@ -144,5 +144,5 @@
   },
   "warnings": [],
   "failures": [],
-  "finished_at": "2026-07-10T15:14:32.425016+00:00"
+  "finished_at": "2026-07-10T13:31:57.686270+00:00"
 }
