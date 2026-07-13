@@ -1,0 +1,118 @@
+{
+  "workflow_version": 1,
+  "status": "running",
+  "started_at": "2026-07-13T09:27:20.617193+00:00",
+  "updated_at": "2026-07-13T09:28:15.377279+00:00",
+  "simulation": "Thesan-1-parallelized",
+  "snapshot": 80,
+  "requested_products": [
+    "lya",
+    "mfp",
+    "gamma",
+    "equations"
+  ],
+  "configuration": {
+    "base_path": "/lustre/work/carlos.lopez/Thesan-1/output",
+    "snapshot": 80,
+    "simulation_name": "Thesan-1-parallelized",
+    "products": [
+      "lya",
+      "mfp",
+      "gamma",
+      "equations"
+    ],
+    "los_file": "/lustre/work/carlos.lopez/Thesan-1/postprocessing/los/rays_080.hdf5",
+    "output_root": "results/forest",
+    "refresh_products": true,
+    "verbose": true,
+    "threads": 8,
+    "equation_workers": null,
+    "gamma_workers": null,
+    "mfp_workers": null,
+    "only_rays": null,
+    "line": "Ly a",
+    "resolution_kms": 1.0,
+    "static": false,
+    "mfp_starts_per_ray": 100,
+    "mfp_seed": 0,
+    "mfp_cross_check": false,
+    "gamma_hi_threshold": 0.5,
+    "gamma_cross_check": false,
+    "gamma_chunk_size": 1000000,
+    "progress_interval": 10,
+    "sigma_hi_cm2": 6.3e-18,
+    "temperature_file": null,
+    "compute_missing_temperature": true,
+    "mean_molecular_weight": 1.6,
+    "temperature_weighting": "volume",
+    "recombination_temperature_mode": "cell",
+    "reduced_speed_of_light_fraction": 0.2,
+    "photon_groups": [
+      0
+    ],
+    "photon_group_tests": [
+      "0",
+      "1",
+      "2",
+      "0+1",
+      "1+2",
+      "0+1+2"
+    ],
+    "thresholds": null,
+    "threshold_min": -1.0,
+    "threshold_max": 25.0,
+    "threshold_count": 200,
+    "ionized_density_thresholds": [
+      1.0,
+      5.0,
+      10.0,
+      15.0,
+      20.0,
+      25.0
+    ],
+    "ionized_cuts": null,
+    "ionized_sweep": true,
+    "ionized_cut_min": 0.9,
+    "ionized_cut_max": 0.9999,
+    "ionized_cut_count": 200,
+    "equation_chunk_size": 1000000,
+    "allow_legacy_ionizing_table": false,
+    "refresh_ionizing_cache": false
+  },
+  "products": {
+    "lya": {
+      "status": "success",
+      "fingerprint": "2bf1239fe79bac3850e237d58fdb5e869b5c4d6b1debfd6d7bcf150f657fbb30",
+      "outputs": [
+        "results/forest/thesan/Thesan-1-parallelized/snapshot080/lya/rays_080_lya.hdf5"
+      ],
+      "duration_seconds": 50.604293540120125,
+      "details": {
+        "line": "Ly a",
+        "ray_count": 150
+      }
+    },
+    "mfp": {
+      "status": "success",
+      "fingerprint": "111436b3dbafaca65a48c80c73ac1ce808f26b6b2c9fb4adbef92b7945db4ca4",
+      "outputs": [
+        "results/forest/thesan/Thesan-1-parallelized/snapshot080/mfp912/rays_080_mfp912.json"
+      ],
+      "duration_seconds": 2.886044170707464,
+      "details": {
+        "redshift": 5.511772431496886,
+        "sample_count": 15000,
+        "mfp_avg_pMpc_h": 4.686775546507418,
+        "sigma_pMpc_h": 3.0520821498474326,
+        "p2_5_pMpc_h": 0.1803313360494196,
+        "p16_pMpc_h": 1.3811780248511483,
+        "mfp_med_pMpc_h": 4.467443555834972,
+        "p84_pMpc_h": 7.8003044267758685,
+        "p97_5_pMpc_h": 11.261291795893051,
+        "workers": 8
+      }
+    }
+  },
+  "warnings": [],
+  "failures": []
+}
