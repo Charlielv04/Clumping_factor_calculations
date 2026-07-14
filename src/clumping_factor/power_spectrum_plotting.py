@@ -8,6 +8,8 @@ from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
 
+from .plot_styles import dark_matter_model, simulation_style
+
 
 def _load_result(path: str | Path) -> dict[str, Any]:
     result_path = Path(path)
@@ -77,16 +79,22 @@ def plot_power_spectrum_files(
         for selected_engine in engines:
             k, values, actual_engine = _spectrum(document, field, selected_engine)
             label = _label(document, actual_engine)
-            linestyle = linestyles[series_index % len(linestyles)] if alternate_linestyles else "-"
+            style = simulation_style(document, series_index)
+            linestyle = (
+                linestyles[series_index % len(linestyles)]
+                if alternate_linestyles
+                else style["linestyle"] if dark_matter_model(document) is not None else "-"
+            )
+            color = style["color"]
             series_index += 1
             if baseline is None:
-                axis.plot(k, values, linewidth=1.5, linestyle=linestyle, label=label)
+                axis.plot(k, values, linewidth=1.5, linestyle=linestyle, color=color, label=label)
                 continue
             baseline_k, baseline_values = baseline
             common_k = np.linspace(max(k.min(), baseline_k.min()), min(k.max(), baseline_k.max()), 400)
             curve = np.exp(np.interp(np.log(common_k), np.log(k), np.log(values)))
             reference = np.exp(np.interp(np.log(common_k), np.log(baseline_k), np.log(baseline_values)))
-            axis.plot(common_k, curve / reference, linewidth=1.5, linestyle=linestyle, label=label)
+            axis.plot(common_k, curve / reference, linewidth=1.5, linestyle=linestyle, color=color, label=label)
 
     axis.set_xlabel(r"$k\ [h\,\mathrm{Mpc}^{-1}]$")
     axis.set_ylabel(

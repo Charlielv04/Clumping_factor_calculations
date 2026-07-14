@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from .results import read_json_result
+from .plot_styles import dark_matter_model, simulation_style
 
 
 _RUN_FILENAME_RE = re.compile(r"threads(?P<threads>\d+)_batch(?P<batch>\d+)_run(?P<run>\d+)\.json$")
@@ -358,8 +359,13 @@ def plot_ionized_sweep_files(
     handles_by_label: OrderedDict[str, object] = OrderedDict()
     for axis, (density, series) in zip(axes, panel_series.items()):
         for x, y, label, document_index in series:
-            linestyle = linestyles[document_index % len(linestyles)] if alternate_linestyles else "-"
-            color = colors[document_index % len(colors)]
+            style = simulation_style(document, document_index)
+            if dark_matter_model(document) is not None and not alternate_linestyles:
+                linestyle = style["linestyle"]
+                color = style["color"]
+            else:
+                linestyle = linestyles[document_index % len(linestyles)] if alternate_linestyles else "-"
+                color = colors[document_index % len(colors)]
             (line,) = axis.plot(x, y, label=label, linestyle=linestyle, color=color)
             handles_by_label.setdefault(label, line)
         axis.set_title(rf"$\delta < {density:g}$")
@@ -489,8 +495,14 @@ def plot_result_files(
             label_mode,
             include_simulation=include_simulation,
         )
-        linestyle = linestyles[index % len(linestyles)] if alternate_linestyles else "-"
-        ax.plot(thresholds, values, label=label, linestyle=linestyle)
+        style = simulation_style(document, index)
+        if dark_matter_model(document) is not None and not alternate_linestyles:
+            linestyle = style["linestyle"]
+            color = style["color"]
+        else:
+            linestyle = linestyles[index % len(linestyles)] if alternate_linestyles else "-"
+            color = None
+        ax.plot(thresholds, values, label=label, linestyle=linestyle, color=color)
         plotted += 1
 
     if plotted == 0:
