@@ -54,6 +54,7 @@ def plot_power_spectrum_files(
     y_min: float | None = None,
     y_max: float | None = None,
     legend: bool = True,
+    alternate_linestyles: bool = False,
 ) -> Path:
     if field not in {"power", "dimensionless_power"}:
         raise ValueError("field must be 'power' or 'dimensionless_power'.")
@@ -69,19 +70,23 @@ def plot_power_spectrum_files(
         baseline = _spectrum(baseline_document, field, None if engine == "primary" else engine)[:2]
 
     figure, axis = plt.subplots(figsize=(10, 6), constrained_layout=True)
+    linestyles = ["-", "--", ":", "-."]
+    series_index = 0
     for path, document in documents:
         engines = ["numpy", "pylians"] if engine == "both" else [None if engine == "primary" else engine]
         for selected_engine in engines:
             k, values, actual_engine = _spectrum(document, field, selected_engine)
             label = _label(document, actual_engine)
+            linestyle = linestyles[series_index % len(linestyles)] if alternate_linestyles else "-"
+            series_index += 1
             if baseline is None:
-                axis.plot(k, values, linewidth=1.5, label=label)
+                axis.plot(k, values, linewidth=1.5, linestyle=linestyle, label=label)
                 continue
             baseline_k, baseline_values = baseline
             common_k = np.linspace(max(k.min(), baseline_k.min()), min(k.max(), baseline_k.max()), 400)
             curve = np.exp(np.interp(np.log(common_k), np.log(k), np.log(values)))
             reference = np.exp(np.interp(np.log(common_k), np.log(baseline_k), np.log(baseline_values)))
-            axis.plot(common_k, curve / reference, linewidth=1.5, label=label)
+            axis.plot(common_k, curve / reference, linewidth=1.5, linestyle=linestyle, label=label)
 
     axis.set_xlabel(r"$k\ [h\,\mathrm{Mpc}^{-1}]$")
     axis.set_ylabel(
@@ -118,6 +123,11 @@ def build_power_spectrum_plot_parser() -> argparse.ArgumentParser:
     parser.add_argument("--k-max", type=float)
     parser.add_argument("--y-min", type=float)
     parser.add_argument("--y-max", type=float)
+    parser.add_argument(
+        "--alternate-linestyles",
+        action="store_true",
+        help="Cycle through solid, dashed, dotted, and dash-dot styles for separate curves.",
+    )
     parser.add_argument("--no-legend", action="store_true")
     return parser
 
@@ -137,6 +147,7 @@ def power_spectrum_plot_main(argv: list[str] | None = None) -> None:
         y_min=args.y_min,
         y_max=args.y_max,
         legend=not args.no_legend,
+        alternate_linestyles=args.alternate_linestyles,
     )
     print(f"Wrote power-spectrum plot: {output}")
 
