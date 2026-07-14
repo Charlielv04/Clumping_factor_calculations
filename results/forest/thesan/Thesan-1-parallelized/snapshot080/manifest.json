@@ -1,9 +1,9 @@
 {
   "workflow_version": 1,
   "status": "success",
-  "started_at": "2026-07-10T13:21:48.305549+00:00",
-  "updated_at": "2026-07-10T15:14:32.425057+00:00",
-  "simulation": "Thesan-1",
+  "started_at": "2026-07-13T09:27:20.617193+00:00",
+  "updated_at": "2026-07-13T11:05:51.287031+00:00",
+  "simulation": "Thesan-1-parallelized",
   "snapshot": 80,
   "requested_products": [
     "lya",
@@ -14,7 +14,7 @@
   "configuration": {
     "base_path": "/lustre/work/carlos.lopez/Thesan-1/output",
     "snapshot": 80,
-    "simulation_name": "Thesan-1",
+    "simulation_name": "Thesan-1-parallelized",
     "products": [
       "lya",
       "mfp",
@@ -22,7 +22,7 @@
       "equations"
     ],
     "los_file": "/lustre/work/carlos.lopez/Thesan-1/postprocessing/los/rays_080.hdf5",
-    "output_root": "/lustre/work/carlos.lopez/Thesan-1/results/forest_parallelized",
+    "output_root": "results/forest",
     "refresh_products": true,
     "verbose": true,
     "threads": 8,
@@ -82,11 +82,11 @@
   "products": {
     "lya": {
       "status": "success",
-      "fingerprint": "726e42b9b461c1974a8ff4958db253e98297e78d5adfbee88ee9820eebadce8a",
+      "fingerprint": "2bf1239fe79bac3850e237d58fdb5e869b5c4d6b1debfd6d7bcf150f657fbb30",
       "outputs": [
-        "/lustre/work/carlos.lopez/Thesan-1/results/forest_parallelized/thesan/Thesan-1/snapshot080/lya/rays_080_lya.hdf5"
+        "results/forest/thesan/Thesan-1-parallelized/snapshot080/lya/rays_080_lya.hdf5"
       ],
-      "duration_seconds": 63.443245865404606,
+      "duration_seconds": 50.604293540120125,
       "details": {
         "line": "Ly a",
         "ray_count": 150
@@ -94,11 +94,11 @@
     },
     "mfp": {
       "status": "success",
-      "fingerprint": "4d43f8f7141ffa2ca96425b172324afb52c6271b84ac30badc4bab079dc120f2",
+      "fingerprint": "111436b3dbafaca65a48c80c73ac1ce808f26b6b2c9fb4adbef92b7945db4ca4",
       "outputs": [
-        "/lustre/work/carlos.lopez/Thesan-1/results/forest_parallelized/thesan/Thesan-1/snapshot080/mfp912/rays_080_mfp912.json"
+        "results/forest/thesan/Thesan-1-parallelized/snapshot080/mfp912/rays_080_mfp912.json"
       ],
-      "duration_seconds": 3.948598312214017,
+      "duration_seconds": 2.886044170707464,
       "details": {
         "redshift": 5.511772431496886,
         "sample_count": 15000,
@@ -114,11 +114,11 @@
     },
     "gamma": {
       "status": "success",
-      "fingerprint": "e0ab5c6ba3cf9b5284b700e75ba779bc1b825d8d55188c7e3fb4ba757a9edf81",
+      "fingerprint": "2d6381e814d5cc422883f267bb375f77d1a8dfa72ab4254b79420596c6c0f1ec",
       "outputs": [
-        "/lustre/work/carlos.lopez/Thesan-1/results/forest_parallelized/thesan/Thesan-1/snapshot080/gamma_hi/gamma_hi.json"
+        "results/forest/thesan/Thesan-1-parallelized/snapshot080/gamma_hi/gamma_hi.json"
       ],
-      "duration_seconds": 1609.8652074476704,
+      "duration_seconds": 1818.3071116320789,
       "details": {
         "scale_factor": 0.1535680201542495,
         "redshift": 5.511772431496886,
@@ -130,12 +130,12 @@
     },
     "equations": {
       "status": "success",
-      "fingerprint": "8ea8eff6b263cd6b188bf086a7372191ae471acd9a03d8a18d53188782d18f00",
+      "fingerprint": "1617ca9322c767324a3b202da3724b7641ad5860505f8c56a1a5b8d820eebe82",
       "outputs": [
-        "/lustre/work/carlos.lopez/Thesan-1/results/forest_parallelized/thesan/Thesan-1/snapshot080/equations/equations.json",
-        "/lustre/work/carlos.lopez/Thesan-1/results/forest_parallelized/thesan/Thesan-1/snapshot080/equations/equations.csv"
+        "results/forest/thesan/Thesan-1-parallelized/snapshot080/equations/equations.json",
+        "results/forest/thesan/Thesan-1-parallelized/snapshot080/equations/equations.csv"
       ],
-      "duration_seconds": 5081.598285297863,
+      "duration_seconds": 4037.4813534468412,
       "details": {
         "row_count": 1401,
         "workers": 8
@@ -144,5 +144,5 @@
   },
   "warnings": [],
   "failures": [],
-  "finished_at": "2026-07-10T15:14:32.425016+00:00"
+  "finished_at": "2026-07-13T11:05:51.287009+00:00"
 }
