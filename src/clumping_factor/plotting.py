@@ -717,10 +717,16 @@ def plot_model_evolution_files(
         if snapshot in records.setdefault(model, {}):
             raise ValueError(f"Duplicate result for model {model!r}, snapshot {snapshot}.")
         records[model][snapshot] = (path, document)
-    complete_snapshots = set().union(*(set(values) for values in records.values()))
-    records = {model: values for model, values in records.items() if set(values) == complete_snapshots}
-    if not records:
-        raise ValueError("No model has results for every snapshot in the supplied inputs.")
+    # Compare models only over the snapshots they all share.  Production
+    # campaigns can legitimately have one missing snapshot in one model; the
+    # common intersection still gives a valid apples-to-apples evolution plot.
+    complete_snapshots = set.intersection(*(set(values) for values in records.values()))
+    if not complete_snapshots:
+        raise ValueError("The supplied models have no snapshots in common.")
+    records = {
+        model: {snapshot: values[snapshot] for snapshot in complete_snapshots}
+        for model, values in records.items()
+    }
 
     cdm = records.get("CDM")
     if relative_to_cdm and cdm is None:
