@@ -25,6 +25,12 @@ def build_power_spectrum_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-full-load-gb", type=float, default=16.0)
     parser.add_argument("--mas", choices=["CIC", "TSC"], default="CIC")
     parser.add_argument(
+        "--pylians-mas",
+        choices=["auto", "None", "CIC", "TSC"],
+        default="auto",
+        help="Mass-assignment correction used only by the Pylians estimator. 'auto' matches --mas; 'None' disables correction.",
+    )
+    parser.add_argument(
         "--smoothing",
         choices=["none", "sphere", "cube", "pylians"],
         default="none",
@@ -227,10 +233,11 @@ def _compute_spectra(args: argparse.Namespace, density_grid: np.ndarray, box_siz
             k_max=args.k_max,
         )
     if args.spectrum_engine in {"pylians", "both"}:
+        pylians_mas = args.mas if args.pylians_mas == "auto" else args.pylians_mas
         spectra["pylians"] = density_power_spectrum_pylians(
             density_grid,
             box_size,
-            mas=args.mas,
+            mas=pylians_mas,
             threads=args.threads,
             axis=args.pylians_axis,
             verbose=args.verbose,
@@ -260,6 +267,7 @@ def run_power_spectrum(args: argparse.Namespace) -> Path:
         "estimated_full_load_gb": estimated_gb,
         "chunk_size": int(args.chunk_size) if selected_load_mode == "chunked" else None,
         "mas": args.mas,
+        "pylians_mas": args.pylians_mas if args.pylians_mas != "auto" else args.mas,
         "smoothing": args.smoothing,
         "radius_mode": args.radius_mode,
         "radius_bins": int(args.radius_bins) if args.smoothing != "none" else None,

@@ -177,8 +177,8 @@ def density_power_spectrum_pylians(
         raise ValueError("density_grid must contain only finite values.")
     if box_size <= 0 or not np.isfinite(box_size):
         raise ValueError("box_size must be positive and finite.")
-    if mas not in {"CIC", "TSC"}:
-        raise ValueError("mas must be 'CIC' or 'TSC'.")
+    if mas not in {"None", "CIC", "TSC"}:
+        raise ValueError("mas must be 'None', 'CIC', or 'TSC'.")
 
     grid_size = int(density.shape[0])
     mean_density = float(np.mean(density, dtype=np.float64))
@@ -217,7 +217,7 @@ def density_power_spectrum_pylians(
         "threads": int(threads),
         "nonempty_bin_count": int(k.size),
         "normalization": "Pylians3 Pk_library.Pk",
-        "mas_window_correction": True,
+        "mas_window_correction": mas != "None",
     }
     return PowerSpectrumResult(
         k=k,

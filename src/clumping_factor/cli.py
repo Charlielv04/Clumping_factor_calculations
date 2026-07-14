@@ -275,6 +275,15 @@ def build_evolution_plot_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def build_model_evolution_plot_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Plot dark-matter model clumping evolution versus overdensity.")
+    parser.add_argument("results", nargs="+", help="JSON result files or directories containing result JSON files.")
+    parser.add_argument("--output-dir", help="Directory for per-model plots. Defaults to the canonical results/analysis layout.")
+    parser.add_argument("--relative-to-cdm", action="store_true", help="Plot proportional differences from the CDM result at each snapshot.")
+    parser.add_argument("--title", help="Optional title applied to every generated plot.")
+    return parser
+
+
 def build_campaign_plot_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Plot batch-size and grid-size campaign diagnostics from result JSON files.")
     parser.add_argument("results", nargs="+", help="Result JSON files or directories containing result JSON files.")
@@ -1125,6 +1134,22 @@ def campaign_plot_main(argv: list[str] | None = None) -> None:
         baseline_batch_by_grid=_parse_baseline_batches(args.baseline_batch),
     )
     print(f"Wrote {len(output_paths)} campaign plots:")
+    for output_path in output_paths:
+        print(output_path)
+
+
+def model_evolution_plot_main(argv: list[str] | None = None) -> None:
+    from .plotting import plot_model_evolution_files
+
+    parser = build_model_evolution_plot_parser()
+    args = parser.parse_args(argv)
+    output_paths = plot_model_evolution_files(
+        args.results,
+        output_dir=args.output_dir,
+        relative_to_cdm=args.relative_to_cdm,
+        title=args.title,
+    )
+    print(f"Wrote {len(output_paths)} model-evolution plots:")
     for output_path in output_paths:
         print(output_path)
 

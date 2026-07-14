@@ -21,6 +21,7 @@ SNAPSHOT="${SNAPSHOT:-98}"
 SMOOTHING="${SMOOTHING:-none}"
 SPECTRUM_ENGINE="${SPECTRUM_ENGINE:-numpy}"
 PYLIANS_AXIS="${PYLIANS_AXIS:-0}"
+PYLIANS_MAS="${PYLIANS_MAS:-auto}"
 RADIUS_BINS="${RADIUS_BINS:-10}"
 RADIUS_BIN_BATCH_SIZE="${RADIUS_BIN_BATCH_SIZE:-1}"
 RADIUS_MODE="${RADIUS_MODE:-sphere}"
@@ -52,6 +53,10 @@ if [[ "${SPECTRUM_ENGINE}" != "numpy" && "${SPECTRUM_ENGINE}" != "pylians" && "$
   echo "SPECTRUM_ENGINE must be numpy, pylians, or both, got: ${SPECTRUM_ENGINE}" >&2
   exit 1
 fi
+if [[ "${PYLIANS_MAS}" != "auto" && "${PYLIANS_MAS}" != "None" && "${PYLIANS_MAS}" != "CIC" && "${PYLIANS_MAS}" != "TSC" ]]; then
+  echo "PYLIANS_MAS must be auto, None, CIC, or TSC, got: ${PYLIANS_MAS}" >&2
+  exit 1
+fi
 if [[ -z "${SIMULATION_NAME}" ]]; then
   base_trimmed="${BASE_PATH%/}"
   SIMULATION_NAME="$(basename "${base_trimmed}")"
@@ -71,6 +76,10 @@ RUN_PADDED="$(printf '%03d' "${RUN_LABEL}")"
 SMOOTHING_LABEL="mas-only"
 if [[ "${SMOOTHING}" != "none" ]]; then
   SMOOTHING_LABEL="smoothed-${SMOOTHING}"
+fi
+PYLIANS_MAS_LABEL=""
+if [[ "${PYLIANS_MAS}" != "auto" ]]; then
+  PYLIANS_MAS_LABEL="_pylians-mas-${PYLIANS_MAS,,}"
 fi
 
 USE_CANONICAL_LAYOUT=0
@@ -95,12 +104,12 @@ if (( USE_CANONICAL_LAYOUT == 1 )) && [[ -z "${CANONICAL_FAMILY}" ]]; then
 fi
 
 if (( USE_CANONICAL_LAYOUT == 1 )); then
-  OUTPUT_DIR="results/${CANONICAL_FAMILY}/${PHYSICAL_SIMULATION_NAME}/${PARTICLE}/power-spectrum/${SMOOTHING_LABEL}_${SPECTRUM_ENGINE}/snapshot${SNAPSHOT_PADDED}_grid${GRID}"
+  OUTPUT_DIR="results/${CANONICAL_FAMILY}/${PHYSICAL_SIMULATION_NAME}/${PARTICLE}/power-spectrum/${SMOOTHING_LABEL}_${SPECTRUM_ENGINE}${PYLIANS_MAS_LABEL}/snapshot${SNAPSHOT_PADDED}_grid${GRID}"
   mkdir -p "${OUTPUT_DIR}"
   OUTPUT="${OUTPUT_DIR}/threads${THREADS}_run${RUN_PADDED}.json"
 else
   mkdir -p "results/${SIMULATION_NAME}/power-spectrum"
-  OUTPUT="results/${SIMULATION_NAME}/power-spectrum/${PARTICLE}_${SMOOTHING_LABEL}_${SPECTRUM_ENGINE}_snapshot${SNAPSHOT_PADDED}_grid${GRID}_threads${THREADS}_run${RUN_PADDED}.json"
+  OUTPUT="results/${SIMULATION_NAME}/power-spectrum/${PARTICLE}_${SMOOTHING_LABEL}_${SPECTRUM_ENGINE}${PYLIANS_MAS_LABEL}_snapshot${SNAPSHOT_PADDED}_grid${GRID}_threads${THREADS}_run${RUN_PADDED}.json"
 fi
 
 ARGS=(
@@ -120,6 +129,7 @@ ARGS=(
   --filter-type "${FILTER_TYPE}"
   --spectrum-engine "${SPECTRUM_ENGINE}"
   --pylians-axis "${PYLIANS_AXIS}"
+  --pylians-mas "${PYLIANS_MAS}"
   --bin-count "${BIN_COUNT}"
   --binning "${BINNING}"
   --threads "${THREADS}"
@@ -143,6 +153,7 @@ echo "Particle type: ${PARTICLE}"
 echo "Grid size: ${GRID}"
 echo "Smoothing: ${SMOOTHING}"
 echo "Spectrum engine: ${SPECTRUM_ENGINE}"
+echo "Pylians MAS correction: ${PYLIANS_MAS}"
 echo "Mass assignment: ${MAS}"
 echo "Load mode: ${LOAD_MODE}"
 echo "Threads: ${THREADS}"

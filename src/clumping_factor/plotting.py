@@ -626,6 +626,146 @@ def plot_evolution_files(
     return output_path
 
 
+def _model_evolution_snapshot(document: dict, result_path: str | Path) -> int:
+    snapshot = document.get("simulation", {}).get("snapshot")
+    if snapshot is None:
+        snapshot = document.get("parameters", {}).get("snapshot")
+    if not isinstance(snapshot, (int, np.integer)):
+        match = re.search(r"snapshot(?P<snapshot>\d+)", str(result_path), re.IGNORECASE)
+        if match is None:
+            raise ValueError(f"{result_path} is missing an integer snapshot identifier.")
+        snapshot = int(match.group("snapshot"))
+    return int(snapshot)
+
+
+def _model_evolution_signature(document: dict) -> tuple:
+    parameters = document.get("parameters", {})
+    backend = document.get("backend", {})
+    return (
+        document.get("particle_type"),
+        parameters.get("grid_size"),
+        parameters.get("radius_bins"),
+        parameters.get("mas"),
+        parameters.get("filter_type"),
+        parameters.get("target"),
+        parameters.get("mask"),
+        backend.get("backend"),
+        backend.get("method"),
+    )
+
+
+def _model_evolution_label(document: dict, result_path: str | Path) -> str:
+    model = dark_matter_model(document)
+    if model is not None:
+        return model
+    simulation = document.get("simulation", {}).get("name") or document.get("parameters", {}).get("simulation_name")
+    if simulation:
+        return str(simulation)
+    return Path(result_path).stem
+
+
+def _model_evolution_output_path(result_paths: list[str | Path], output_dir: str | Path | None, relative: bool) -> Path:
+    if output_dir is not None:
+        return Path(output_dir)
+    first = Path(result_paths[0])
+    parts = list(first.parts)
+    try:
+        results_index = parts.index("results")
+    except ValueError:
+        return Path("results") / "analysis" / "clumping" / "combined" / "combined" / "combined-snapshots" / "dm" / "combined"
+    family = "combined"
+    for candidate in ("aida-tng", "tng", "thesan"):
+        if candidate in parts[results_index + 1:]:
+            family = candidate
+            break
+    simulation = "combined"
+    for part in parts[results_index + 1:]:
+        if part.lower().startswith(("l35n", "l75n", "tng", "thesan-")):
+            simulation = part
+            break
+    backend = "combined"
+    for part in parts[results_index + 1:]:
+        if part in {"raw", "raw-volume", "sphere", "cube", "pylians"}:
+            backend = part
+            break
+    suffix = "relative-to-cdm" if relative else "clumping"
+    return Path("results") / "analysis" / "clumping" / family / simulation / "combined-snapshots" / "dm" / backend / suffix
+
+
+def plot_model_evolution_files(
+    result_inputs: list[str | Path],
+    output_dir: str | Path | None = None,
+    *,
+    relative_to_cdm: bool = False,
+    title: str | None = None,
+) -> list[Path]:
+    """Write one overdensity-evolution plot per complete dark-matter model."""
+    paths = _expand_result_inputs(result_inputs)
+    documents = [(path, read_json_result(path)) for path in paths]
+    if not documents:
+        raise ValueError("At least one JSON result file is required.")
+    if any(document.get("particle_type") != "dm" for _, document in documents):
+        raise ValueError("Model evolution plots require dark-matter result files.")
+
+    signature = _model_evolution_signature(documents[0][1])
+    if any(_model_evolution_signature(document) != signature for _, document in documents):
+        raise ValueError("All inputs must use the same particle, backend, mask, and grid configuration.")
+    records: dict[str, dict[int, tuple[Path, dict]]] = {}
+    for path, document in documents:
+        model = _model_evolution_label(document, path)
+        snapshot = _model_evolution_snapshot(document, path)
+        if snapshot in records.setdefault(model, {}):
+            raise ValueError(f"Duplicate result for model {model!r}, snapshot {snapshot}.")
+        records[model][snapshot] = (path, document)
+    complete_snapshots = set().union(*(set(values) for values in records.values()))
+    records = {model: values for model, values in records.items() if set(values) == complete_snapshots}
+    if not records:
+        raise ValueError("No model has results for every snapshot in the supplied inputs.")
+
+    cdm = records.get("CDM")
+    if relative_to_cdm and cdm is None:
+        raise ValueError("Relative model-evolution plots require a complete CDM model.")
+    written: list[Path] = []
+    destination = _model_evolution_output_path(result_inputs, output_dir, relative_to_cdm)
+    for model, snapshot_records in sorted(records.items()):
+        if relative_to_cdm and model == "CDM":
+            continue
+        fig, ax = plt.subplots(figsize=(8, 5))
+        plotted = 0
+        for snapshot in sorted(complete_snapshots):
+            path, document = snapshot_records[snapshot]
+            thresholds, values = _result_arrays(document, path)
+            if relative_to_cdm:
+                baseline_path, baseline_document = cdm[snapshot]
+                baseline_thresholds, baseline_values = _result_arrays(baseline_document, baseline_path)
+                values = _relative_to_baseline(thresholds, values, baseline_thresholds, baseline_values, path, baseline_path)
+            finite = np.isfinite(thresholds) & np.isfinite(values)
+            if not np.any(finite):
+                continue
+            ax.plot(thresholds[finite], values[finite], label=_snapshot_label(document, path), marker="o", markersize=2)
+            plotted += 1
+        if not plotted:
+            plt.close(fig)
+            continue
+        ax.set_xlabel("Overdensity threshold")
+        ax.set_ylabel(
+            r"Proportional difference, $(C - C_{\rm CDM}) / C_{\rm CDM}$"
+            if relative_to_cdm else "Clumping factor"
+        )
+        ax.set_title(title or f"{model}: {'clumping relative to CDM' if relative_to_cdm else 'clumping factor'} vs overdensity")
+        ax.grid(True)
+        ax.legend(title="Snapshot")
+        filename = f"{model}_{'relative_to_cdm' if relative_to_cdm else 'clumping'}_vs_overdensity_all_snapshots.png"
+        output = destination / filename
+        output.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(output, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+        written.append(output)
+    if not written:
+        raise ValueError("No finite clumping-factor values remain to plot.")
+    return written
+
+
 def _expand_result_inputs(result_inputs: list[str | Path]) -> list[Path]:
     paths: list[Path] = []
     for item in result_inputs:

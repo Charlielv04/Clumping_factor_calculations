@@ -281,6 +281,18 @@ clumping-evolution-plot \
 
 The evolution plot command verifies that all inputs use the same particle, mask, backend, grid, and threshold configuration before interpolating the requested threshold values.
 
+To plot the complete overdensity sweep for every dark-matter model, with one curve per snapshot, pass the result directory (or individual JSON files):
+
+```bash
+clumping-model-evolution-plot \
+  results/aida-tng/L35n1080_CDM/dm/raw-volume \
+  results/aida-tng/L35n1080_SIDM1/dm/raw-volume \
+  results/aida-tng/L35n1080_vSIDM/dm/raw-volume \
+  results/aida-tng/L35n1080_WDM3/dm/raw-volume
+```
+
+This writes one plot per complete model under `results/analysis/clumping/aida-tng/L35n1080_CDM/combined-snapshots/dm/raw-volume/`. Use `--relative-to-cdm` to write the corresponding same-snapshot proportional differences under the `relative-to-cdm` subdirectory. Models missing any snapshot in the supplied set are skipped.
+
 ## Results Organization
 
 The `results/` tree is organized by data product first, then by simulation family. Do not add campaign names to canonical paths; campaign/source folder names belong in manifests and metadata.
