@@ -241,6 +241,51 @@ def generate_aida_tng_plots(
                             output = canonical_plot_path(analysis_root, "clumping/model-comparison", subject, _snapshot_name(snapshot), particle, f"{backend}-{_grid_name(grid)}", f"{match.group('model').lower()}_relative_to_cdm.png")
                             render("clumping/model-comparison", output, [value.path], plot_result_files, relative_to_baseline=cdm.path, alternate_linestyles=True)
 
+    # Evolution relative to CDM: one plot per non-CDM model, with one curve
+    # for every snapshot shared by all models in the same simulation box.
+    for (particle, backend, grid), values in sorted(_group(clumping, "particle", "backend", "grid").items()):
+        by_box: dict[str, list[AidaResult]] = defaultdict(list)
+        for value in values:
+            match = _MODEL_RE.match(value.simulation)
+            if match:
+                by_box[match.group("box")].append(value)
+        for box, box_values in sorted(by_box.items()):
+            representatives: dict[tuple[str, int | None], AidaResult] = {}
+            for value in sorted(box_values, key=lambda item: item.path.name):
+                representatives.setdefault((value.simulation, value.snapshot), value)
+            selected = list(representatives.values())
+            if len({value.simulation for value in selected}) < 2 or len({value.snapshot for value in selected}) < 2:
+                continue
+            inputs = _unique_paths(selected)
+            output_dir = (
+                Path(analysis_root)
+                / "clumping"
+                / "aida-tng"
+                / "model-comparison"
+                / box
+                / "combined-snapshots"
+                / particle
+                / f"{backend}-grid{grid}"
+                / "relative-to-cdm"
+            )
+            if dry_run:
+                _record(rows, "clumping/model-comparison", output_dir, inputs, status="planned")
+                outputs.append(output_dir)
+                continue
+            try:
+                written = plot_model_evolution_files(
+                    inputs,
+                    output_dir=output_dir,
+                    relative_to_cdm=True,
+                    particle_type=particle,
+                )
+            except (ValueError, OSError) as exc:
+                _record(rows, "clumping/model-comparison", output_dir, inputs, status="skipped", message=str(exc))
+                continue
+            for item in written:
+                _record(rows, "clumping/model-comparison", Path(item), inputs)
+                outputs.append(Path(item))
+
     ionized = [result for result in results if result.kind == "ionization"]
     for (simulation, snapshot, particle), values in sorted(_group(ionized, "simulation", "snapshot", "particle").items()):
         output = canonical_plot_path(analysis_root, "clumping/ionization", simulation, _snapshot_name(snapshot), particle, "ionized-sweep", "ionized_sweep.png")

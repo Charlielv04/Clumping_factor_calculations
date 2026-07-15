@@ -314,6 +314,7 @@ results/analysis/
     aida-tng/
       evolution/<simulation>/combined/<particle>/<method>/
       model-comparison/<box>/<snapshot>/<particle>/<method>/
+      model-comparison/<box>/combined-snapshots/<particle>/<method>/relative-to-cdm/
       method-comparison/<simulation>/<snapshot>/<particle>/<grid>/
       grid-comparison/<simulation>/combined/<particle>/<method>/
       ionization/<simulation>/<snapshot>/<particle>/ionized-sweep/
@@ -324,6 +325,10 @@ results/analysis/
 
 Existing AIDA-TNG PNGs are archived under `results/analysis/archive/aida-tng/`
 when `--archive-existing` is supplied. JSON result files are never modified.
+
+Relative-to-CDM snapshot-evolution plots are written one per non-CDM model
+under `model-comparison/<box>/combined-snapshots/.../relative-to-cdm/`; each
+plot contains all snapshots shared by the model set.
 
 ## Results Organization
 
