@@ -691,6 +691,9 @@ def _model_evolution_output_path(
             backend = part
             break
     suffix = "relative-to-cdm" if relative else "clumping"
+    if family == "aida-tng":
+        category = "model-comparison" if relative else "evolution"
+        return Path("results") / "analysis" / "clumping" / family / category / simulation / "combined" / particle_type / backend / suffix
     return Path("results") / "analysis" / "clumping" / family / simulation / "combined-snapshots" / particle_type / backend / suffix
 
 
@@ -945,6 +948,8 @@ def _write_campaign_manifest(
 
 def _campaign_family(simulations: set[str]) -> str:
     lowered = {simulation.lower() for simulation in simulations}
+    if lowered and all(simulation.startswith(("l35n", "l75n")) for simulation in lowered):
+        return "aida-tng"
     if lowered and all(simulation.startswith("thesan-") for simulation in lowered):
         return "thesan"
     if lowered and all(simulation.startswith("tng") for simulation in lowered):
@@ -967,6 +972,11 @@ def _campaign_output_path(
     simulations = {row["simulation"] for row in rows}
     simulation = next(iter(simulations)) if len(simulations) == 1 else "combined"
     family = _campaign_family(simulations)
+    if family == "aida-tng":
+        category = "performance" if plot_type == "performance" else "clumping/grid-comparison"
+        if category == "performance":
+            return Path(analysis_root) / category / family / simulation / "combined" / particle / backend / filename
+        return Path(analysis_root) / "clumping" / family / "grid-comparison" / simulation / "combined" / particle / backend / filename
     return Path(analysis_root) / plot_type / family / simulation / "combined-snapshots" / particle / backend / filename
 
 

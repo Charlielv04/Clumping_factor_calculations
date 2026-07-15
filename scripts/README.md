@@ -2,6 +2,18 @@
 
 ## AIDA-TNG campaign
 
+After result jobs finish, generate the canonical AIDA-TNG plot catalog with:
+
+```bash
+clumping-aida-tng-plots --archive-existing
+```
+
+Use `clumping-aida-tng-plots --dry-run` first when checking a new campaign.
+Outputs are grouped by scientific question under
+`results/analysis/clumping/aida-tng/` (plus the separate power-spectrum and
+performance trees), with the complete clumping catalog at
+`results/analysis/clumping/aida-tng/aida-tng-plots.csv`.
+
 Discover and submit every available `snapdir_*` under the eight AIDA-TNG
 simulation outputs (currently snapshots 017 and/or 099):
 

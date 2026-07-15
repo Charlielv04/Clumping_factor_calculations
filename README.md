@@ -293,6 +293,38 @@ clumping-model-evolution-plot \
 
 This writes one plot per complete model under `results/analysis/clumping/aida-tng/L35n1080_CDM/combined-snapshots/dm/raw-volume/`. Use `--relative-to-cdm` to write the corresponding same-snapshot proportional differences under the `relative-to-cdm` subdirectory. Models missing any snapshot in the supplied set are skipped.
 
+### AIDA-TNG plot catalog
+
+For a complete, question-first plot tree, use the AIDA-TNG catalog command:
+
+```bash
+clumping-aida-tng-plots --archive-existing
+```
+
+It discovers clumping, ionized-sweep, and power-spectrum JSON results under
+`results/aida-tng`, delegates rendering to the existing plotters, and writes a
+CSV catalog to `results/analysis/clumping/aida-tng/aida-tng-plots.csv`. Use
+`--dry-run` to inspect the planned outputs without moving or creating plots.
+
+Canonical AIDA-TNG analysis outputs use this layout:
+
+```text
+results/analysis/
+  clumping/
+    aida-tng/
+      evolution/<simulation>/combined/<particle>/<method>/
+      model-comparison/<box>/<snapshot>/<particle>/<method>/
+      method-comparison/<simulation>/<snapshot>/<particle>/<grid>/
+      grid-comparison/<simulation>/combined/<particle>/<method>/
+      ionization/<simulation>/<snapshot>/<particle>/ionized-sweep/
+  power-spectra/aida-tng/<simulation>/<snapshot>/<particle>/<method>/
+  performance/aida-tng/<simulation>/combined/<particle>/<backend>/
+  manifests/aida-tng-plots.csv
+```
+
+Existing AIDA-TNG PNGs are archived under `results/analysis/archive/aida-tng/`
+when `--archive-existing` is supplied. JSON result files are never modified.
+
 ## Results Organization
 
 The `results/` tree is organized by data product first, then by simulation family. Do not add campaign names to canonical paths; campaign/source folder names belong in manifests and metadata.
