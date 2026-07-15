@@ -276,8 +276,9 @@ def build_evolution_plot_parser() -> argparse.ArgumentParser:
 
 
 def build_model_evolution_plot_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Plot dark-matter model clumping evolution versus overdensity.")
+    parser = argparse.ArgumentParser(description="Plot particle-model clumping evolution versus overdensity.")
     parser.add_argument("results", nargs="+", help="JSON result files or directories containing result JSON files.")
+    parser.add_argument("--particle-type", choices=["dm", "gas"], default="dm", help="Particle type to plot. Defaults to dm.")
     parser.add_argument("--output-dir", help="Directory for per-model plots. Defaults to the canonical results/analysis layout.")
     parser.add_argument("--relative-to-cdm", action="store_true", help="Plot proportional differences from the CDM result at each snapshot.")
     parser.add_argument("--title", help="Optional title applied to every generated plot.")
@@ -1148,6 +1149,7 @@ def model_evolution_plot_main(argv: list[str] | None = None) -> None:
         output_dir=args.output_dir,
         relative_to_cdm=args.relative_to_cdm,
         title=args.title,
+        particle_type=args.particle_type,
     )
     print(f"Wrote {len(output_paths)} model-evolution plots:")
     for output_path in output_paths:

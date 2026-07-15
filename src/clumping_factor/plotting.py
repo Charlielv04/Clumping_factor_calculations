@@ -664,7 +664,9 @@ def _model_evolution_label(document: dict, result_path: str | Path) -> str:
     return Path(result_path).stem
 
 
-def _model_evolution_output_path(result_paths: list[str | Path], output_dir: str | Path | None, relative: bool) -> Path:
+def _model_evolution_output_path(
+    result_paths: list[str | Path], output_dir: str | Path | None, relative: bool, particle_type: str
+) -> Path:
     if output_dir is not None:
         return Path(output_dir)
     first = Path(result_paths[0])
@@ -672,7 +674,7 @@ def _model_evolution_output_path(result_paths: list[str | Path], output_dir: str
     try:
         results_index = parts.index("results")
     except ValueError:
-        return Path("results") / "analysis" / "clumping" / "combined" / "combined" / "combined-snapshots" / "dm" / "combined"
+        return Path("results") / "analysis" / "clumping" / "combined" / "combined" / "combined-snapshots" / particle_type / "combined"
     family = "combined"
     for candidate in ("aida-tng", "tng", "thesan"):
         if candidate in parts[results_index + 1:]:
@@ -689,7 +691,7 @@ def _model_evolution_output_path(result_paths: list[str | Path], output_dir: str
             backend = part
             break
     suffix = "relative-to-cdm" if relative else "clumping"
-    return Path("results") / "analysis" / "clumping" / family / simulation / "combined-snapshots" / "dm" / backend / suffix
+    return Path("results") / "analysis" / "clumping" / family / simulation / "combined-snapshots" / particle_type / backend / suffix
 
 
 def plot_model_evolution_files(
@@ -698,14 +700,17 @@ def plot_model_evolution_files(
     *,
     relative_to_cdm: bool = False,
     title: str | None = None,
+    particle_type: str = "dm",
 ) -> list[Path]:
-    """Write one overdensity-evolution plot per complete dark-matter model."""
+    """Write one overdensity-evolution plot per complete particle model."""
+    if particle_type not in {"dm", "gas"}:
+        raise ValueError("particle_type must be 'dm' or 'gas'.")
     paths = _expand_result_inputs(result_inputs)
     documents = [(path, read_json_result(path)) for path in paths]
     if not documents:
         raise ValueError("At least one JSON result file is required.")
-    if any(document.get("particle_type") != "dm" for _, document in documents):
-        raise ValueError("Model evolution plots require dark-matter result files.")
+    if any(document.get("particle_type") != particle_type for _, document in documents):
+        raise ValueError(f"Model evolution plots require {particle_type} result files.")
 
     signature = _model_evolution_signature(documents[0][1])
     if any(_model_evolution_signature(document) != signature for _, document in documents):
@@ -732,7 +737,7 @@ def plot_model_evolution_files(
     if relative_to_cdm and cdm is None:
         raise ValueError("Relative model-evolution plots require a complete CDM model.")
     written: list[Path] = []
-    destination = _model_evolution_output_path(result_inputs, output_dir, relative_to_cdm)
+    destination = _model_evolution_output_path(result_inputs, output_dir, relative_to_cdm, particle_type)
     for model, snapshot_records in sorted(records.items()):
         if relative_to_cdm and model == "CDM":
             continue
