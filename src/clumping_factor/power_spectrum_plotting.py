@@ -57,6 +57,7 @@ def plot_power_spectrum_files(
     y_max: float | None = None,
     legend: bool = True,
     alternate_linestyles: bool = False,
+    color_by_snapshot: bool = False,
 ) -> Path:
     if field not in {"power", "dimensionless_power"}:
         raise ValueError("field must be 'power' or 'dimensionless_power'.")
@@ -73,6 +74,17 @@ def plot_power_spectrum_files(
 
     figure, axis = plt.subplots(figsize=(10, 6), constrained_layout=True)
     linestyles = ["-", "--", ":", "-."]
+    snapshot_values = sorted(
+        {
+            document.get("parameters", {}).get("snapshot")
+            for _, document in documents
+            if document.get("parameters", {}).get("snapshot") is not None
+        }
+    )
+    snapshot_colors = {
+        snapshot: plt.get_cmap("viridis")(index / max(1, len(snapshot_values) - 1))
+        for index, snapshot in enumerate(snapshot_values)
+    }
     series_index = 0
     for path, document in documents:
         engines = ["numpy", "pylians"] if engine == "both" else [None if engine == "primary" else engine]
@@ -85,7 +97,7 @@ def plot_power_spectrum_files(
                 if alternate_linestyles
                 else style["linestyle"] if dark_matter_model(document) is not None else "-"
             )
-            color = style["color"]
+            color = snapshot_colors.get(document.get("parameters", {}).get("snapshot"), style["color"]) if color_by_snapshot else style["color"]
             series_index += 1
             if baseline is None:
                 axis.plot(k, values, linewidth=1.5, linestyle=linestyle, color=color, label=label)
@@ -112,6 +124,78 @@ def plot_power_spectrum_files(
     axis.grid(True, which="both", alpha=0.25)
     if legend:
         axis.legend(fontsize=8)
+    output_path = Path(output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    figure.savefig(output_path, dpi=180)
+    plt.close(figure)
+    return output_path
+
+
+def plot_relative_power_spectrum_evolution_files(
+    results: list[str | Path],
+    baselines: dict[int, str | Path],
+    output: str | Path,
+    *,
+    field: str = "dimensionless_power",
+    engine: str = "pylians",
+    title: str | None = None,
+    color_by_snapshot: bool = True,
+) -> Path:
+    """Plot one relative power-spectrum curve for every available snapshot.
+
+    Each result is divided by the CDM result at the same snapshot.  This is
+    intentionally separate from ``plot_power_spectrum_files`` because a
+    single baseline file is not appropriate for an all-snapshot evolution
+    comparison.
+    """
+    if field not in {"power", "dimensionless_power"}:
+        raise ValueError("field must be 'power' or 'dimensionless_power'.")
+    if engine == "both":
+        raise ValueError("Relative evolution requires one selected engine.")
+
+    figure, axis = plt.subplots(figsize=(10, 6), constrained_layout=True)
+    snapshot_values = sorted(
+        {
+            document.get("parameters", {}).get("snapshot")
+            for path in results
+            for document in [_load_result(path)]
+            if document.get("parameters", {}).get("snapshot") is not None
+        }
+    )
+    snapshot_colors = {
+        snapshot: plt.get_cmap("viridis")(index / max(1, len(snapshot_values) - 1))
+        for index, snapshot in enumerate(snapshot_values)
+    }
+    for series_index, path in enumerate(sorted(results)):
+        document = _load_result(path)
+        parameters = document.get("parameters", {})
+        snapshot = parameters.get("snapshot")
+        if snapshot is None or int(snapshot) not in baselines:
+            continue
+        baseline_document = _load_result(baselines[int(snapshot)])
+        k, values, actual_engine = _spectrum(document, field, engine)
+        baseline_k, baseline_values, _ = _spectrum(baseline_document, field, engine)
+        common_k = np.linspace(max(k.min(), baseline_k.min()), min(k.max(), baseline_k.max()), 400)
+        curve = np.exp(np.interp(np.log(common_k), np.log(k), np.log(values)))
+        reference = np.exp(np.interp(np.log(common_k), np.log(baseline_k), np.log(baseline_values)))
+        style = simulation_style(document, series_index)
+        color = snapshot_colors.get(snapshot, style["color"]) if color_by_snapshot else style["color"]
+        axis.plot(
+            common_k,
+            curve / reference,
+            linewidth=1.5,
+            color=color,
+            linestyle=style["linestyle"],
+            label=_label(document, actual_engine),
+        )
+
+    axis.set_xlabel(r"$k\ [h\,\mathrm{Mpc}^{-1}]$")
+    axis.set_ylabel("Ratio to CDM")
+    axis.set_title(title or "Relative power spectra")
+    axis.set_xscale("log")
+    axis.axhline(1.0, color="0.35", linestyle="--", linewidth=1)
+    axis.grid(True, which="both", alpha=0.25)
+    axis.legend(fontsize=8)
     output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(output_path, dpi=180)

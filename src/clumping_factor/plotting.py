@@ -725,20 +725,22 @@ def plot_model_evolution_files(
         if snapshot in records.setdefault(model, {}):
             raise ValueError(f"Duplicate result for model {model!r}, snapshot {snapshot}.")
         records[model][snapshot] = (path, document)
-    # Compare models only over the snapshots they all share.  Production
-    # campaigns can legitimately have one missing snapshot in one model; the
-    # common intersection still gives a valid apples-to-apples evolution plot.
-    complete_snapshots = set.intersection(*(set(values) for values in records.values()))
-    if not complete_snapshots:
-        raise ValueError("The supplied models have no snapshots in common.")
-    records = {
-        model: {snapshot: values[snapshot] for snapshot in complete_snapshots}
-        for model, values in records.items()
-    }
-
     cdm = records.get("CDM")
     if relative_to_cdm and cdm is None:
         raise ValueError("Relative model-evolution plots require a complete CDM model.")
+    if relative_to_cdm and not set.intersection(*(set(values) for values in records.values())):
+        # This keeps the existing validation for a completely incompatible
+        # campaign, while allowing models with different valid endpoints.
+        if not any(set(values) & set(cdm) for model, values in records.items() if model != "CDM"):
+            raise ValueError("The supplied models have no snapshots in common with CDM.")
+
+    all_snapshots = sorted({snapshot for values in records.values() for snapshot in values})
+    snapshot_colors = {
+        snapshot: plt.get_cmap("viridis")(
+            index / max(1, len(all_snapshots) - 1)
+        )
+        for index, snapshot in enumerate(all_snapshots)
+    }
     written: list[Path] = []
     destination = _model_evolution_output_path(result_inputs, output_dir, relative_to_cdm, particle_type)
     for model, snapshot_records in sorted(records.items()):
@@ -746,7 +748,10 @@ def plot_model_evolution_files(
             continue
         fig, ax = plt.subplots(figsize=(8, 5))
         plotted = 0
-        for snapshot in sorted(complete_snapshots):
+        snapshots = set(snapshot_records)
+        if relative_to_cdm:
+            snapshots &= set(cdm)
+        for snapshot in sorted(snapshots):
             path, document = snapshot_records[snapshot]
             thresholds, values = _result_arrays(document, path)
             if relative_to_cdm:
@@ -756,7 +761,14 @@ def plot_model_evolution_files(
             finite = np.isfinite(thresholds) & np.isfinite(values)
             if not np.any(finite):
                 continue
-            ax.plot(thresholds[finite], values[finite], label=_snapshot_label(document, path), marker="o", markersize=2)
+            ax.plot(
+                thresholds[finite],
+                values[finite],
+                label=_snapshot_label(document, path),
+                color=snapshot_colors[snapshot],
+                marker="o",
+                markersize=2,
+            )
             plotted += 1
         if not plotted:
             plt.close(fig)

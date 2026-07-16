@@ -17,7 +17,10 @@ from .plotting import (
     plot_model_evolution_files,
     plot_result_files,
 )
-from .power_spectrum_plotting import plot_power_spectrum_files
+from .power_spectrum_plotting import (
+    plot_power_spectrum_files,
+    plot_relative_power_spectrum_evolution_files,
+)
 
 
 _SNAPSHOT_RE = re.compile(r"snapshot(?P<snapshot>\d+)_grid(?P<grid>\d+)", re.IGNORECASE)
@@ -232,14 +235,14 @@ def generate_aida_tng_plots(
                     continue
                 input_paths = _unique_paths(box_values)
                 output = canonical_plot_path(analysis_root, "clumping/model-comparison", subject, _snapshot_name(snapshot), particle, f"{backend}-{_grid_name(grid)}", "model_comparison.png")
-                render("clumping/model-comparison", output, input_paths, plot_result_files, title=f"{subject} {particle} model comparison, snapshot {snapshot:03d}", alternate_linestyles=True)
+                render("clumping/model-comparison", output, input_paths, plot_result_files, title=f"{subject} {particle} model comparison, snapshot {snapshot:03d}")
                 cdm = next((candidate for candidate in box_values if candidate.simulation.lower().endswith("_cdm")), None)
                 if cdm:
                     for value in box_values:
                         match = _MODEL_RE.match(value.simulation)
                         if match and match.group("model").upper() != "CDM":
                             output = canonical_plot_path(analysis_root, "clumping/model-comparison", subject, _snapshot_name(snapshot), particle, f"{backend}-{_grid_name(grid)}", f"{match.group('model').lower()}_relative_to_cdm.png")
-                            render("clumping/model-comparison", output, [value.path], plot_result_files, relative_to_baseline=cdm.path, alternate_linestyles=True)
+                            render("clumping/model-comparison", output, [value.path], plot_result_files, relative_to_baseline=cdm.path)
 
     # Evolution relative to CDM: one plot per non-CDM model, with one curve
     # for every snapshot shared by all models in the same simulation box.
@@ -294,7 +297,65 @@ def generate_aida_tng_plots(
     spectra = [result for result in results if result.kind == "power-spectrum"]
     for (simulation, particle, method), values in sorted(_group(spectra, "simulation", "particle", "method").items()):
         output = canonical_plot_path(analysis_root, "power-spectra", simulation, "combined", particle, method, "power_spectra.png")
-        render("power-spectra", output, _unique_paths(values), plot_power_spectrum_files, engine="both")
+        # The evolution overview is intentionally a single, reproducible
+        # configuration: 256^3 spectra evaluated with the Pylians engine.
+        # Keep the generic combined plot behavior for all other methods.
+        if method == "smoothed-pylians_both":
+            selected = [value for value in values if value.grid == 256]
+            render(
+                "power-spectra",
+                output,
+                _unique_paths(selected),
+                plot_power_spectrum_files,
+                engine="pylians",
+                color_by_snapshot=True,
+            )
+        else:
+            render("power-spectra", output, _unique_paths(values), plot_power_spectrum_files, engine="both")
+
+    # Relative evolution: one all-snapshot plot per non-CDM model and box.
+    # Match each snapshot to its CDM baseline and use the same 256^3 Pylians
+    # configuration as the absolute evolution overview.
+    selected_spectra = [
+        value
+        for value in spectra
+        if value.method == "smoothed-pylians_both" and value.grid == 256 and value.particle in {"gas", "dm"}
+    ]
+    by_simulation = defaultdict(list)
+    for value in selected_spectra:
+        by_simulation[(value.simulation, value.particle)].append(value)
+    for (simulation, particle), values in sorted(by_simulation.items()):
+        match = _MODEL_RE.match(simulation)
+        if not match or match.group("model").upper() == "CDM":
+            continue
+        box = match.group("box")
+        cdm_simulation = f"{box}_CDM"
+        baselines = {
+            value.snapshot: value.path
+            for value in by_simulation.get((cdm_simulation, particle), [])
+            if value.snapshot is not None
+        }
+        if not baselines:
+            continue
+        output = canonical_plot_path(
+            analysis_root,
+            "power-spectra/model-comparison",
+            box,
+            "combined-snapshots",
+            particle,
+            "smoothed-pylians_both-grid256",
+            f"{match.group('model').lower()}_relative_to_cdm.png",
+        )
+        render(
+            "power-spectra/model-comparison",
+            output,
+            _unique_paths(values) + _unique_paths(baselines.values()),
+            plot_relative_power_spectrum_evolution_files,
+            baselines=baselines,
+            engine="pylians",
+            color_by_snapshot=True,
+            title=f"{box} {match.group('model')} gas power relative to CDM (256^3, Pylians)",
+        )
 
     for simulation in sorted({result.simulation for result in clumping}):
         paths = _unique_paths(result for result in clumping if result.simulation == simulation)
