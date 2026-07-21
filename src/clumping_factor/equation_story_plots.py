@@ -17,6 +17,7 @@ MASK_PATTERN = re.compile(
     r"^overdensity_lt_(?P<density>[-+0-9.eE]+)"
     r"(?:__xHII_gt_(?P<ionized>[-+0-9.eE]+))?$"
 )
+SPEED_OF_LIGHT_CM_S = 2.99792458e10
 DEFAULT_BEST_MASKS = [(24.0, 0.99), (24.0, 0.999), (49.0, 0.999)]
 DEFAULT_PHOTON_GROUPS = ["0", "1", "2", "0+1", "1+2", "0+1+2"]
 DEFAULT_DENSITY_CUTOFFS = [1.0, 5.0, 10.0, 15.0, 20.0, 25.0]
@@ -125,6 +126,47 @@ def _finite(value: object) -> float:
     except (TypeError, ValueError):
         return np.nan
     return number if np.isfinite(number) else np.nan
+
+
+def _ratio(numerator: float, denominator: float) -> float:
+    """Return a finite ratio, using NaN when the denominator is not usable."""
+
+    if not np.isfinite(numerator) or not np.isfinite(denominator) or denominator == 0.0:
+        return np.nan
+    return numerator / denominator
+
+
+def _parameter_value(row: dict, field: str) -> float:
+    """Read a plotted parameter, deriving newer IGM aliases for old results."""
+
+    direct = _finite(row.get(field))
+    if np.isfinite(direct):
+        return direct
+    if field == "recombination_rate":
+        return _finite(row.get("R_rec"))
+    if field == "photoionization_rate":
+        return _finite(row.get("R_ion"))
+    if field == "ionization_equilibrium_ratio":
+        q6 = _finite(row.get("Q6"))
+        if np.isfinite(q6):
+            return q6
+        return _ratio(_finite(row.get("R_ion")), _finite(row.get("R_rec")))
+    if field == "electron_density_nHII_over_ne":
+        return _ratio(_finite(row.get("nHII_V")), _finite(row.get("ne_V")))
+    if field == "lambda_mfp_nHI_sigma_HI":
+        lambda_mfp_cm = _finite(row.get("lambda_mfp_cm"))
+        n_hi = _finite(row.get("nHI_V"))
+        sigma_hi = _finite(row.get("sigma_hi_cm2"))
+        if np.isfinite(lambda_mfp_cm) and np.isfinite(n_hi) and np.isfinite(sigma_hi):
+            return lambda_mfp_cm * n_hi * sigma_hi
+    if field == "Gamma_lambda_mfp_over_c":
+        gamma_hi = _finite(row.get("GammaHI_s_1"))
+        lambda_mfp_cm = _finite(row.get("lambda_mfp_cm"))
+        if np.isfinite(gamma_hi) and np.isfinite(lambda_mfp_cm):
+            return gamma_hi * lambda_mfp_cm / SPEED_OF_LIGHT_CM_S
+    if field == "photon_photoionization_rate_ratio":
+        return _ratio(_finite(row.get("R_gamma_c")), _finite(row.get("R_ion")))
+    return np.nan
 
 
 def _load_equation_document(path: str | Path) -> dict:
@@ -944,7 +986,7 @@ def plot_parameter_ionization_curves(
             requested_density,
         )
         x = np.asarray([float(row.ionized_cut) for row in rows])
-        y = np.asarray([_finite(row.values.get(field)) for row in rows])
+        y = np.asarray([_parameter_value(row.values, field) for row in rows])
         finite = np.isfinite(x) & np.isfinite(y)
         if not np.any(finite):
             continue
@@ -996,7 +1038,7 @@ def plot_parameter_ionization_curves_comparison(
             field = _resolve_parameter_field(document, parameter, photon_test)
             actual_density, rows = _combined_rows_for_density(document, requested_density)
             x = np.asarray([float(row.ionized_cut) for row in rows])
-            y = np.asarray([_finite(row.values.get(field)) for row in rows])
+            y = np.asarray([_parameter_value(row.values, field) for row in rows])
             finite = np.isfinite(x) & np.isfinite(y)
             if not np.any(finite):
                 continue
