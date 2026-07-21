@@ -34,6 +34,15 @@ DEFAULT_DIAGNOSTIC_PARAMETERS = [
     "Q12_ctilde",
     "nGamma_ctilde_sigma_over_Gamma",
 ]
+DEFAULT_IGM_CHECK_PARAMETERS = [
+    "recombination_rate",
+    "photoionization_rate",
+    "ionization_equilibrium_ratio",
+    "electron_density_nHII_over_ne",
+    "lambda_mfp_nHI_sigma_HI",
+    "Gamma_lambda_mfp_over_c",
+    "photon_photoionization_rate_ratio",
+]
 PHOTON_DEPENDENT_PARAMETERS = {
     "nGamma_V",
     "R_gamma_c",
@@ -54,6 +63,29 @@ PARAMETER_LABELS = {
     "nGamma_V": r"$\langle n_\gamma\rangle_V$ [cm$^{-3}$]",
     "R_rec": r"$R_{\rm rec}$ [cm$^{-3}$ s$^{-1}$]",
     "R_ion": r"$R_{\rm ion}$ [cm$^{-3}$ s$^{-1}$]",
+    "recombination_rate": (
+        r"$\langle n_e n_{\rm HII}\alpha_{\rm HII}\rangle$ "
+        r"[cm$^{-3}$ s$^{-1}$]"
+    ),
+    "photoionization_rate": (
+        r"$\langle \Gamma_{\rm HI} n_{\rm HI}\rangle$ "
+        r"[cm$^{-3}$ s$^{-1}$]"
+    ),
+    "ionization_equilibrium_ratio": (
+        r"$\langle \Gamma_{\rm HI}n_{\rm HI}\rangle / "
+        r"\langle n_e n_{\rm HII}\alpha_{\rm HII}\rangle$"
+    ),
+    "electron_density_nHII_over_ne": (
+        r"$\langle n_{\rm HII}\rangle/\langle n_e\rangle$"
+    ),
+    "lambda_mfp_nHI_sigma_HI": (
+        r"$\lambda_{\rm mfp}\langle n_{\rm HI}\sigma_{\rm HI}\rangle$"
+    ),
+    "Gamma_lambda_mfp_over_c": r"$\Gamma_{\rm HI}\lambda_{\rm mfp}/c$",
+    "photon_photoionization_rate_ratio": (
+        r"$\langle n_\gamma c/\lambda_{\rm mfp}\rangle / "
+        r"\langle \Gamma_{\rm HI}n_{\rm HI}\rangle$"
+    ),
     "R_gamma_ctilde": r"$R_{\gamma,\tilde c}$ [cm$^{-3}$ s$^{-1}$]",
     "Q6": r"$Q6=R_{\rm ion}/R_{\rm rec}$",
     "nHI_mfp_over_nHI_V": r"$n_{\rm HI,mfp}/\langle n_{\rm HI}\rangle$",
@@ -61,6 +93,16 @@ PARAMETER_LABELS = {
     "nGamma_ctilde_sigma_over_Gamma": (
         r"$\langle n_\gamma\rangle\tilde c\sigma_{\rm HI}/\Gamma_{\rm HI}$"
     ),
+}
+UNITY_REFERENCE_PARAMETERS = {
+    "Q6",
+    "Q12_c",
+    "Q12_ctilde",
+    "nHI_mfp_over_nHI_V",
+    "ionization_equilibrium_ratio",
+    "electron_density_nHII_over_ne",
+    "lambda_mfp_nHI_sigma_HI",
+    "photon_photoionization_rate_ratio",
 }
 
 
@@ -917,7 +959,7 @@ def plot_parameter_ionization_curves(
     if plotted == 0:
         plt.close(fig)
         raise ValueError(f"No finite values found for parameter {field!r}.")
-    if parameter in {"Q6", "Q12_c", "Q12_ctilde", "nHI_mfp_over_nHI_V"}:
+    if parameter in UNITY_REFERENCE_PARAMETERS:
         ax.axhline(1.0, color="#333333", linestyle="--", linewidth=1.2)
     ax.set_xlabel(r"Minimum ionized fraction, $x_{\mathrm{HII,min}}$")
     ax.set_ylabel(_parameter_label(parameter, photon_test))
@@ -970,7 +1012,7 @@ def plot_parameter_ionization_curves_comparison(
     if plotted == 0:
         plt.close(fig)
         raise ValueError(f"No finite values found for parameter {parameter!r}.")
-    if parameter in {"Q6", "Q12_c", "Q12_ctilde", "nHI_mfp_over_nHI_V"}:
+    if parameter in UNITY_REFERENCE_PARAMETERS:
         ax.axhline(1.0, color="#333333", linestyle="--", linewidth=1.2)
     ax.set_xlabel(r"Minimum ionized fraction, $x_{\mathrm{HII,min}}$")
     ax.set_ylabel(_parameter_label(parameter, photon_test))
@@ -1028,6 +1070,32 @@ def build_extended_diagnostic_plots(
                     f"{index:02d}_parameter_{_safe_filename(parameter)}.png",
                 ),
                 photon_test=photon_test,
+            )
+        )
+    return outputs
+
+
+def build_igm_check_plots(
+    result_path: str | Path,
+    output_dir: str | Path,
+    density_cutoffs: Sequence[float] = DEFAULT_DENSITY_CUTOFFS,
+    parameters: Sequence[str] = DEFAULT_IGM_CHECK_PARAMETERS,
+) -> list[Path]:
+    """Build the focused IGM-assumption check plots from equation-test rows."""
+
+    document = _load_equation_document(result_path)
+    output_dir = Path(output_dir)
+    outputs = []
+    for index, parameter in enumerate(parameters, start=1):
+        outputs.append(
+            plot_parameter_ionization_curves(
+                document,
+                parameter,
+                density_cutoffs,
+                _prepare_output(
+                    output_dir,
+                    f"{index:02d}_igm_check_{_safe_filename(parameter)}.png",
+                ),
             )
         )
     return outputs
@@ -1133,6 +1201,33 @@ def build_extended_plot_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def build_igm_check_plot_parser() -> argparse.ArgumentParser:
+    """Build the parser for focused IGM equation-check plots."""
+
+    parser = argparse.ArgumentParser(
+        description="Plot the focused IGM equation checks from equation-test JSON."
+    )
+    parser.add_argument("result", help="Equation-test JSON result.")
+    parser.add_argument("--output-dir", required=True)
+    parser.add_argument(
+        "--density-cutoffs",
+        nargs="+",
+        type=float,
+        default=DEFAULT_DENSITY_CUTOFFS,
+        help=(
+            "Stored overdensity thresholds to plot. Defaults to "
+            "1 5 10 15 20 25."
+        ),
+    )
+    parser.add_argument(
+        "--parameters",
+        nargs="+",
+        default=DEFAULT_IGM_CHECK_PARAMETERS,
+        help="IGM-check row fields to plot.",
+    )
+    return parser
+
+
 def equation_diagnostic_plots_main(argv: list[str] | None = None) -> None:
     """Run the extended diagnostic plotting workflow."""
 
@@ -1161,3 +1256,18 @@ def equation_diagnostic_plots_main(argv: list[str] | None = None) -> None:
         )
     for output in outputs:
         print(f"Wrote equation diagnostic plot: {output}")
+
+
+def equation_igm_check_plots_main(argv: list[str] | None = None) -> None:
+    """Run the focused IGM equation-check plotting workflow."""
+
+    parser = build_igm_check_plot_parser()
+    args = parser.parse_args(argv)
+    outputs = build_igm_check_plots(
+        args.result,
+        args.output_dir,
+        density_cutoffs=args.density_cutoffs,
+        parameters=args.parameters,
+    )
+    for output in outputs:
+        print(f"Wrote IGM check plot: {output}")
