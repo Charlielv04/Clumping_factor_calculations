@@ -1,14 +1,11 @@
 {
   "workflow_version": 1,
   "status": "success",
-  "started_at": "2026-07-13T09:27:20.617193+00:00",
-  "updated_at": "2026-07-13T11:05:51.287031+00:00",
+  "started_at": "2026-07-21T02:06:23.210495+00:00",
+  "updated_at": "2026-07-21T03:20:30.197300+00:00",
   "simulation": "Thesan-1-parallelized",
   "snapshot": 80,
   "requested_products": [
-    "lya",
-    "mfp",
-    "gamma",
     "equations"
   ],
   "configuration": {
@@ -16,14 +13,11 @@
     "snapshot": 80,
     "simulation_name": "Thesan-1-parallelized",
     "products": [
-      "lya",
-      "mfp",
-      "gamma",
       "equations"
     ],
     "los_file": "/lustre/work/carlos.lopez/Thesan-1/postprocessing/los/rays_080.hdf5",
     "output_root": "results/forest",
-    "refresh_products": true,
+    "refresh_products": false,
     "verbose": true,
     "threads": 8,
     "equation_workers": null,
@@ -130,12 +124,12 @@
     },
     "equations": {
       "status": "success",
-      "fingerprint": "1617ca9322c767324a3b202da3724b7641ad5860505f8c56a1a5b8d820eebe82",
+      "fingerprint": "169ec16f9df772612e640c71c202d6e7dd0868f361cf8a2a6dc7241154a016a8",
       "outputs": [
         "results/forest/thesan/Thesan-1-parallelized/snapshot080/equations/equations.json",
         "results/forest/thesan/Thesan-1-parallelized/snapshot080/equations/equations.csv"
       ],
-      "duration_seconds": 4037.4813534468412,
+      "duration_seconds": 4446.250002801418,
       "details": {
         "row_count": 1401,
         "workers": 8
@@ -144,5 +138,5 @@
   },
   "warnings": [],
   "failures": [],
-  "finished_at": "2026-07-13T11:05:51.287009+00:00"
+  "finished_at": "2026-07-21T03:20:30.197289+00:00"
 }
