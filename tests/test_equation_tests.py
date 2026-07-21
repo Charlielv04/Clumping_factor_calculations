@@ -110,9 +110,31 @@ def test_equation_tests_compute_expected_formulas(tmp_path):
     assert rows["overdensity_lt_1e+09__xHII_gt_0.7"]["selected_cells"] == 2
     assert "xHII_gt_0.7" not in rows
     assert np.isclose(all_gas["R_ion"], all_gas["nHI_V"] * 1.0e-12)
+    assert np.isclose(all_gas["recombination_rate"], all_gas["R_rec"])
+    assert np.isclose(all_gas["photoionization_rate"], all_gas["R_ion"])
+    assert np.isclose(
+        all_gas["ionization_equilibrium_ratio"],
+        all_gas["R_ion"] / all_gas["R_rec"],
+    )
+    assert np.isclose(
+        all_gas["electron_density_nHII_over_ne"],
+        all_gas["nHII_V"] / all_gas["ne_V"],
+    )
+    assert np.isclose(
+        all_gas["lambda_mfp_nHI_sigma_HI"],
+        all_gas["lambda_mfp_cm"] * all_gas["nHI_V"] * all_gas["sigma_hi_cm2"],
+    )
+    assert np.isclose(
+        all_gas["Gamma_lambda_mfp_over_c"],
+        all_gas["GammaHI_s_1"] * all_gas["lambda_mfp_cm"] / SPEED_OF_LIGHT_CM_S,
+    )
     assert np.isclose(
         all_gas["R_gamma_c"],
         all_gas["nGamma_V"] * SPEED_OF_LIGHT_CM_S / all_gas["lambda_mfp_cm"],
+    )
+    assert np.isclose(
+        all_gas["photon_photoionization_rate_ratio"],
+        all_gas["R_gamma_c"] / all_gas["R_ion"],
     )
     assert np.isclose(all_gas["nGamma_V"], all_gas["nGamma_V_g0"])
     assert np.isclose(
@@ -153,6 +175,18 @@ def test_equation_tests_compute_expected_formulas(tmp_path):
         rows["overdensity_lt_1e+09"]["C_standard_raw_volume"]
     ]
     assert result["parameters"]["ionized_density_thresholds"] == [1e9]
+    igm_checks = {
+        row["mask_name"]: row
+        for row in result["diagnostics"]["igm_checks"]["rows"]
+    }
+    assert np.isclose(
+        igm_checks["overdensity_lt_1e+09__xHII_gt_0.7"]["photoionization_rate"],
+        rows["overdensity_lt_1e+09__xHII_gt_0.7"]["R_ion"],
+    )
+    assert np.isclose(
+        igm_checks["all-gas"]["photon_photoionization_rate_ratio"],
+        all_gas["R_gamma_c"] / all_gas["R_ion"],
+    )
     assert any(
         "global scalar/table Gamma_HI" in warning
         for warning in result["warnings"]

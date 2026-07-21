@@ -126,6 +126,30 @@ def _finite_or_none(value: float) -> float | None:
     return value if np.isfinite(value) else None
 
 
+def _json_safe_value(value):
+    """Convert NumPy/non-finite values into JSON-friendly scalars."""
+
+    if isinstance(value, (float, np.floating)):
+        return _finite_or_none(value)
+    if isinstance(value, (int, np.integer)):
+        return int(value)
+    return value
+
+
+IGM_CHECK_FIELDS = [
+    "mask_name",
+    "selected_cells",
+    "volume_fraction",
+    "recombination_rate",
+    "photoionization_rate",
+    "ionization_equilibrium_ratio",
+    "electron_density_nHII_over_ne",
+    "lambda_mfp_nHI_sigma_HI",
+    "Gamma_lambda_mfp_over_c",
+    "photon_photoionization_rate_ratio",
+]
+
+
 def _format_mask_value(value: float) -> str:
     """Format a mask boundary precisely enough for a stable row name."""
     value = float(value)
@@ -998,6 +1022,12 @@ def compute_equation_tests(
                 "C13_c_chi_nH2", "C13_ctilde_chi_nH2", "Q6", "Q12_c",
                 "Q12_ctilde", "C7_over_C5", "C8_over_C7", "C13c_over_C5",
                 "C13ctilde_over_C5", "nHI_mfp_over_nHI_V",
+                "recombination_rate", "photoionization_rate",
+                "ionization_equilibrium_ratio",
+                "electron_density_nHII_over_ne",
+                "lambda_mfp_nHI_sigma_HI",
+                "Gamma_lambda_mfp_over_c",
+                "photon_photoionization_rate_ratio",
             ]:
                 row[key] = np.nan
             for _label, _groups, suffix in photon_suffixes:
@@ -1012,6 +1042,7 @@ def compute_equation_tests(
                     "Q12_c",
                     "Q12_ctilde",
                     "nGamma_ctilde_sigma_over_Gamma",
+                    "photon_photoionization_rate_ratio",
                 ]:
                     row[f"{key}_{suffix}"] = np.nan
             rows.append(row)
@@ -1132,10 +1163,21 @@ def compute_equation_tests(
                 "Q12_ctilde": (
                     r_gamma_ctilde / r_rec if r_rec > 0 else np.nan
                 ),
+                "photon_photoionization_rate_ratio": (
+                    r_gamma_c / r_ion if r_ion > 0 else np.nan
+                ),
             }
 
         primary_suffix = _photon_field_suffix(primary_photon_label)
         primary_photon = photon_results[primary_suffix]
+        ionization_equilibrium_ratio = r_ion / r_rec if r_rec > 0 else np.nan
+        electron_density_ratio = (
+            means["n_hii"] / means["n_e"] if means["n_e"] > 0 else np.nan
+        )
+        mfp_neutral_optical_depth = lambda_mfp_cm * means["n_hi"] * sigma_hi_cm2
+        photon_photoionization_assumption = (
+            gamma_hi * lambda_mfp_cm / SPEED_OF_LIGHT_CM_S
+        )
         row.update(
             {
                 "nH_V": means["n_h"],
@@ -1177,7 +1219,7 @@ def compute_equation_tests(
                 "C13_ctilde_chi_nH2": primary_photon[
                     "C13_ctilde_chi_nH2"
                 ],
-                "Q6": r_ion / r_rec if r_rec > 0 else np.nan,
+                "Q6": ionization_equilibrium_ratio,
                 "Q12_c": primary_photon["Q12_c"],
                 "Q12_ctilde": primary_photon["Q12_ctilde"],
                 "C7_over_C5": (
@@ -1206,6 +1248,15 @@ def compute_equation_tests(
                     if means["n_hi"] > 0
                     else np.nan
                 ),
+                "recombination_rate": r_rec,
+                "photoionization_rate": r_ion,
+                "ionization_equilibrium_ratio": ionization_equilibrium_ratio,
+                "electron_density_nHII_over_ne": electron_density_ratio,
+                "lambda_mfp_nHI_sigma_HI": mfp_neutral_optical_depth,
+                "Gamma_lambda_mfp_over_c": photon_photoionization_assumption,
+                "photon_photoionization_rate_ratio": primary_photon[
+                    "photon_photoionization_rate_ratio"
+                ],
             }
         )
         for suffix, values_by_name in photon_results.items():
@@ -1229,6 +1280,18 @@ def compute_equation_tests(
         for row in rows
         if str(row["mask_name"]).startswith("overdensity_lt_")
         and "__" not in str(row["mask_name"])
+    ]
+    serialized_rows = [
+        {key: _json_safe_value(value) for key, value in row.items()}
+        for row in rows
+    ]
+    igm_check_rows = [
+        {
+            key: _json_safe_value(row.get(key))
+            for key in IGM_CHECK_FIELDS
+            if key in row
+        }
+        for row in rows
     ]
 
     document = {
@@ -1316,6 +1379,7 @@ def compute_equation_tests(
             "length": "cm",
             "clumping_factors": "dimensionless",
             "nGamma_ctilde_sigma_over_Gamma": "dimensionless",
+            "equilibrium_and_assumption_checks": "dimensionless",
             "volume_code": (
                 "(ckpc/h)^3 physical-converted only through density units; "
                 "masks use cell volumes as weights"
@@ -1333,17 +1397,7 @@ def compute_equation_tests(
         ],
         "raw_volume_clumping_factor_quantity": "C_standard_raw_volume",
         "warnings": warnings,
-        "rows": [
-            {
-                key: (
-                    _finite_or_none(value)
-                    if isinstance(value, (float, np.floating))
-                    else value
-                )
-                for key, value in row.items()
-            }
-            for row in rows
-        ],
+        "rows": serialized_rows,
         "diagnostics": {
             "expected_gas_cell_count": int(expected_count),
             "input_count": int(input_count),
@@ -1354,6 +1408,15 @@ def compute_equation_tests(
             "density_unit_g_cm3": float(units["density_unit_g_cm3"]),
             "photon_density_unit_cm3": float(units["photon_density_unit_cm3"]),
             "n_h_cosmic_mean_cm3": float(n_h_cosmic),
+            "igm_checks": {
+                "averaging": "raw cell-volume weighted means inside each mask",
+                "mask_definition": (
+                    "all-gas, overdensity_lt_* and optional "
+                    "overdensity_lt_*__xHII_gt_* masks"
+                ),
+                "fields": IGM_CHECK_FIELDS,
+                "rows": igm_check_rows,
+            },
         },
         "timings": {
             "stream_snapshot": stream_seconds,
