@@ -1,0 +1,39 @@
+#!/bin/bash
+
+set -euo pipefail
+
+set +u
+source ~/.bashrc
+set -u
+conda activate "${CONDA_ENV:-clumping-factor}"
+
+cd "${PROJECT_DIR:-$PBS_O_WORKDIR}"
+
+BASE_PATH="${BASE_PATH:?BASE_PATH must be set.}"
+SNAPSHOT="${SNAPSHOT:?SNAPSHOT must be set.}"
+SIMULATION_NAME="${SIMULATION_NAME:?SIMULATION_NAME must be set.}"
+OUTPUT_DIR="${OUTPUT_DIR:-results/thesan}"
+OUTPUT="${OUTPUT:-${OUTPUT_DIR}/${SIMULATION_NAME}/gas/density-ratio/snapshot$(printf '%03d' "${SNAPSHOT}").json}"
+THRESHOLD_MIN="${THRESHOLD_MIN:--1}"
+THRESHOLD_MAX="${THRESHOLD_MAX:-25}"
+THRESHOLD_COUNT="${THRESHOLD_COUNT:-200}"
+CHUNK_SIZE="${CHUNK_SIZE:-1000000}"
+HYDROGEN_MASS_FRACTION="${HYDROGEN_MASS_FRACTION:-0.76}"
+
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+
+mkdir -p "$(dirname "${OUTPUT}")"
+
+clumping-density-ratio \
+  --base-path "${BASE_PATH}" \
+  --simulation-name "${SIMULATION_NAME}" \
+  --snapshot "${SNAPSHOT}" \
+  --threshold-min "${THRESHOLD_MIN}" \
+  --threshold-max "${THRESHOLD_MAX}" \
+  --threshold-count "${THRESHOLD_COUNT}" \
+  --chunk-size "${CHUNK_SIZE}" \
+  --hydrogen-mass-fraction "${HYDROGEN_MASS_FRACTION}" \
+  --output "${OUTPUT}"

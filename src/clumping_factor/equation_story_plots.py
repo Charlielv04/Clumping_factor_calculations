@@ -1012,6 +1012,51 @@ def plot_parameter_ionization_curves(
     return _save_figure(fig, Path(output))
 
 
+def plot_parameter_overdensity_curve(
+    document: dict,
+    parameter: str,
+    output: str | Path,
+    log_y: bool = False,
+) -> Path:
+    """Plot one diagnostic parameter over the pure overdensity sweep."""
+
+    import matplotlib.pyplot as plt
+
+    field = _resolve_parameter_field(document, parameter, None)
+    rows = sorted(
+        (row for row in _parse_mask_rows(document) if row.ionized_cut is None),
+        key=lambda row: row.density_threshold,
+    )
+    if not rows:
+        raise ValueError("No pure overdensity rows are available.")
+
+    x = np.asarray([row.density_threshold for row in rows])
+    y = np.asarray([_parameter_value(row.values, field) for row in rows])
+    finite = np.isfinite(x) & np.isfinite(y)
+    if not np.any(finite):
+        raise ValueError(f"No finite values found for parameter {parameter!r}.")
+
+    fig, ax = plt.subplots(figsize=(8.0, 5.0))
+    ax.plot(
+        x[finite],
+        y[finite],
+        color="#176B87",
+        linewidth=1.9,
+        label=parameter,
+    )
+    if parameter in UNITY_REFERENCE_PARAMETERS:
+        ax.axhline(1.0, color="#333333", linestyle="--", linewidth=1.2)
+    positive = finite & (y > 0.0)
+    if log_y and np.all(positive[finite]):
+        ax.set_yscale("log")
+    ax.set_xlabel(r"Maximum overdensity contrast, $\delta_{\max}$")
+    ax.set_ylabel(_parameter_label(parameter, None))
+    ax.set_xlim(left=-1.0)
+    ax.grid(True, alpha=0.3)
+    ax.set_title(f"{_context_title(document)}: {parameter} vs overdensity")
+    return _save_figure(fig, Path(output))
+
+
 def plot_parameter_ionization_curves_comparison(
     baseline_document: dict,
     comparison_document: dict,
@@ -1122,24 +1167,40 @@ def build_igm_check_plots(
     output_dir: str | Path,
     density_cutoffs: Sequence[float] = DEFAULT_DENSITY_CUTOFFS,
     parameters: Sequence[str] = DEFAULT_IGM_CHECK_PARAMETERS,
+    axes: Sequence[str] = ("ionization", "overdensity"),
+    log_y: bool = False,
 ) -> list[Path]:
-    """Build the focused IGM-assumption check plots from equation-test rows."""
+    """Build focused IGM checks over ionization cuts and/or overdensity."""
 
     document = _load_equation_document(result_path)
     output_dir = Path(output_dir)
     outputs = []
-    for index, parameter in enumerate(parameters, start=1):
-        outputs.append(
-            plot_parameter_ionization_curves(
-                document,
-                parameter,
-                density_cutoffs,
-                _prepare_output(
-                    output_dir,
-                    f"{index:02d}_igm_check_{_safe_filename(parameter)}.png",
-                ),
+    if "ionization" in axes:
+        for index, parameter in enumerate(parameters, start=1):
+            outputs.append(
+                plot_parameter_ionization_curves(
+                    document,
+                    parameter,
+                    density_cutoffs,
+                    _prepare_output(
+                        output_dir,
+                        f"{index:02d}_igm_check_{_safe_filename(parameter)}.png",
+                    ),
+                )
             )
-        )
+    if "overdensity" in axes:
+        for index, parameter in enumerate(parameters, start=1):
+            outputs.append(
+                plot_parameter_overdensity_curve(
+                    document,
+                    parameter,
+                    _prepare_output(
+                        output_dir,
+                        f"{index:02d}_igm_check_overdensity_{_safe_filename(parameter)}.png",
+                    ),
+                    log_y=log_y,
+                )
+            )
     return outputs
 
 
@@ -1252,6 +1313,18 @@ def build_igm_check_plot_parser() -> argparse.ArgumentParser:
     parser.add_argument("result", help="Equation-test JSON result.")
     parser.add_argument("--output-dir", required=True)
     parser.add_argument(
+        "--axes",
+        nargs="+",
+        choices=("ionization", "overdensity"),
+        default=["ionization", "overdensity"],
+        help="Plot against ionization cuts, overdensity, or both.",
+    )
+    parser.add_argument(
+        "--log-y",
+        action="store_true",
+        help="Use a logarithmic y-axis for overdensity plots.",
+    )
+    parser.add_argument(
         "--density-cutoffs",
         nargs="+",
         type=float,
@@ -1310,6 +1383,8 @@ def equation_igm_check_plots_main(argv: list[str] | None = None) -> None:
         args.output_dir,
         density_cutoffs=args.density_cutoffs,
         parameters=args.parameters,
+        axes=args.axes,
+        log_y=args.log_y,
     )
     for output in outputs:
         print(f"Wrote IGM check plot: {output}")

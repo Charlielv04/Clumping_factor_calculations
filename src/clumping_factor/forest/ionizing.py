@@ -1,8 +1,38 @@
 """Ionizing mean-free-path and photoionization-rate measurements.
 
-The formulae are adapted from the supplied ``get_mfp_from_sim.py`` and
-``get_gamma_from_sim.py`` reference scripts, but are import-safe,
-deterministic, and usable on arbitrary THESAN file layouts.
+The module implements two independent quantities from THESAN data.
+
+Mean free path
+--------------
+For each ray segment, the neutral-hydrogen number density is represented as::
+
+    n_HI = density_cgs * xHI * X_H / m_H
+
+The segment contribution to the Lyman-limit optical depth is then::
+
+    d_tau_912 = n_HI * sigma_912 * segment_length_cgs
+
+The mean free path is the distance at which the cumulative optical depth
+first reaches ``tau_912 = 1``. Rays are periodic, so transparent rays can be
+traversed more than once. The result is reported in proper Mpc / h.
+
+Photoionization rate
+--------------------
+For cells with ``HI_Fraction < hi_threshold``, the rate is calculated from
+the first three photon groups::
+
+    Gamma_HI = sum(V_i * sum_b(PhotonDensity_i,b * sigma_c,b)) / sum(V_i)
+
+where ``V_i = Masses_i / Density_i`` in code units. The photon density is
+converted to cgs using the snapshot scale factor, code length, and
+``HubbleParam`` before the volume-weighted average is formed.
+
+The equations are adapted from the supplied ``get_mfp_from_sim.py`` and
+``get_gamma_from_sim.py`` reference scripts. The production implementations
+are import-safe, reproducible when a seed is supplied, validated, and usable
+with arbitrary THESAN file layouts. The reference forms remain available for
+cross-checks. Recombination coefficients such as ``alpha_B`` are calculated
+elsewhere and are not inputs to either quantity here.
 """
 
 from __future__ import annotations
@@ -22,7 +52,12 @@ from .los_loader import LosData, Ray, read_thesan_random_los
 from .ionizing_models import GammaHIResult, MeanFreePathResult
 
 
+# Hydrogen photoionization cross-section at the Lyman limit (912 Angstrom).
 SIGMA_HI_912_CM2 = 6.3e-18
+
+# Group-averaged c * sigma values for the first three THESAN photon groups.
+# Units are cm^3 s^-1, so PhotonDensity * this array gives a rate in s^-1
+# before the snapshot unit conversion.
 THESAN_SIGMA_C_CM3_S = np.array([9.91392673e-8, 2.09532144e-8, 3.26911684e-9])
 IONIZING_ALGORITHM_VERSION = "2"
 PERIODIC_RAY_POLICY = "repeat-ray-until-tau912-equals-one"
@@ -65,7 +100,15 @@ def gamma_result_document(result: GammaHIResult, *, source_files: Sequence[str |
 
 
 def _distance_to_tau_one(ray: Ray, start: int, *, sigma_cm2: float, hydrogen_fraction: float) -> float:
-    """Return the distance to optical depth one through periodic ray copies."""
+    """Return the distance to optical depth one through periodic ray copies.
+
+    ``start`` identifies the segment containing a sampled ray origin. The
+    calculation starts at the beginning of that segment, matching the
+    original scalar reference calculation. For each segment, the optical
+    depth increment is ``rho * xHI * X_H / m_H * dl * sigma``. If one ray
+    traversal is insufficient, complete periodic traversals are added before
+    locating and linearly interpolating the final tau=1 crossing.
+    """
     order = (np.arange(ray.segments_cgs.size) + start) % ray.segments_cgs.size
     dl = ray.segments_cgs[order]
     dtau = ray.density_cgs[order] * ray.xHI[order] * hydrogen_fraction / HYDROGEN_MASS_G * dl * sigma_cm2
@@ -100,7 +143,42 @@ def calculate_mean_free_paths(
     hydrogen_fraction: float = PRIMORDIAL_HYDROGEN_FRACTION,
     workers: int = 1,
 ) -> MeanFreePathResult:
-    """Sample periodic LOS origins and measure where Lyman-limit tau reaches one."""
+    """Sample periodic LOS origins and measure where Lyman-limit tau reaches one.
+
+    Parameters
+    ----------
+    data
+        Loaded random-line-of-sight data. ``density_cgs``, ``xHI``, and
+        ``segments_cgs`` are supplied by :mod:`los_loader`.
+    only_rays
+        Ray IDs to include. ``None`` selects every loaded ray.
+    starts_per_ray
+        Number of random segment origins sampled on each selected ray.
+    seed
+        Seed for reproducible sampling. ``None`` uses NumPy's entropy source.
+    sigma_cm2
+        Absorption cross-section in cm^2. The default is the H I cross-section
+        at 912 Angstrom.
+    hydrogen_fraction
+        Hydrogen mass fraction used to convert gas mass density to hydrogen
+        number density. The THESAN default is 0.76.
+    workers
+        Number of worker threads used to process rays.
+
+    Returns
+    -------
+    MeanFreePathResult
+        One proper-Mpc/h distance sample for every sampled ray origin, along
+        with the corresponding redshift and starting segment indices.
+
+    Notes
+    -----
+    The random position is used to choose a segment; the optical-depth walk
+    begins at that segment's start. This is the sampling convention used by
+    ``get_mfp_from_sim.py``. The implementation additionally handles multiple
+    periodic wraps and uses the header value of ``HubbleParam`` for the final
+    unit conversion.
+    """
     if starts_per_ray <= 0:
         raise ValueError("starts_per_ray must be positive.")
     if workers < 1:
@@ -143,7 +221,13 @@ def calculate_mean_free_paths(
 
 
 def calculate_mean_free_paths_reference(data: LosData, starting_indices: Sequence[int]) -> np.ndarray:
-    """Literal scalar form of the supplied MFP equation for cross-checks."""
+    """Evaluate the MFP equation independently for cross-checks.
+
+    The supplied starting segment indices are held fixed so this function can
+    be compared sample-by-sample with :func:`calculate_mean_free_paths`. It
+    intentionally keeps a simple scalar structure rather than sharing the
+    production worker and sampling code.
+    """
     values: list[float] = []
     for ray, start in zip((r for r in data.rays for _ in range(len(starting_indices) // len(data.rays))), starting_indices):
         order = (np.arange(ray.segments_cgs.size) + int(start)) % ray.segments_cgs.size
@@ -187,7 +271,23 @@ def gamma_hi_from_arrays(
     hi_threshold: float = 0.5,
     sigma_c_cm3_s: np.ndarray = THESAN_SIGMA_C_CM3_S,
 ) -> float:
-    """Volume-weighted Gamma_HI for ionized cells, matching the reference script."""
+    """Calculate volume-weighted ``Gamma_HI`` from in-memory cell arrays.
+
+    The calculation selects cells with ``hi_fraction < hi_threshold`` and
+    forms ``volume = masses / density``. For each selected cell, the first
+    ``len(sigma_c_cm3_s)`` photon groups are contracted with their group-
+    averaged ``c * sigma`` values. The code-unit photon-density rate is
+    converted with::
+
+        conversion = 1e63 / (unit_length_cm * a / h)^3 * a
+
+    The final value is::
+
+        sum(volume * rate * conversion) / sum(volume)
+
+    This is algebraically equivalent to the band-by-band loop in
+    ``get_gamma_from_sim.py``.
+    """
     photons = np.asarray(photon_density, dtype=float)
     if photons.ndim != 2 or photons.shape[1] < len(sigma_c_cm3_s):
         raise ValueError("PhotonDensity must have shape (cells, at least three groups).")
@@ -209,7 +309,39 @@ def compute_gamma_hi_result(
     progress_interval: int = 10,
     workers: int = 1,
 ) -> GammaHIResult:
-    """Stream validated snapshot pieces, optionally checking both equations in one I/O pass."""
+    """Stream snapshot pieces and calculate the volume-weighted ``Gamma_HI``.
+
+    Files are read in chunks to avoid loading a complete snapshot into memory.
+    Each file must contain ``Header`` attributes ``Time``,
+    ``UnitLength_in_cm``, and ``HubbleParam``, plus the gas fields ``Masses``,
+    ``Density``, ``HI_Fraction``, and ``PhotonDensity``. Snapshot pieces are
+    required to have consistent scale factor and unit/cosmology metadata.
+
+    Parameters
+    ----------
+    paths
+        Snapshot-piece files belonging to one snapshot.
+    hi_threshold
+        Cells with ``HI_Fraction`` below this value contribute to the
+        ionized-cell volume average.
+    cross_check
+        Also evaluate the same numerator with an explicit band-by-band loop;
+        the result is stored in ``GammaHIResult.reference_gamma_hi_s_1``.
+    chunk_size
+        Number of cells read from each HDF5 dataset at once.
+    progress
+        Optional callback receiving ``(file_number, file_count, path)``.
+    progress_interval
+        File interval for progress callbacks.
+    workers
+        Number of worker threads used to read files.
+
+    Returns
+    -------
+    GammaHIResult
+        The scale factor, Gamma_HI in s^-1, selected volume, selected-cell
+        count, and optional independent cross-check value.
+    """
     paths = list(paths)
     if not paths:
         raise ValueError("No snapshot files were supplied.")

@@ -1,4 +1,4 @@
-﻿# Review of Clumping factor and Power Spectrum in AIDA-TNG simulations
+# Review of Clumping factor and Power Spectrum in AIDA-TNG simulations
 
 This review collects the locally generated AIDA-TNG plots. The model-evolution
 panels use overdensity on the horizontal axis and show one curve per available
