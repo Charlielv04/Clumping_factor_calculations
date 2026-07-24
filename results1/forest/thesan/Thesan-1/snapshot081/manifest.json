@@ -1,0 +1,100 @@
+{
+  "workflow_version": 1,
+  "status": "running",
+  "started_at": "2026-07-08T03:22:33.230796+00:00",
+  "updated_at": "2026-07-08T03:23:40.246375+00:00",
+  "simulation": "Thesan-1",
+  "snapshot": 81,
+  "requested_products": [
+    "lya",
+    "mfp",
+    "gamma",
+    "equations"
+  ],
+  "configuration": {
+    "base_path": "/lustre/work/carlos.lopez/Thesan-1/output",
+    "snapshot": 81,
+    "simulation_name": "Thesan-1",
+    "products": [
+      "lya",
+      "mfp",
+      "gamma",
+      "equations"
+    ],
+    "los_file": "/lustre/work/carlos.lopez/Thesan-1/postprocessing/los/rays_080.hdf5",
+    "output_root": "/lustre/work/carlos.lopez/Thesan-1/results/forest",
+    "refresh_products": false,
+    "verbose": true,
+    "only_rays": null,
+    "line": "Ly a",
+    "resolution_kms": 1.0,
+    "static": false,
+    "mfp_starts_per_ray": 100,
+    "mfp_seed": 0,
+    "mfp_cross_check": true,
+    "gamma_hi_threshold": 0.5,
+    "gamma_cross_check": true,
+    "gamma_chunk_size": 1000000,
+    "progress_interval": 10,
+    "sigma_hi_cm2": 6.3e-18,
+    "temperature_file": "/lustre/work/carlos.lopez/Thesan-1/Tigm_Thesan1.dat",
+    "reduced_speed_of_light_fraction": 0.2,
+    "photon_groups": [
+      0
+    ],
+    "thresholds": null,
+    "threshold_min": -1.0,
+    "threshold_max": 25.0,
+    "threshold_count": 200,
+    "ionized_density_thresholds": [
+      1.0,
+      5.0,
+      10.0,
+      15.0,
+      20.0,
+      25.0
+    ],
+    "ionized_cuts": null,
+    "ionized_sweep": true,
+    "ionized_cut_min": 0.9,
+    "ionized_cut_max": 0.9999,
+    "ionized_cut_count": 200,
+    "equation_chunk_size": 1000000,
+    "allow_legacy_ionizing_table": false,
+    "refresh_ionizing_cache": false
+  },
+  "products": {
+    "lya": {
+      "status": "success",
+      "fingerprint": "42438a972e0a98e225315c86eec0d19514d4316700ec3ea90d82552ceaf85ec7",
+      "outputs": [
+        "/lustre/work/carlos.lopez/Thesan-1/results/forest/thesan/Thesan-1/snapshot081/lya/rays_080_lya.hdf5"
+      ],
+      "duration_seconds": 63.31707653030753,
+      "details": {
+        "line": "Ly a",
+        "ray_count": 150
+      }
+    },
+    "mfp": {
+      "status": "failed",
+      "fingerprint": "e7a54ef9d2b0545415d86db210588d4c158356790f0e55d09e65606ff76e49fa",
+      "outputs": [],
+      "duration_seconds": 3.2096354365348816,
+      "error": {
+        "type": "ValueError",
+        "message": "MFP ray redshift 5.511772431496886 does not match snapshot redshift 5.458689675319775."
+      }
+    }
+  },
+  "warnings": [],
+  "failures": [
+    {
+      "product": "mfp",
+      "error": {
+        "type": "ValueError",
+        "message": "MFP ray redshift 5.511772431496886 does not match snapshot redshift 5.458689675319775."
+      }
+    }
+  ]
+}

@@ -1,0 +1,148 @@
+{
+  "workflow_version": 1,
+  "status": "success",
+  "started_at": "2026-07-10T13:21:48.305549+00:00",
+  "updated_at": "2026-07-10T15:14:32.425057+00:00",
+  "simulation": "Thesan-1",
+  "snapshot": 80,
+  "requested_products": [
+    "lya",
+    "mfp",
+    "gamma",
+    "equations"
+  ],
+  "configuration": {
+    "base_path": "/lustre/work/carlos.lopez/Thesan-1/output",
+    "snapshot": 80,
+    "simulation_name": "Thesan-1",
+    "products": [
+      "lya",
+      "mfp",
+      "gamma",
+      "equations"
+    ],
+    "los_file": "/lustre/work/carlos.lopez/Thesan-1/postprocessing/los/rays_080.hdf5",
+    "output_root": "/lustre/work/carlos.lopez/Thesan-1/results/forest_parallelized",
+    "refresh_products": true,
+    "verbose": true,
+    "threads": 8,
+    "equation_workers": null,
+    "gamma_workers": null,
+    "mfp_workers": null,
+    "only_rays": null,
+    "line": "Ly a",
+    "resolution_kms": 1.0,
+    "static": false,
+    "mfp_starts_per_ray": 100,
+    "mfp_seed": 0,
+    "mfp_cross_check": false,
+    "gamma_hi_threshold": 0.5,
+    "gamma_cross_check": false,
+    "gamma_chunk_size": 1000000,
+    "progress_interval": 10,
+    "sigma_hi_cm2": 6.3e-18,
+    "temperature_file": null,
+    "compute_missing_temperature": true,
+    "mean_molecular_weight": 1.6,
+    "temperature_weighting": "volume",
+    "recombination_temperature_mode": "cell",
+    "reduced_speed_of_light_fraction": 0.2,
+    "photon_groups": [
+      0
+    ],
+    "photon_group_tests": [
+      "0",
+      "1",
+      "2",
+      "0+1",
+      "1+2",
+      "0+1+2"
+    ],
+    "thresholds": null,
+    "threshold_min": -1.0,
+    "threshold_max": 25.0,
+    "threshold_count": 200,
+    "ionized_density_thresholds": [
+      1.0,
+      5.0,
+      10.0,
+      15.0,
+      20.0,
+      25.0
+    ],
+    "ionized_cuts": null,
+    "ionized_sweep": true,
+    "ionized_cut_min": 0.9,
+    "ionized_cut_max": 0.9999,
+    "ionized_cut_count": 200,
+    "equation_chunk_size": 1000000,
+    "allow_legacy_ionizing_table": false,
+    "refresh_ionizing_cache": false
+  },
+  "products": {
+    "lya": {
+      "status": "success",
+      "fingerprint": "726e42b9b461c1974a8ff4958db253e98297e78d5adfbee88ee9820eebadce8a",
+      "outputs": [
+        "/lustre/work/carlos.lopez/Thesan-1/results/forest_parallelized/thesan/Thesan-1/snapshot080/lya/rays_080_lya.hdf5"
+      ],
+      "duration_seconds": 63.443245865404606,
+      "details": {
+        "line": "Ly a",
+        "ray_count": 150
+      }
+    },
+    "mfp": {
+      "status": "success",
+      "fingerprint": "4d43f8f7141ffa2ca96425b172324afb52c6271b84ac30badc4bab079dc120f2",
+      "outputs": [
+        "/lustre/work/carlos.lopez/Thesan-1/results/forest_parallelized/thesan/Thesan-1/snapshot080/mfp912/rays_080_mfp912.json"
+      ],
+      "duration_seconds": 3.948598312214017,
+      "details": {
+        "redshift": 5.511772431496886,
+        "sample_count": 15000,
+        "mfp_avg_pMpc_h": 4.686775546507418,
+        "sigma_pMpc_h": 3.0520821498474326,
+        "p2_5_pMpc_h": 0.1803313360494196,
+        "p16_pMpc_h": 1.3811780248511483,
+        "mfp_med_pMpc_h": 4.467443555834972,
+        "p84_pMpc_h": 7.8003044267758685,
+        "p97_5_pMpc_h": 11.261291795893051,
+        "workers": 8
+      }
+    },
+    "gamma": {
+      "status": "success",
+      "fingerprint": "e0ab5c6ba3cf9b5284b700e75ba779bc1b825d8d55188c7e3fb4ba757a9edf81",
+      "outputs": [
+        "/lustre/work/carlos.lopez/Thesan-1/results/forest_parallelized/thesan/Thesan-1/snapshot080/gamma_hi/gamma_hi.json"
+      ],
+      "duration_seconds": 1609.8652074476704,
+      "details": {
+        "scale_factor": 0.1535680201542495,
+        "redshift": 5.511772431496886,
+        "Gamma_HI_s_1": 3.8534514182948477e-13,
+        "selected_volume_code": 269689105726838.62,
+        "selected_cells": 9064654292,
+        "workers": 8
+      }
+    },
+    "equations": {
+      "status": "success",
+      "fingerprint": "8ea8eff6b263cd6b188bf086a7372191ae471acd9a03d8a18d53188782d18f00",
+      "outputs": [
+        "/lustre/work/carlos.lopez/Thesan-1/results/forest_parallelized/thesan/Thesan-1/snapshot080/equations/equations.json",
+        "/lustre/work/carlos.lopez/Thesan-1/results/forest_parallelized/thesan/Thesan-1/snapshot080/equations/equations.csv"
+      ],
+      "duration_seconds": 5081.598285297863,
+      "details": {
+        "row_count": 1401,
+        "workers": 8
+      }
+    }
+  },
+  "warnings": [],
+  "failures": [],
+  "finished_at": "2026-07-10T15:14:32.425016+00:00"
+}

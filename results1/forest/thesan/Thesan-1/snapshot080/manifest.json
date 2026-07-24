@@ -1,0 +1,69 @@
+{
+  "workflow_version": 1,
+  "status": "running",
+  "started_at": "2026-07-08T03:29:56.807143+00:00",
+  "updated_at": "2026-07-08T03:29:56.807165+00:00",
+  "simulation": "Thesan-1",
+  "snapshot": 80,
+  "requested_products": [
+    "lya",
+    "mfp",
+    "gamma",
+    "equations"
+  ],
+  "configuration": {
+    "base_path": "/lustre/work/carlos.lopez/Thesan-1/output",
+    "snapshot": 80,
+    "simulation_name": "Thesan-1",
+    "products": [
+      "lya",
+      "mfp",
+      "gamma",
+      "equations"
+    ],
+    "los_file": "/lustre/work/carlos.lopez/Thesan-1/postprocessing/los/rays_080.hdf5",
+    "output_root": "/lustre/work/carlos.lopez/Thesan-1/results/forest",
+    "refresh_products": false,
+    "verbose": true,
+    "only_rays": null,
+    "line": "Ly a",
+    "resolution_kms": 1.0,
+    "static": false,
+    "mfp_starts_per_ray": 100,
+    "mfp_seed": 0,
+    "mfp_cross_check": true,
+    "gamma_hi_threshold": 0.5,
+    "gamma_cross_check": true,
+    "gamma_chunk_size": 1000000,
+    "progress_interval": 10,
+    "sigma_hi_cm2": 6.3e-18,
+    "temperature_file": "",
+    "reduced_speed_of_light_fraction": 0.2,
+    "photon_groups": [
+      0
+    ],
+    "thresholds": null,
+    "threshold_min": -1.0,
+    "threshold_max": 25.0,
+    "threshold_count": 200,
+    "ionized_density_thresholds": [
+      1.0,
+      5.0,
+      10.0,
+      15.0,
+      20.0,
+      25.0
+    ],
+    "ionized_cuts": null,
+    "ionized_sweep": true,
+    "ionized_cut_min": 0.9,
+    "ionized_cut_max": 0.9999,
+    "ionized_cut_count": 200,
+    "equation_chunk_size": 1000000,
+    "allow_legacy_ionizing_table": false,
+    "refresh_ionizing_cache": false
+  },
+  "products": {},
+  "warnings": [],
+  "failures": []
+}
