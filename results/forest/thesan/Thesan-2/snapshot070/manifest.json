@@ -1,0 +1,90 @@
+{
+  "workflow_version": 1,
+  "status": "success",
+  "started_at": "2026-07-24T05:40:08.153270+00:00",
+  "updated_at": "2026-07-24T05:43:19.360316+00:00",
+  "simulation": "Thesan-2",
+  "snapshot": 70,
+  "requested_products": [
+    "equations"
+  ],
+  "configuration": {
+    "base_path": "/lustre/work/carlos.lopez/Thesan-2/output",
+    "snapshot": 70,
+    "simulation_name": "Thesan-2",
+    "products": [
+      "equations"
+    ],
+    "los_file": "/lustre/work/carlos.lopez/Thesan-2/postprocessing/los/rays_070.hdf5",
+    "output_root": "results/forest",
+    "refresh_products": true,
+    "verbose": true,
+    "threads": 8,
+    "equation_workers": 8,
+    "gamma_workers": null,
+    "mfp_workers": null,
+    "only_rays": null,
+    "line": "Ly a",
+    "resolution_kms": 1.0,
+    "static": false,
+    "mfp_starts_per_ray": 100,
+    "mfp_seed": 0,
+    "mfp_cross_check": false,
+    "gamma_hi_threshold": 0.5,
+    "gamma_cross_check": false,
+    "gamma_chunk_size": 1000000,
+    "progress_interval": 10,
+    "sigma_hi_cm2": 6.3e-18,
+    "temperature_file": null,
+    "compute_missing_temperature": true,
+    "mean_molecular_weight": 1.6,
+    "temperature_weighting": "volume",
+    "recombination_temperature_mode": "cell",
+    "reduced_speed_of_light_fraction": 0.2,
+    "photon_groups": [
+      0
+    ],
+    "photon_group_tests": [
+      "0"
+    ],
+    "thresholds": null,
+    "threshold_min": -1.0,
+    "threshold_max": 25.0,
+    "threshold_count": 200,
+    "ionized_density_thresholds": [
+      10.0,
+      15.0,
+      20.0
+    ],
+    "ionized_cuts": [
+      0.1,
+      0.5,
+      0.9
+    ],
+    "ionized_sweep": false,
+    "ionized_cut_min": 0.9,
+    "ionized_cut_max": 0.9999,
+    "ionized_cut_count": 200,
+    "equation_chunk_size": 1000000,
+    "allow_legacy_ionizing_table": false,
+    "refresh_ionizing_cache": false
+  },
+  "products": {
+    "equations": {
+      "status": "success",
+      "fingerprint": "ed6b5e8703392b83a42513b37333d6468fa81a71c7354d369e3948035d17e6bc",
+      "outputs": [
+        "results/forest/thesan/Thesan-2/snapshot070/equations/equations.json",
+        "results/forest/thesan/Thesan-2/snapshot070/equations/equations.csv"
+      ],
+      "duration_seconds": 191.1949871815741,
+      "details": {
+        "row_count": 210,
+        "workers": 8
+      }
+    }
+  },
+  "warnings": [],
+  "failures": [],
+  "finished_at": "2026-07-24T05:43:19.360307+00:00"
+}
