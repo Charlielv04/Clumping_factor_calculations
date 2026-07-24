@@ -1,0 +1,131 @@
+{
+  "workflow_version": 1,
+  "status": "success",
+  "started_at": "2026-07-24T05:07:15.610648+00:00",
+  "updated_at": "2026-07-24T05:14:32.448954+00:00",
+  "simulation": "Thesan-2",
+  "snapshot": 75,
+  "requested_products": [
+    "equations"
+  ],
+  "configuration": {
+    "base_path": "/lustre/work/carlos.lopez/Thesan-2/output",
+    "snapshot": 75,
+    "simulation_name": "Thesan-2",
+    "products": [
+      "equations"
+    ],
+    "los_file": "/lustre/work/carlos.lopez/Thesan-2/postprocessing/los/rays_075.hdf5",
+    "output_root": "/lustre/work/carlos.lopez/Thesan-2/results/forest_parallelized",
+    "refresh_products": true,
+    "verbose": true,
+    "threads": 8,
+    "equation_workers": 8,
+    "gamma_workers": null,
+    "mfp_workers": null,
+    "only_rays": null,
+    "line": "Ly a",
+    "resolution_kms": 1.0,
+    "static": false,
+    "mfp_starts_per_ray": 100,
+    "mfp_seed": 0,
+    "mfp_cross_check": false,
+    "gamma_hi_threshold": 0.5,
+    "gamma_cross_check": false,
+    "gamma_chunk_size": 1000000,
+    "progress_interval": 10,
+    "sigma_hi_cm2": 6.3e-18,
+    "temperature_file": null,
+    "compute_missing_temperature": true,
+    "mean_molecular_weight": 1.6,
+    "temperature_weighting": "volume",
+    "recombination_temperature_mode": "cell",
+    "reduced_speed_of_light_fraction": 0.2,
+    "photon_groups": [
+      0
+    ],
+    "photon_group_tests": [
+      "0"
+    ],
+    "thresholds": null,
+    "threshold_min": -1.0,
+    "threshold_max": 25.0,
+    "threshold_count": 200,
+    "ionized_density_thresholds": [
+      10.0,
+      15.0,
+      20.0
+    ],
+    "ionized_cuts": [
+      0.99,
+      0.999,
+      0.9999
+    ],
+    "ionized_sweep": false,
+    "ionized_cut_min": 0.9,
+    "ionized_cut_max": 0.9999,
+    "ionized_cut_count": 200,
+    "equation_chunk_size": 1000000,
+    "allow_legacy_ionizing_table": false,
+    "refresh_ionizing_cache": false
+  },
+  "products": {
+    "mfp": {
+      "status": "success",
+      "fingerprint": "ceabe7a03fa612650720f94f0b56674f0fb0abf47e470012f26ce7bbfef2233c",
+      "outputs": [
+        "/lustre/work/carlos.lopez/Thesan-2/results/forest_parallelized/thesan/Thesan-2/snapshot075/mfp912/rays_075_mfp912.json"
+      ],
+      "duration_seconds": 2.963753379881382,
+      "details": {
+        "redshift": 5.737651213014603,
+        "sample_count": 15000,
+        "mfp_avg_pMpc_h": 2.6850874063177996,
+        "sigma_pMpc_h": 2.2189510573259357,
+        "p2_5_pMpc_h": 0.0014748810530916697,
+        "p16_pMpc_h": 0.4808154035336199,
+        "mfp_med_pMpc_h": 2.2407949381407626,
+        "p84_pMpc_h": 4.869038853107956,
+        "p97_5_pMpc_h": 7.923006342958679,
+        "workers": 8
+      }
+    },
+    "gamma": {
+      "status": "success",
+      "fingerprint": "cc7904294b26318cd0f057cf7a612ac65a0b1830582e5898dc62887be6fb3780",
+      "outputs": [
+        "/lustre/work/carlos.lopez/Thesan-2/results/forest_parallelized/thesan/Thesan-2/snapshot075/gamma_hi/gamma_hi.json"
+      ],
+      "duration_seconds": 154.97167637571692,
+      "details": {
+        "scale_factor": 0.148419674510366,
+        "redshift": 5.737651213014603,
+        "Gamma_HI_s_1": 2.33242363581301e-13,
+        "selected_volume_code": 258025463991790.53,
+        "selected_cells": 1108701561,
+        "cross_check": {
+          "reference": "get_gamma_from_sim.py scalar band loop",
+          "passed": true,
+          "absolute_difference_s_1": 0.0
+        },
+        "workers": 8
+      }
+    },
+    "equations": {
+      "status": "success",
+      "fingerprint": "e2dc1c4f4b95e442877f28a96027ca1012950e39f7cf081e92156af08c2f9c6a",
+      "outputs": [
+        "/lustre/work/carlos.lopez/Thesan-2/results/forest_parallelized/thesan/Thesan-2/snapshot075/equations/equations.json",
+        "/lustre/work/carlos.lopez/Thesan-2/results/forest_parallelized/thesan/Thesan-2/snapshot075/equations/equations.csv"
+      ],
+      "duration_seconds": 436.78533263504505,
+      "details": {
+        "row_count": 210,
+        "workers": 8
+      }
+    }
+  },
+  "warnings": [],
+  "failures": [],
+  "finished_at": "2026-07-24T05:14:32.448943+00:00"
+}

@@ -1,0 +1,24 @@
+{
+  "calculation": "thesan_mfp_912",
+  "quantity": "mfp_912",
+  "algorithm_version": "2",
+  "units": "proper Mpc / h",
+  "periodic_ray_policy": "repeat-ray-until-tau912-equals-one",
+  "redshift": 6.597387448679843,
+  "sample_count": 15000,
+  "mfp_avg_pMpc_h": 0.37458575228684043,
+  "sigma_pMpc_h": 0.5717803416710256,
+  "p2_5_pMpc_h": 0.0002620932524955375,
+  "p16_pMpc_h": 0.000713970356319298,
+  "mfp_med_pMpc_h": 0.09565399627112728,
+  "p84_pMpc_h": 0.8592854722480364,
+  "p97_5_pMpc_h": 2.0258295010447664,
+  "source_los_file": "/lustre/work/carlos.lopez/Thesan-2/postprocessing/los/rays_060.hdf5",
+  "simulation": "Thesan-2",
+  "snapshot": 60,
+  "cross_check": {
+    "reference": "get_mfp_from_sim.py independent scalar equation",
+    "passed": true,
+    "max_abs_difference_pMpc_h": 3.3306690738754696e-15
+  }
+}
