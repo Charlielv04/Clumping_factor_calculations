@@ -90,7 +90,10 @@ PARAMETER_LABELS = {
     "R_gamma_ctilde": r"$R_{\gamma,\tilde c}$ [cm$^{-3}$ s$^{-1}$]",
     "Q6": r"$Q6=R_{\rm ion}/R_{\rm rec}$",
     "nHI_mfp_over_nHI_V": r"$n_{\rm HI,mfp}/\langle n_{\rm HI}\rangle$",
-    "Q12_ctilde": r"$Q12_{\tilde c}=R_{\gamma,\tilde c}/R_{\rm rec}$",
+    "Q12_c": r"$C_{\rm photon}(c)/C_{\rm recombination}$",
+    "Q12_ctilde": (
+        r"$C_{\rm photon}(\tilde c)/C_{\rm recombination}$"
+    ),
     "nGamma_ctilde_sigma_over_Gamma": (
         r"$\langle n_\gamma\rangle\tilde c\sigma_{\rm HI}/\Gamma_{\rm HI}$"
     ),
@@ -104,6 +107,7 @@ UNITY_REFERENCE_PARAMETERS = {
     "electron_density_nHII_over_ne",
     "lambda_mfp_nHI_sigma_HI",
     "photon_photoionization_rate_ratio",
+    "nGamma_ctilde_sigma_over_Gamma",
 }
 
 
@@ -767,19 +771,44 @@ def plot_clumping_ionization_panels_comparison(
     baseline_label: str,
     comparison_label: str,
     photon_test: str | None = None,
+    report_normalization: bool = False,
+    method2_speed: str = "ctilde",
+    log_y: bool = False,
+    title: str | None = None,
 ) -> Path:
     """Plot clumping estimates for two runs, dotted baseline and solid comparison."""
 
     import matplotlib.pyplot as plt
 
-    quantities = [
-        ("Raw volume", "C_standard_raw_volume"),
-        ("C5", "C5_paper_actual"),
-        ("C7", "C7_paper_actual"),
-        ("C8", "C8_corrected_actual"),
-        (r"C13$_{\tilde c}$", "C13_ctilde_actual"),
-    ]
-    colors = ["#4F772D", "#176B87", "#D1495B", "#E76F51", "#7B2CBF"]
+    if method2_speed not in {"c", "ctilde"}:
+        raise ValueError("method2_speed must be 'c' or 'ctilde'.")
+    if report_normalization:
+        photon_label = (
+            "Photon density (physical c)"
+            if method2_speed == "c"
+            else r"Photon density (reduced $\tilde c$)"
+        )
+        photon_field = (
+            "C13_c_chi_nH2"
+            if method2_speed == "c"
+            else "C13_ctilde_chi_nH2"
+        )
+        quantities = [
+            ("Standard recombination", "C5_chi_nH2"),
+            (r"Ionization equilibrium ($\Gamma_{\rm HI}$)", "C7_chi_nH2"),
+            (r"Mean free path ($\Gamma_{\rm HI}$)", "C8_corrected_chi_nH2"),
+            (photon_label, photon_field),
+        ]
+        colors = ["#176B87", "#D1495B", "#E76F51", "#7B2CBF"]
+    else:
+        quantities = [
+            ("Raw volume", "C_standard_raw_volume"),
+            ("C5", "C5_paper_actual"),
+            ("C7", "C7_paper_actual"),
+            ("C8", "C8_corrected_actual"),
+            (r"C13$_{\tilde c}$", "C13_ctilde_actual"),
+        ]
+        colors = ["#4F772D", "#176B87", "#D1495B", "#E76F51", "#7B2CBF"]
     columns = 3
     panel_rows = int(np.ceil(len(density_cutoffs) / columns))
     fig, axes = plt.subplots(
@@ -798,7 +827,28 @@ def plot_clumping_ionization_panels_comparison(
             x = np.asarray([float(row.ionized_cut) for row in rows])
             for (label, base_field), color in zip(quantities, colors, strict=True):
                 field = _resolve_parameter_field(document, base_field, photon_test)
-                y = np.asarray([_finite(row.values.get(field)) for row in rows])
+                y_values = []
+                for row in rows:
+                    value = _finite(row.values.get(field))
+                    if report_normalization:
+                        n_h = _finite(row.values.get("nH_V"))
+                        n_hi = _finite(row.values.get("nHI_V"))
+                        ionized_fraction = (
+                            1.0 - n_hi / n_h
+                            if np.isfinite(n_h)
+                            and np.isfinite(n_hi)
+                            and n_h > 0.0
+                            else np.nan
+                        )
+                        value = (
+                            value / ionized_fraction**2
+                            if np.isfinite(value)
+                            and np.isfinite(ionized_fraction)
+                            and ionized_fraction > 0.0
+                            else np.nan
+                        )
+                    y_values.append(value)
+                y = np.asarray(y_values)
                 finite = np.isfinite(x) & np.isfinite(y)
                 if np.any(finite):
                     ax.plot(
@@ -814,13 +864,24 @@ def plot_clumping_ionization_panels_comparison(
         ax.set_xlabel(r"$x_{\mathrm{HII,min}}$")
         ax.set_ylabel("Clumping-factor estimate")
         ax.set_xscale("logit")
+        if log_y:
+            ax.set_yscale("log")
         ax.grid(True, alpha=0.3)
     for ax in axes.ravel()[len(density_cutoffs):]:
         ax.axis("off")
     handles, labels = axes.ravel()[0].get_legend_handles_labels()
     if handles:
-        fig.legend(handles, labels, loc="lower center", ncol=5)
-    fig.suptitle(f"{_context_title(comparison_document)}: clumping vs ionization cut comparison")
+        fig.legend(
+            handles,
+            labels,
+            loc="lower center",
+            ncol=len(quantities),
+            fontsize=8,
+        )
+    fig.suptitle(
+        title
+        or f"{baseline_label} vs {comparison_label}: clumping-factor methods"
+    )
     fig.tight_layout(rect=(0, 0.11, 1, 0.93))
     return _save_figure(fig, Path(output))
 
@@ -1066,6 +1127,8 @@ def plot_parameter_ionization_curves_comparison(
     baseline_label: str,
     comparison_label: str,
     photon_test: str | None = None,
+    title: str | None = None,
+    ylabel: str | None = None,
 ) -> Path:
     """Plot one diagnostic parameter for two runs."""
 
@@ -1102,11 +1165,14 @@ def plot_parameter_ionization_curves_comparison(
     if parameter in UNITY_REFERENCE_PARAMETERS:
         ax.axhline(1.0, color="#333333", linestyle="--", linewidth=1.2)
     ax.set_xlabel(r"Minimum ionized fraction, $x_{\mathrm{HII,min}}$")
-    ax.set_ylabel(_parameter_label(parameter, photon_test))
+    ax.set_ylabel(ylabel or _parameter_label(parameter, photon_test))
     ax.set_xscale("logit")
     ax.grid(True, alpha=0.3)
     ax.legend(title="Density mask, run", ncol=2)
-    ax.set_title(f"{_context_title(comparison_document)}: {parameter} comparison")
+    ax.set_title(
+        title
+        or f"{baseline_label} vs {comparison_label}: {parameter} comparison"
+    )
     return _save_figure(fig, Path(output))
 
 

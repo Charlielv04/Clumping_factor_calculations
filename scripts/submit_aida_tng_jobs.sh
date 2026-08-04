@@ -4,6 +4,7 @@ set -euo pipefail
 
 AIDA_ROOT="${AIDA_ROOT:-/lustre/work/egaraldi/AIDA-TNG}"
 SIMULATIONS="${SIMULATIONS:-L35n1080_CDM L35n1080_SIDM1 L35n1080_vSIDM L35n1080_WDM3 L75n910_CDM L75n910_SIDM1 L75n910_vSIDM L75n910_WDM3}"
+RESULTS_FAMILY="${RESULTS_FAMILY:-aida-tng}"
 DRY_RUN="${DRY_RUN:-0}"
 
 project_dir="$(pwd)"
@@ -51,7 +52,7 @@ for simulation in ${SIMULATIONS}; do
     SIMULATION_NAME="${simulation}" \
     SOURCE_CAMPAIGN="AIDA-TNG" \
     RESULTS_LAYOUT="canonical" \
-    RESULTS_FAMILY="aida-tng" \
+    RESULTS_FAMILY="${RESULTS_FAMILY}" \
     SNAPSHOT="${snapshot}" \
       bash "${submitter}"
     ((submitted += 1))

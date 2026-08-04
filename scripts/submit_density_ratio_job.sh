@@ -5,7 +5,7 @@ set -euo pipefail
 BASE_PATH="${BASE_PATH:?Set BASE_PATH, for example /lustre/work/carlos.lopez/Thesan-2/output.}"
 SNAPSHOT="${SNAPSHOT:?Set SNAPSHOT, for example 80.}"
 SIMULATION_NAME="${SIMULATION_NAME:-Thesan-2}"
-OUTPUT_DIR="${OUTPUT_DIR:-/lustre/work/carlos.lopez/Thesan-2/results/forest_parallelized}"
+OUTPUT_DIR="${OUTPUT_DIR:-results/thesan}"
 CONDA_ENV="${CONDA_ENV:-clumping-factor}"
 NCPUS="${NCPUS:-1}"
 MEM="${MEM:-16gb}"

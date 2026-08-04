@@ -19,15 +19,30 @@ SERIES = {
     "density": (
         r"$\langle n^2\rangle/\langle n\rangle^2$",
         "raw gas density",
+        "-",
     ),
     "hii-density": (
         r"$\langle n_{\rm HII}^2\rangle/\langle n_{\rm HII}\rangle^2$",
         "ionized hydrogen density",
+        "--",
     ),
     "electron-hii": (
         r"$\langle n_e n_{\rm HII}\rangle/(\langle n_e\rangle\langle n_{\rm HII}\rangle)$",
+        ":",
         "electron–HII product",
     ),
+}
+
+LINESTYLES = {
+    "density": "-",
+    "hii-density": "--",
+    "electron-hii": ":",
+}
+
+MODE_LABELS = {
+    "density": "raw gas density",
+    "hii-density": "ionized hydrogen density",
+    "electron-hii": "electron-HII product",
 }
 
 
@@ -73,14 +88,27 @@ def _equation_test_standard_arrays(path: Path) -> tuple[np.ndarray, np.ndarray]:
     return thresholds, values
 
 
-def _plot_curve(ax, path: Path, mode: str, label: str, *, equation_test: bool = False) -> bool:
+def _plot_curve(
+    ax,
+    path: Path,
+    mode: str,
+    label: str,
+    *,
+    equation_test: bool = False,
+) -> bool:
     thresholds, values = (
         _equation_test_standard_arrays(path) if equation_test else _raw_volume_arrays(path, mode)
     )
     finite = np.isfinite(thresholds) & np.isfinite(values)
     if not np.any(finite):
         return False
-    ax.plot(thresholds[finite], values[finite], linewidth=2.0, label=label)
+    ax.plot(
+        thresholds[finite],
+        values[finite],
+        linewidth=2.0,
+        linestyle=LINESTYLES[mode],
+        label=label,
+    )
     return True
 
 
@@ -105,7 +133,7 @@ def plot_thesan_clumping_definitions(
 
     fig, ax = plt.subplots(figsize=(8.4, 5.4))
     missing: list[str] = []
-    for mode, (formula, _short_label) in SERIES.items():
+    for mode, (formula, *_metadata) in SERIES.items():
         path, equation_test = sources[mode]
         if path is None or not path.exists():
             missing.append(mode)
@@ -121,10 +149,10 @@ def plot_thesan_clumping_definitions(
     ax.set_ylabel("Clumping factor")
     ax.set_xlim(left=-0.9)
     ax.grid(True, alpha=0.3)
-    ax.set_title(f"{simulation}: raw-volume clumping definitions")
+    ax.set_title(f"{simulation}: Comparison of clumping factor definitions")
     ax.legend(loc="best", fontsize=9)
     if missing:
-        missing_text = "Unavailable in existing runs: " + ", ".join(SERIES[mode][1] for mode in missing)
+        missing_text = "Unavailable in existing runs: " + ", ".join(MODE_LABELS[mode] for mode in missing)
         fig.text(0.5, 0.01, missing_text, ha="center", va="bottom", fontsize=8, color="dimgray")
         fig.tight_layout(rect=(0, 0.04, 1, 1))
     else:

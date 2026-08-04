@@ -47,6 +47,9 @@ RAW_HII_SOURCE="${RAW_HII_SOURCE:-auto}"
 RAW_ELECTRON_SOURCE="${RAW_ELECTRON_SOURCE:-constant}"
 RAW_CONSTANT_ELECTRON_ABUNDANCE="${RAW_CONSTANT_ELECTRON_ABUNDANCE:-1.08}"
 RAW_HYDROGEN_MASS_FRACTION="${RAW_HYDROGEN_MASS_FRACTION:-0.76}"
+THRESHOLD_MIN="${THRESHOLD_MIN:--1}"
+THRESHOLD_MAX="${THRESHOLD_MAX:-25}"
+THRESHOLD_COUNT="${THRESHOLD_COUNT:-200}"
 if [[ "${MAS}" != "CIC" && "${MAS}" != "TSC" ]]; then
   echo "MAS must be CIC or TSC, got: ${MAS}" >&2
   exit 1
@@ -172,6 +175,8 @@ echo "Grid size: ${GRID}"
 echo "Radius mode: ${RADIUS_MODE}"
 echo "Mass assignment: ${MAS}"
 echo "Load mode: ${LOAD_MODE}"
+echo "Threshold range: ${THRESHOLD_MIN} to ${THRESHOLD_MAX}"
+echo "Threshold count: ${THRESHOLD_COUNT}"
 echo "Resource size: ${RESOURCE_SIZE}"
 echo "Allocated CPUs requested: ${NCPUS}"
 echo "Threads: ${THREADS}"
@@ -228,6 +233,9 @@ else
     --summary-cache-dir "${SUMMARY_CACHE_DIR}" \
     --work-partition "${WORK_PARTITION}" \
     --max-file-readers "${MAX_FILE_READERS}" \
+    --threshold-min "${THRESHOLD_MIN}" \
+    --threshold-max "${THRESHOLD_MAX}" \
+    --threshold-count "${THRESHOLD_COUNT}" \
     --source-campaign "${SOURCE_CAMPAIGN}" \
     --run-label "${RUN_LABEL:-1}" \
     --resource-size "${RESOURCE_SIZE}" \
