@@ -11,7 +11,8 @@ BACKENDS="${BACKENDS:-voronoi-transmission}"
 # submitter still expects one grid label for resource and output naming.
 GRIDS="${GRIDS:-256}"
 SIGMA_BAR_ION_CM2="${SIGMA_BAR_ION_CM2:-}"
-SIGMA_BAR_ION_SOURCE="${SIGMA_BAR_ION_SOURCE:-}"
+SIGMA_BAR_ION_MODE="${SIGMA_BAR_ION_MODE:-thesan-photon-groups}"
+SIGMA_BAR_ION_SOURCE="${SIGMA_BAR_ION_SOURCE:-THESAN_SIGMA_C_CM3_S groups 0-2; volume-weighted PhotonDensity average}"
 VORONOI_NEIGHBORS="${VORONOI_NEIGHBORS:-32}"
 VORONOI_GRADIENT_BATCH_SIZE="${VORONOI_GRADIENT_BATCH_SIZE:-100000}"
 DRY_RUN="${DRY_RUN:-0}"
@@ -28,7 +29,9 @@ if [[ " ${BACKENDS} " == *" voronoi-transmission "* ]]; then
     echo "voronoi-transmission is gas-only; set PARTICLES=gas." >&2
     exit 1
   fi
-  : "${SIGMA_BAR_ION_CM2:?Set SIGMA_BAR_ION_CM2 for voronoi-transmission.}"
+  if [[ "${SIGMA_BAR_ION_MODE}" == "explicit" ]]; then
+    : "${SIGMA_BAR_ION_CM2:?Set SIGMA_BAR_ION_CM2 when using explicit mode.}"
+  fi
   : "${SIGMA_BAR_ION_SOURCE:?Set SIGMA_BAR_ION_SOURCE for voronoi-transmission.}"
 fi
 
@@ -77,6 +80,7 @@ for simulation in ${SIMULATIONS}; do
     SNAPSHOT="${snapshot}" \
     SIGMA_BAR_ION_CM2="${SIGMA_BAR_ION_CM2}" \
     SIGMA_BAR_ION_SOURCE="${SIGMA_BAR_ION_SOURCE}" \
+    SIGMA_BAR_ION_MODE="${SIGMA_BAR_ION_MODE}" \
     VORONOI_NEIGHBORS="${VORONOI_NEIGHBORS}" \
     VORONOI_GRADIENT_BATCH_SIZE="${VORONOI_GRADIENT_BATCH_SIZE}" \
       bash "${submitter}"

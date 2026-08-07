@@ -12,6 +12,52 @@ KPC_CM = 3.0856775814913673e21
 PROTON_MASS_G = 1.67262192369e-24
 
 
+def effective_sigma_bar_ion_from_photon_groups(
+    photon_volume_sums: np.ndarray,
+) -> tuple[float, dict]:
+    """Derive the gray HI cross-section from the first three THESAN groups."""
+    from .forest.constants import SPEED_OF_LIGHT_CM_S
+    from .forest.ionizing import THESAN_SIGMA_C_CM3_S
+
+    sums = np.asarray(photon_volume_sums, dtype=np.float64).reshape(-1)
+    if sums.shape != (3,) or not np.all(np.isfinite(sums)) or np.any(sums < 0):
+        raise ValueError("photon_volume_sums must contain three finite non-negative group sums.")
+    total = float(np.sum(sums, dtype=np.float64))
+    if total <= 0:
+        raise ValueError("PhotonDensity group sums must have a positive total.")
+    sigma_c = np.asarray(THESAN_SIGMA_C_CM3_S, dtype=np.float64)
+    weights = sums / total
+    sigma = float(np.dot(weights, sigma_c) / SPEED_OF_LIGHT_CM_S)
+    return sigma, {
+        "sigma_bar_ion_mode": "thesan-photon-groups",
+        "sigma_bar_ion_cm2": sigma,
+        "sigma_group_cm2": (sigma_c / SPEED_OF_LIGHT_CM_S).tolist(),
+        "sigma_c_group_cm3_s": sigma_c.tolist(),
+        "photon_group_volume_sums": sums.tolist(),
+        "photon_group_volume_weights": weights.tolist(),
+    }
+
+
+def resolve_sigma_bar_ion(
+    sigma_bar_ion_cm2: float | None,
+    sigma_bar_ion_mode: str,
+    photon_volume_sums: np.ndarray | None = None,
+) -> tuple[float, dict]:
+    """Resolve an explicit gray cross-section or a THESAN group-weighted one."""
+    if sigma_bar_ion_mode == "explicit":
+        if sigma_bar_ion_cm2 is None or not np.isfinite(sigma_bar_ion_cm2) or sigma_bar_ion_cm2 <= 0:
+            raise ValueError("sigma_bar_ion_cm2 must be positive and finite in explicit mode.")
+        return float(sigma_bar_ion_cm2), {
+            "sigma_bar_ion_mode": "explicit",
+            "sigma_bar_ion_cm2": float(sigma_bar_ion_cm2),
+        }
+    if sigma_bar_ion_mode == "thesan-photon-groups":
+        if photon_volume_sums is None:
+            raise ValueError("thesan-photon-groups mode requires PhotonDensity group data.")
+        return effective_sigma_bar_ion_from_photon_groups(photon_volume_sums)
+    raise ValueError("sigma_bar_ion_mode must be 'explicit' or 'thesan-photon-groups'.")
+
+
 def transmission_from_neutral_grid(
     neutral_number_density: np.ndarray,
     physical_cell_size_cm: float,
@@ -193,8 +239,9 @@ def compute_voronoi_transmission_chunked(
     lbox: float,
     scale_factor: float,
     hubble_param: float,
-    sigma_bar_ion_cm2: float,
+    sigma_bar_ion_cm2: float | None,
     chunk_size: int,
+    sigma_bar_ion_mode: str = "explicit",
     neighbor_count: int = 32,
     gradient_batch_size: int = 100_000,
     workers: int = 1,
@@ -214,8 +261,6 @@ def compute_voronoi_transmission_chunked(
         raise ValueError("native-cell transmission requires a positive snapshot scale factor.")
     if not np.isfinite(hubble_param) or hubble_param <= 0:
         raise ValueError("native-cell transmission requires a positive HubbleParam header attribute.")
-    if not np.isfinite(sigma_bar_ion_cm2) or sigma_bar_ion_cm2 <= 0:
-        raise ValueError("sigma_bar_ion_cm2 must be positive and finite.")
     if not 0 <= memory_safety_fraction < 1:
         raise ValueError("memory_safety_fraction must be in [0, 1).")
     memory_limit_bytes = _parse_memory_bytes(memory_limit)
@@ -223,6 +268,7 @@ def compute_voronoi_transmission_chunked(
     arrays: dict[str, list[np.ndarray]] = {
         "coords": [], "density": [], "cell_volume": [], "hi_fraction": [], "hydrogen_mass_fraction": [],
     }
+    photon_volume_sums = np.zeros(3, dtype=np.float64)
     input_count = valid_count = dropped_count = chunks = 0
     t0 = perf_counter()
     if progress:
@@ -234,6 +280,15 @@ def compute_voronoi_transmission_chunked(
         dropped_count += int(chunk["dropped_count"])
         for key in arrays:
             arrays[key].append(np.asarray(chunk[key], dtype=np.float64))
+        if sigma_bar_ion_mode == "thesan-photon-groups":
+            photon = chunk.get("photon_density")
+            volume = np.asarray(chunk["cell_volume"], dtype=np.float64)
+            if photon is None:
+                raise ValueError("thesan-photon-groups mode requires PhotonDensity[:,0:3].")
+            photon = np.asarray(photon, dtype=np.float64)
+            if photon.shape != (volume.size, 3) or not np.all(np.isfinite(photon)) or np.any(photon < 0):
+                raise ValueError("PhotonDensity[:,0:3] must be finite, non-negative, and match gas cells.")
+            photon_volume_sums += np.sum(photon * volume[:, None], axis=0, dtype=np.float64)
         if progress and chunks % progress_interval == 0:
             progress(f"native cells loaded {chunks} chunks")
     load_time = perf_counter() - t0
@@ -257,6 +312,9 @@ def compute_voronoi_transmission_chunked(
     hi_fraction = np.concatenate(arrays["hi_fraction"])
     hydrogen_mass_fraction = np.concatenate(arrays["hydrogen_mass_fraction"])
     arrays.clear()
+    sigma_bar_ion_cm2, sigma_diagnostics = resolve_sigma_bar_ion(
+        sigma_bar_ion_cm2, sigma_bar_ion_mode, photon_volume_sums
+    )
     density_unit = (1e10 * MSUN_G / hubble_param) / (KPC_CM / hubble_param) ** 3 / scale_factor**3
     n_hi = density * hydrogen_mass_fraction * hi_fraction * density_unit / PROTON_MASS_G
     coordinate_unit_cm = scale_factor / hubble_param * KPC_CM
@@ -302,6 +360,7 @@ def compute_voronoi_transmission_chunked(
         "zero_gradient_neutral_cells": int(np.count_nonzero(zero_gradient & (n_hi > 0.0))),
         "tau_clipped_cells": int(np.count_nonzero(tau >= 700.0)),
         **gradient_diagnostics,
+        **sigma_diagnostics,
     })
     timings = {
         "native_cell_load": load_time,
@@ -318,8 +377,9 @@ def compute_raw_transmission_chunked(
     hubble_param: float,
     grid_size: int,
     mas: str,
-    sigma_bar_ion_cm2: float,
+    sigma_bar_ion_cm2: float | None,
     chunk_size: int,
+    sigma_bar_ion_mode: str = "explicit",
     progress: Callable[[str], None] | None = None,
     progress_interval: int = 25,
     memory_limit: str | float | int | None = None,
@@ -346,6 +406,7 @@ def compute_raw_transmission_chunked(
 
     numerator = np.zeros((grid_size, grid_size, grid_size), dtype=np.float64)
     volume_grid = np.zeros_like(numerator)
+    photon_volume_sums = np.zeros(3, dtype=np.float64)
     input_count = valid_count = dropped_count = chunks = 0
     t0 = perf_counter()
     if progress:
@@ -363,11 +424,22 @@ def compute_raw_transmission_chunked(
         )
         _add_deposited_mass(numerator, chunk["coords"], neutral_mass, lbox, grid_size, mas)
         _add_deposited_mass(volume_grid, chunk["coords"], volume, lbox, grid_size, mas)
+        if sigma_bar_ion_mode == "thesan-photon-groups":
+            photon = chunk.get("photon_density")
+            if photon is None:
+                raise ValueError("thesan-photon-groups mode requires PhotonDensity[:,0:3].")
+            photon = np.asarray(photon, dtype=np.float64)
+            if photon.shape != (volume.size, 3) or not np.all(np.isfinite(photon)) or np.any(photon < 0):
+                raise ValueError("PhotonDensity[:,0:3] must be finite, non-negative, and match gas cells.")
+            photon_volume_sums += np.sum(photon * volume[:, None], axis=0, dtype=np.float64)
         if progress and chunks % progress_interval == 0:
             progress(f"neutral grid processed {chunks} chunks")
     grid_build_time = perf_counter() - t0
     if valid_count == 0:
         raise ValueError("Cannot compute raw-transmission from an empty valid gas stream.")
+    sigma_bar_ion_cm2, sigma_diagnostics = resolve_sigma_bar_ion(
+        sigma_bar_ion_cm2, sigma_bar_ion_mode, photon_volume_sums
+    )
 
     density_unit = (1e10 * MSUN_G / hubble_param) / (KPC_CM / hubble_param) ** 3 / scale_factor**3
     neutral_mass_density_code = np.divide(
@@ -450,6 +522,7 @@ def compute_raw_transmission_chunked(
         "memory_safety_fraction": memory_safety_fraction,
         "clumping_definition": "<rho**2 * exp(-tau)>_V / <rho * exp(-tau)>_V**2",
         **gradient_diagnostics,
+        **sigma_diagnostics,
     }
     timings = {
         "neutral_grid_build": grid_build_time,

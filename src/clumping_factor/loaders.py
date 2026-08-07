@@ -158,6 +158,13 @@ def inspect_raw_transmission_fields(base_path: str | Path, snapshot: int) -> dic
                 )
             if group["GFM_Metals"].ndim != 2 or group["GFM_Metals"].shape[1] < 1:
                 raise ValueError("GFM_Metals must be a two-dimensional array with hydrogen in column 0.")
+            has_photon_groups = "PhotonDensity" in group
+            if has_photon_groups and (
+                group["PhotonDensity"].ndim != 2
+                or group["PhotonDensity"].shape[0] != group["Coordinates"].shape[0]
+                or group["PhotonDensity"].shape[1] < 3
+            ):
+                raise ValueError("PhotonDensity must have one row per gas cell and at least three photon groups.")
             sample_size = min(10000, int(group["HI_Fraction"].shape[0]))
             hi = np.asarray(group["HI_Fraction"][:sample_size], dtype=np.float64)
             hii = np.asarray(group["HII_Fraction"][:sample_size], dtype=np.float64)
@@ -171,12 +178,16 @@ def inspect_raw_transmission_fields(base_path: str | Path, snapshot: int) -> dic
                 raise ValueError(
                     "Cannot confirm the HI_Fraction convention: HI_Fraction + HII_Fraction is not approximately 1."
                 )
-            return {
+            metadata = {
                 "hi_field": "HI_Fraction",
                 "hii_field": "HII_Fraction",
                 "hydrogen_abundance_field": "GFM_Metals[:,0]",
                 "hi_fraction_convention": "neutral hydrogen ion-stage fraction; verified by HI + HII ~= 1",
             }
+            if has_photon_groups:
+                metadata["photon_density_field"] = "PhotonDensity[:,0:3]"
+                metadata["photon_density_convention"] = "photon-number density in the first three THESAN radiation groups"
+            return metadata
     raise ValueError("Snapshot contains no non-empty PartType0 gas group.")
 
 
@@ -207,6 +218,11 @@ def iter_raw_transmission_chunks(
                 hi_raw = np.asarray(group["HI_Fraction"][start:stop])
                 hii_raw = np.asarray(group["HII_Fraction"][start:stop])
                 hydrogen_raw = np.asarray(group["GFM_Metals"][start:stop, 0])
+                photon_raw = (
+                    np.asarray(group["PhotonDensity"][start:stop, :3])
+                    if "PhotonDensity" in group
+                    else None
+                )
                 valid = (
                     np.all(np.isfinite(coords_raw), axis=1)
                     & np.isfinite(density_raw)
@@ -225,13 +241,18 @@ def iter_raw_transmission_chunks(
                 coords = np.ascontiguousarray(coords_raw[valid], dtype=np.float64)
                 density = np.ascontiguousarray(density_raw[valid], dtype=np.float64)
                 masses = np.ascontiguousarray(masses_raw[valid], dtype=np.float64)
-                yield {
+                chunk = {
                     "coords": coords,
                     "density": density,
                     "masses": masses,
                     "cell_volume": masses / density,
                     "hi_fraction": np.ascontiguousarray(hi_raw[valid], dtype=np.float64),
                     "hydrogen_mass_fraction": np.ascontiguousarray(hydrogen_raw[valid], dtype=np.float64),
+                    "photon_density": (
+                        np.ascontiguousarray(photon_raw[valid], dtype=np.float64)
+                        if photon_raw is not None
+                        else None
+                    ),
                     "lbox": metadata.lbox,
                     "input_count": int(stop - start),
                     "valid_count": int(np.count_nonzero(valid)),
@@ -240,6 +261,7 @@ def iter_raw_transmission_chunks(
                     "start": start,
                     "stop": stop,
                 }
+                yield chunk
 
 
 def estimate_full_load_bytes(metadata: SnapshotMetadata, particle_type: str) -> int:

@@ -135,6 +135,12 @@ def build_compute_parser() -> argparse.ArgumentParser:
         help="Human-readable provenance for --sigma-bar-ion-cm2; required by transmission backends.",
     )
     parser.add_argument(
+        "--sigma-bar-ion-mode",
+        choices=["explicit", "thesan-photon-groups"],
+        default="explicit",
+        help="Obtain sigma_bar_ion from an explicit value or volume-weighted THESAN PhotonDensity groups.",
+    )
+    parser.add_argument(
         "--voronoi-neighbors",
         type=int,
         default=32,
@@ -875,6 +881,7 @@ def run_compute(args: argparse.Namespace) -> Path:
                 getattr(args, "mas", "CIC"),
                 args.sigma_bar_ion_cm2,
                 stream_chunk_size,
+                sigma_bar_ion_mode=getattr(args, "sigma_bar_ion_mode", "explicit"),
                 progress=_progress_callback(args),
                 progress_interval=getattr(args, "progress_interval", 25),
                 memory_limit=getattr(args, "memory_limit", None),
@@ -888,6 +895,7 @@ def run_compute(args: argparse.Namespace) -> Path:
                 metadata.hubble_param,
                 args.sigma_bar_ion_cm2,
                 stream_chunk_size,
+                sigma_bar_ion_mode=getattr(args, "sigma_bar_ion_mode", "explicit"),
                 neighbor_count=args.voronoi_neighbors,
                 gradient_batch_size=args.voronoi_gradient_batch_size,
                 workers=getattr(args, "threads", 1),
@@ -911,8 +919,9 @@ def run_compute(args: argparse.Namespace) -> Path:
             "load_mode": selected_load_mode,
             "chunk_size": stream_chunk_size if selected_load_mode == "chunked" else None,
             "estimated_full_load_gb": estimated_gb,
-            "sigma_bar_ion_cm2": args.sigma_bar_ion_cm2,
+            "sigma_bar_ion_cm2": transmission_diagnostics.get("sigma_bar_ion_cm2", args.sigma_bar_ion_cm2),
             "sigma_bar_ion_source": args.sigma_bar_ion_source,
+            "sigma_bar_ion_mode": getattr(args, "sigma_bar_ion_mode", "explicit"),
             "threads": getattr(args, "threads", 1),
             "source_campaign": getattr(args, "source_campaign", None),
             "run_label": getattr(args, "run_label", None),

@@ -50,8 +50,11 @@ def validate_compute_config(args: Any) -> None:
     if args.backend in raw_backends and any(getattr(args, name, None) for name in separate_fields):
         raise ValueError("raw backends do not support separate mask/target fields.")
     if args.backend in TRANSMISSION_BACKENDS:
+        sigma_mode = getattr(args, "sigma_bar_ion_mode", "explicit")
+        if sigma_mode not in {"explicit", "thesan-photon-groups"}:
+            raise ValueError("--sigma-bar-ion-mode must be 'explicit' or 'thesan-photon-groups'.")
         sigma = getattr(args, "sigma_bar_ion_cm2", None)
-        if sigma is None or not np.isfinite(sigma) or sigma <= 0:
+        if sigma_mode == "explicit" and (sigma is None or not np.isfinite(sigma) or sigma <= 0):
             raise ValueError(f"--backend {args.backend} requires a positive --sigma-bar-ion-cm2.")
         if not str(getattr(args, "sigma_bar_ion_source", "") or "").strip():
             raise ValueError(f"--backend {args.backend} requires --sigma-bar-ion-source.")

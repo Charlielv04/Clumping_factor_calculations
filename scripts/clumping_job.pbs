@@ -42,6 +42,7 @@ PROGRESS_INTERVAL="${PROGRESS_INTERVAL:-25}"
 VERBOSE="${VERBOSE:-1}"
 SIGMA_BAR_ION_CM2="${SIGMA_BAR_ION_CM2:-}"
 SIGMA_BAR_ION_SOURCE="${SIGMA_BAR_ION_SOURCE:-}"
+SIGMA_BAR_ION_MODE="${SIGMA_BAR_ION_MODE:-explicit}"
 VORONOI_NEIGHBORS="${VORONOI_NEIGHBORS:-32}"
 VORONOI_GRADIENT_BATCH_SIZE="${VORONOI_GRADIENT_BATCH_SIZE:-100000}"
 RAW_CLUMPING_MODE="${RAW_CLUMPING_MODE:-density}"
@@ -119,9 +120,14 @@ if [[ -n "${MEMORY_LIMIT}" ]]; then
   EXTRA_ARGS+=(--memory-limit "${MEMORY_LIMIT}" --memory-safety-fraction "${MEMORY_SAFETY_FRACTION}")
 fi
 if [[ "${BACKEND}" == "raw-transmission" || "${BACKEND}" == "voronoi-transmission" ]]; then
-  : "${SIGMA_BAR_ION_CM2:?SIGMA_BAR_ION_CM2 is required for transmission backends}"
   : "${SIGMA_BAR_ION_SOURCE:?SIGMA_BAR_ION_SOURCE is required for transmission backends}"
-  EXTRA_ARGS+=(--sigma-bar-ion-cm2 "${SIGMA_BAR_ION_CM2}" --sigma-bar-ion-source "${SIGMA_BAR_ION_SOURCE}")
+  if [[ "${SIGMA_BAR_ION_MODE}" == "explicit" ]]; then
+    : "${SIGMA_BAR_ION_CM2:?SIGMA_BAR_ION_CM2 is required in explicit sigma mode}"
+  fi
+  EXTRA_ARGS+=(--sigma-bar-ion-mode "${SIGMA_BAR_ION_MODE}" --sigma-bar-ion-source "${SIGMA_BAR_ION_SOURCE}")
+  if [[ -n "${SIGMA_BAR_ION_CM2}" ]]; then
+    EXTRA_ARGS+=(--sigma-bar-ion-cm2 "${SIGMA_BAR_ION_CM2}")
+  fi
 fi
 if [[ "${BACKEND}" == "voronoi-transmission" ]]; then
   EXTRA_ARGS+=(--voronoi-neighbors "${VORONOI_NEIGHBORS}" --voronoi-gradient-batch-size "${VORONOI_GRADIENT_BATCH_SIZE}")

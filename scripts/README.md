@@ -161,11 +161,10 @@ and one placeholder `GRIDS=256` label. Override `SIMULATIONS`, `BACKENDS`,
 `GRIDS`, `VORONOI_NEIGHBORS`, `VORONOI_GRADIENT_BATCH_SIZE`, or use
 `DRY_RUN=1` to inspect the discovered snapshot set.
 
-The equivalent all-snapshot submission for both Thesan simulations is:
+The equivalent all-snapshot submission for both Thesan simulations is. By default this uses all three `PhotonDensity` groups and the existing THESAN `c*sigma` coefficients from the Gamma_HI calculation:
 
 ```bash
-SIGMA_BAR_ION_CM2=<cross-section> \
-SIGMA_BAR_ION_SOURCE="documented cross-section source" \
+SIGMA_BAR_ION_MODE=thesan-photon-groups \
 THESAN_ROOT=/lustre/work/carlos.lopez \
 MEM_256=64gb WALLTIME_256=24:00:00 \
 bash scripts/submit_thesan_jobs.sh

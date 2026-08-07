@@ -26,6 +26,7 @@ def test_compute_help():
     assert "raw-transmission" in help_text
     assert "voronoi-transmission" in help_text
     assert "--sigma-bar-ion-cm2" in help_text
+    assert "--sigma-bar-ion-mode" in help_text
     assert "--radius-mode" in help_text
     assert "--simulation-name" in help_text
     assert "--load-mode" in help_text
@@ -50,6 +51,20 @@ def test_voronoi_transmission_requires_sigma_and_provenance(tmp_path):
         assert "sigma-bar-ion-cm2" in str(exc)
     else:
         raise AssertionError("voronoi-transmission should require sigma")
+
+
+def test_thesan_group_sigma_mode_does_not_require_scalar_sigma():
+    from clumping_factor.configuration import validate_compute_config
+
+    args = build_compute_parser().parse_args(
+        [
+            "--particle-type", "gas",
+            "--backend", "voronoi-transmission",
+            "--sigma-bar-ion-mode", "thesan-photon-groups",
+            "--sigma-bar-ion-source", "THESAN group coefficients",
+        ]
+    )
+    validate_compute_config(args)
 
 
 def test_campaign_plot_help():

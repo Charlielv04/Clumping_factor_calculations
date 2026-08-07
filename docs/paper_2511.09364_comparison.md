@@ -219,7 +219,13 @@ Handle limiting cases physically:
 
 Do not add a tunable gradient floor without reporting it: a floor can artificially make uniform neutral regions transmissive. A clearly defined zero-gradient branch is easier to interpret. As a numerical-systematics test, also calculate gradients after one-cell smoothing or with a fourth-order periodic stencil.
 
-The paper derives `sigma_bar_ion` from its assumed UV-background spectrum. THESAN follows three photon groups, so the most faithful THESAN adaptation is to calculate a photon-number- or photoionization-rate-weighted effective HI cross-section from the first ionizing group, if its group-averaged cross-section is available in the simulation parameters. Otherwise expose `sigma_bar_ion` as a required input and report results for a documented fiducial value and plausible alternatives. This cross-section choice is a genuine physical systematic, not only a numerical option.
+The paper derives `sigma_bar_ion` from its assumed UV-background spectrum. For THESAN, the implementation now uses all three `PhotonDensity` groups when `sigma_bar_ion_mode=thesan-photon-groups`. It reuses the existing group-averaged `c*sigma` coefficients used by the Gamma_HI calculation and computes
+
+```text
+sigma_bar_ion = sum_b(V-weighted PhotonDensity_b * sigma_b) / sum_b(V-weighted PhotonDensity_b)
+```
+
+with `sigma_b = (c*sigma)_b / c`. The result and group weights are recorded in JSON. An explicit `sigma_bar_ion` remains available because the cross-section choice is a genuine physical systematic, not only a numerical option.
 
 ### Pass 2: integrate on native gas-cell volumes
 

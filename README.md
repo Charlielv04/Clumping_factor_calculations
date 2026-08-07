@@ -115,6 +115,8 @@ clumping-compute \
 
 The cross-section has no implicit default. For PBS submissions, provide the same values through `SIGMA_BAR_ION_CM2` and `SIGMA_BAR_ION_SOURCE`.
 
+For THESAN snapshots containing `PhotonDensity`, use `--sigma-bar-ion-mode thesan-photon-groups` to derive the gray cross-section from all three groups. The code uses the existing `THESAN_SIGMA_C_CM3_S` coefficients from the Gamma_HI calculation, converts `c*sigma` to sigma, and volume-weights the three photon-number densities. The derived value and group weights are written to the result diagnostics.
+
 The grid-free native-cell variant avoids CIC/TSC mass assignment:
 
 ```bash

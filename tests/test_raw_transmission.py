@@ -12,13 +12,14 @@ from clumping_factor.loaders import (
 from clumping_factor.raw_transmission import (
     compute_raw_transmission_chunked,
     compute_voronoi_transmission_chunked,
+    effective_sigma_bar_ion_from_photon_groups,
     native_cell_least_squares_gradient,
     raw_transmission_clumping,
     transmission_from_neutral_grid,
 )
 
 
-def _write_snapshot(tmp_path, hi=None, hii=None):
+def _write_snapshot(tmp_path, hi=None, hii=None, photon_density=None):
     snapdir = tmp_path / "snapdir_000"
     snapdir.mkdir(parents=True)
     path = snapdir / "snap_000.0.hdf5"
@@ -47,6 +48,8 @@ def _write_snapshot(tmp_path, hi=None, hii=None):
         metals = np.zeros((4, 10), dtype=np.float32)
         metals[:, 0] = 0.76
         gas.create_dataset("GFM_Metals", data=metals)
+        if photon_density is not None:
+            gas.create_dataset("PhotonDensity", data=np.asarray(photon_density, dtype=np.float32))
     return tmp_path
 
 
@@ -70,6 +73,18 @@ def test_uniform_density_with_half_transmission_returns_two():
 def test_uniform_density_with_unit_transmission_returns_one():
     factor, _ = raw_transmission_clumping(np.ones(4), np.arange(1, 5), np.ones(4))
     assert np.isclose(factor, 1.0)
+
+
+def test_effective_sigma_uses_all_three_thesan_groups():
+    from clumping_factor.forest.constants import SPEED_OF_LIGHT_CM_S
+    from clumping_factor.forest.ionizing import THESAN_SIGMA_C_CM3_S
+
+    group_sums = np.array([1.0, 2.0, 3.0])
+    sigma, diagnostics = effective_sigma_bar_ion_from_photon_groups(group_sums)
+    expected = np.dot(group_sums / group_sums.sum(), THESAN_SIGMA_C_CM3_S) / SPEED_OF_LIGHT_CM_S
+    assert np.isclose(sigma, expected)
+    assert np.allclose(diagnostics["photon_group_volume_weights"], group_sums / group_sums.sum())
+    assert len(diagnostics["sigma_group_cm2"]) == 3
 
 
 def test_transmission_zero_gradient_limits():
@@ -155,6 +170,26 @@ def test_voronoi_transmission_cli_writes_scalar_result(tmp_path):
     assert "native-cell-neighbor" in document["backend"]["method"]
     assert document["clumping_factor"] is not None
     assert "grid_size" in document["parameters"]
+
+
+def test_voronoi_transmission_can_derive_sigma_from_all_photon_groups(tmp_path):
+    photon_density = np.array([[1.0, 2.0, 3.0]] * 4, dtype=np.float32)
+    base_path = _write_snapshot(tmp_path / "groups", photon_density=photon_density)
+    metadata = read_snapshot_metadata(base_path, 0)
+    factor, _, diagnostics = compute_voronoi_transmission_chunked(
+        lambda: iter_raw_transmission_chunks(base_path, 0, 2),
+        metadata.lbox,
+        metadata.scale_factor,
+        metadata.hubble_param,
+        sigma_bar_ion_cm2=None,
+        chunk_size=2,
+        sigma_bar_ion_mode="thesan-photon-groups",
+        neighbor_count=3,
+        gradient_batch_size=2,
+    )
+    assert np.isfinite(factor)
+    assert diagnostics["sigma_bar_ion_mode"] == "thesan-photon-groups"
+    assert np.allclose(diagnostics["photon_group_volume_weights"], [1 / 6, 2 / 6, 3 / 6])
 
 
 def test_thesan_field_convention_and_chunk_loading(tmp_path):
