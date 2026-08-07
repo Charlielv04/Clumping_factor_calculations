@@ -56,7 +56,7 @@ The `raw-volume` backend correctly forms volume-weighted moments of gas mass den
 C_rho,V = [sum(rho^2 V) / sum(V)] / [sum(rho V) / sum(V)]^2.
 ```
 
-This is the closest current numerical foundation to the paper, but it still lacks ionization state, electron abundance, temperature-dependent recombination, neutral-density gradients, and transmission weighting.
+The `raw-transmission` backend adds the original grid-derived density-weighted transmission prototype. The `voronoi-transmission` backend now removes the grid mass-assignment step and estimates the neutral-density gradient from periodic native-cell neighbors. Both still calculate density moments rather than the paper's full temperature- and ionization-dependent recombination numerator.
 
 ## Main differences
 
@@ -293,18 +293,18 @@ C_norm = <alpha(T) n_HII n_e>_V
 
 This isolates field loading, unit conversion, temperature, ionization, and recombination-coefficient logic before introducing a noisy gradient. It is also scientifically more meaningful than density-only clumping.
 
-### Stage 2: grid-derived transmission with native-cell integration
+### Stage 2: transmission with native-cell integration
 
-This is the best first approximation to the paper for existing moving-mesh snapshots:
+The preferred implementation is native-cell transmission. A regular-grid version remains available as `raw-transmission` for comparison, but the grid-free `voronoi-transmission` backend avoids mass assignment:
 
-1. Deposit neutral-hydrogen number density, not neutral mass alone, onto a uniform grid using a volume-conservative scheme.
-2. Compute a periodic finite-difference gradient of the physical `n_HI` grid.
-3. Evaluate `tau_eff` and `F` on the grid, with explicit handling for `|grad(n_HI)| -> 0` and clipping before `exp`.
-4. Interpolate `F` back to gas-cell centers.
+1. Compute native-cell `n_HI` directly from gas mass, hydrogen abundance, neutral fraction, and native cell volume.
+2. Find periodic native-cell neighbors from the cell centers.
+3. Reconstruct the local physical `grad(n_HI)` with a weighted least-squares stencil.
+4. Evaluate `tau_eff` and `F` on the native cells, with explicit handling for `|grad(n_HI)| -> 0` and clipping before `exp`.
 5. Accumulate native-cell volume sums of `alpha(T) n_HII n_e F`, `n_HII`, `n_e`, and optionally `F`.
 6. Report both `C_norm,F` (Eq. 7) and `C_rec,F` (Eq. 5), plus the component means needed to audit them.
 
-Using native cell volumes for the final integral avoids replacing the moving-mesh volume measure with an arbitrary analysis grid. The grid is then used only for the spatial derivative and transmission estimate.
+Using native cell volumes throughout avoids replacing the moving-mesh volume measure with an arbitrary analysis grid. The current snapshot schema does not expose shared face areas, so the implemented neighbor reconstruction is a controlled approximation to a full finite-volume Voronoi gradient. If face connectivity is exported later, the least-squares stencil can be replaced by the exact face-area Gauss sum.
 
 ### Stage 3: fully gridded cross-check
 
@@ -328,7 +328,7 @@ Run Stage 2 and Stage 3 at several grid sizes. Their convergence difference is a
 - Two-zone self-shielding test: dense neutral cells should contribute little as `F -> 0`.
 - Full-load and chunked paths must agree.
 - Physical/comoving unit conversion must give identical dimensionless results under a controlled scale-factor transformation.
-- Convergence tests over transmission-grid size, CIC/TSC assignment, and gradient stencil.
+- Convergence tests over native-cell neighbor count and gradient stencil; compare against the existing grid-based `raw-transmission` backend.
 - Compare `F = 1`, hard overdensity masks, and derived `F` on the same snapshot to separate recombination physics from IGM selection.
 
 ## Scientific limitations for precomputed simulations

@@ -4,7 +4,13 @@ from pathlib import Path
 
 import numpy as np
 
-from clumping_factor.cli import build_campaign_plot_parser, build_compute_parser, evolution_plot_main, plot_main, run_compute
+from clumping_factor.cli import (
+    build_campaign_plot_parser,
+    build_compute_parser,
+    evolution_plot_main,
+    plot_main,
+    run_compute,
+)
 from clumping_factor.models import GridResult, ParticleData
 from clumping_factor.plotting import _auto_plot_context, _campaign_simulation_name, _plot_label
 from clumping_factor.results import canonical_thesan_result_path, default_output_path, resolve_simulation_name
@@ -18,6 +24,7 @@ def test_compute_help():
     assert "raw" in help_text
     assert "raw-volume" in help_text
     assert "raw-transmission" in help_text
+    assert "voronoi-transmission" in help_text
     assert "--sigma-bar-ion-cm2" in help_text
     assert "--radius-mode" in help_text
     assert "--simulation-name" in help_text
@@ -32,6 +39,17 @@ def test_compute_help():
     assert "--work-partition" in help_text
     assert "--max-file-readers" in help_text
     assert "TSC" in help_text
+
+
+def test_voronoi_transmission_requires_sigma_and_provenance(tmp_path):
+    args = build_compute_parser().parse_args(["--particle-type", "gas", "--backend", "voronoi-transmission"])
+    args.output = str(tmp_path / "result.json")
+    try:
+        run_compute(args)
+    except ValueError as exc:
+        assert "sigma-bar-ion-cm2" in str(exc)
+    else:
+        raise AssertionError("voronoi-transmission should require sigma")
 
 
 def test_campaign_plot_help():

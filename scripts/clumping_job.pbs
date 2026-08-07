@@ -42,6 +42,8 @@ PROGRESS_INTERVAL="${PROGRESS_INTERVAL:-25}"
 VERBOSE="${VERBOSE:-1}"
 SIGMA_BAR_ION_CM2="${SIGMA_BAR_ION_CM2:-}"
 SIGMA_BAR_ION_SOURCE="${SIGMA_BAR_ION_SOURCE:-}"
+VORONOI_NEIGHBORS="${VORONOI_NEIGHBORS:-32}"
+VORONOI_GRADIENT_BATCH_SIZE="${VORONOI_GRADIENT_BATCH_SIZE:-100000}"
 RAW_CLUMPING_MODE="${RAW_CLUMPING_MODE:-density}"
 RAW_HII_SOURCE="${RAW_HII_SOURCE:-auto}"
 RAW_ELECTRON_SOURCE="${RAW_ELECTRON_SOURCE:-constant}"
@@ -116,10 +118,13 @@ fi
 if [[ -n "${MEMORY_LIMIT}" ]]; then
   EXTRA_ARGS+=(--memory-limit "${MEMORY_LIMIT}" --memory-safety-fraction "${MEMORY_SAFETY_FRACTION}")
 fi
-if [[ "${BACKEND}" == "raw-transmission" ]]; then
-  : "${SIGMA_BAR_ION_CM2:?SIGMA_BAR_ION_CM2 is required for raw-transmission}"
-  : "${SIGMA_BAR_ION_SOURCE:?SIGMA_BAR_ION_SOURCE is required for raw-transmission}"
+if [[ "${BACKEND}" == "raw-transmission" || "${BACKEND}" == "voronoi-transmission" ]]; then
+  : "${SIGMA_BAR_ION_CM2:?SIGMA_BAR_ION_CM2 is required for transmission backends}"
+  : "${SIGMA_BAR_ION_SOURCE:?SIGMA_BAR_ION_SOURCE is required for transmission backends}"
   EXTRA_ARGS+=(--sigma-bar-ion-cm2 "${SIGMA_BAR_ION_CM2}" --sigma-bar-ion-source "${SIGMA_BAR_ION_SOURCE}")
+fi
+if [[ "${BACKEND}" == "voronoi-transmission" ]]; then
+  EXTRA_ARGS+=(--voronoi-neighbors "${VORONOI_NEIGHBORS}" --voronoi-gradient-batch-size "${VORONOI_GRADIENT_BATCH_SIZE}")
 fi
 if [[ "${BACKEND}" == "raw" || "${BACKEND}" == "raw-volume" ]]; then
   EXTRA_ARGS+=(

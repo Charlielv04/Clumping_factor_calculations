@@ -95,6 +95,7 @@ Backends:
 - `raw`: raw gas-cell density calculation matching the first legacy gas script; only valid with `--particle-type gas`
 - `raw-volume`: raw gas-cell density calculation weighted by each gas cell volume; only valid with `--particle-type gas`
 - `raw-transmission`: native gas-cell, volume-weighted density clumping with a grid-derived `exp(-tau_eff)` weight; only valid with `--particle-type gas`
+- `voronoi-transmission`: grid-free native gas-cell density clumping with a periodic Voronoi-neighbor gradient and `exp(-tau_eff)` weight; only valid with `--particle-type gas`
 
 `raw-transmission` reads `HI_Fraction`, `HII_Fraction`, and hydrogen abundance from `GFM_Metals[:,0]`. It verifies `HI_Fraction + HII_Fraction ~= 1`, builds an auxiliary volume-weighted neutral-hydrogen grid, and returns one scalar rather than an overdensity-threshold sweep:
 
@@ -113,6 +114,23 @@ clumping-compute \
 ```
 
 The cross-section has no implicit default. For PBS submissions, provide the same values through `SIGMA_BAR_ION_CM2` and `SIGMA_BAR_ION_SOURCE`.
+
+The grid-free native-cell variant avoids CIC/TSC mass assignment:
+
+```bash
+clumping-compute \
+  --base-path ../Thesan-1/output \
+  --simulation-name Thesan-1 \
+  --snapshot 81 \
+  --particle-type gas \
+  --backend voronoi-transmission \
+  --load-mode chunked \
+  --voronoi-neighbors 32 \
+  --sigma-bar-ion-cm2 <AREPO-RT-group-average> \
+  --sigma-bar-ion-source "THESAN AREPO-RT first ionizing group"
+```
+
+The current snapshots provide cell centers and native cell volumes, but not shared Voronoi-face geometry. The implementation therefore reconstructs a periodic nearest-cell stencil with `cKDTree` and obtains a weighted local least-squares gradient from neighboring native-cell values. All valid cells and the neighbor index table must be retained in memory for this search; `--memory-limit` will reject a run whose estimated working set is too large. `--voronoi-gradient-batch-size` controls gradient accumulation memory, while `--threads` controls the neighbor query workers.
 
 For gridded gas calculations, `--radius-mode sphere` treats each gas cell volume as a sphere and `--radius-mode cube` uses the cube root of the cell volume. The default is `sphere`.
 

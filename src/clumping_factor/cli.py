@@ -18,7 +18,7 @@ def build_compute_parser() -> argparse.ArgumentParser:
     parser.add_argument("--particle-type", choices=["gas", "dm"], required=True)
     parser.add_argument(
         "--backend",
-        choices=["sphere", "cube", "pylians", "raw", "raw-volume", "raw-transmission"],
+        choices=["sphere", "cube", "pylians", "raw", "raw-volume", "raw-transmission", "voronoi-transmission"],
         required=True,
     )
     parser.add_argument(
@@ -132,7 +132,19 @@ def build_compute_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--sigma-bar-ion-source",
-        help="Human-readable provenance for --sigma-bar-ion-cm2; required by --backend raw-transmission.",
+        help="Human-readable provenance for --sigma-bar-ion-cm2; required by transmission backends.",
+    )
+    parser.add_argument(
+        "--voronoi-neighbors",
+        type=int,
+        default=32,
+        help="Native-cell neighbors used by --backend voronoi-transmission.",
+    )
+    parser.add_argument(
+        "--voronoi-gradient-batch-size",
+        type=int,
+        default=100_000,
+        help="Cells processed per gradient batch by --backend voronoi-transmission.",
     )
     parser.add_argument("--output")
     parser.add_argument("--output-dir", default="results")
@@ -477,6 +489,12 @@ def _compute_raw_transmission_chunked(*args, **kwargs):
     from .raw_transmission import compute_raw_transmission_chunked
 
     return compute_raw_transmission_chunked(*args, **kwargs)
+
+
+def _compute_voronoi_transmission_chunked(*args, **kwargs):
+    from .raw_transmission import compute_voronoi_transmission_chunked
+
+    return compute_voronoi_transmission_chunked(*args, **kwargs)
 
 
 def _validate_compute_args(args: argparse.Namespace) -> None:
@@ -829,12 +847,12 @@ def run_compute(args: argparse.Namespace) -> Path:
     simulation_name = _resolve_simulation_name(args.base_path, getattr(args, "simulation_name", None))
     cosmology = _snapshot_cosmology(args.base_path, args.snapshot)
 
-    if args.backend == "raw-transmission":
+    if args.backend in {"raw-transmission", "voronoi-transmission"}:
         metadata = _read_snapshot_metadata(args.base_path, args.snapshot)
         if metadata.scale_factor is None:
-            raise ValueError("raw-transmission requires snapshot Time or Redshift metadata.")
+            raise ValueError(f"{args.backend} requires snapshot Time or Redshift metadata.")
         if metadata.hubble_param is None:
-            raise ValueError("raw-transmission requires the snapshot HubbleParam header attribute.")
+            raise ValueError(f"{args.backend} requires the snapshot HubbleParam header attribute.")
         field_metadata = _inspect_raw_transmission_fields(args.base_path, args.snapshot)
         selected_load_mode, estimated_gb = _select_load_mode(args, "gas")
         stream_chunk_size = (
@@ -847,28 +865,49 @@ def run_compute(args: argparse.Namespace) -> Path:
                 args.snapshot,
                 stream_chunk_size,
             )
-        clumping_factor, transmission_timings, transmission_diagnostics = _compute_raw_transmission_chunked(
-            chunk_factory,
-            metadata.lbox,
-            metadata.scale_factor,
-            metadata.hubble_param,
-            args.grid_size,
-            getattr(args, "mas", "CIC"),
-            args.sigma_bar_ion_cm2,
-            stream_chunk_size,
-            progress=_progress_callback(args),
-            progress_interval=getattr(args, "progress_interval", 25),
-            memory_limit=getattr(args, "memory_limit", None),
-            memory_safety_fraction=getattr(args, "memory_safety_fraction", 0.1),
-        )
+        if args.backend == "raw-transmission":
+            clumping_factor, transmission_timings, transmission_diagnostics = _compute_raw_transmission_chunked(
+                chunk_factory,
+                metadata.lbox,
+                metadata.scale_factor,
+                metadata.hubble_param,
+                args.grid_size,
+                getattr(args, "mas", "CIC"),
+                args.sigma_bar_ion_cm2,
+                stream_chunk_size,
+                progress=_progress_callback(args),
+                progress_interval=getattr(args, "progress_interval", 25),
+                memory_limit=getattr(args, "memory_limit", None),
+                memory_safety_fraction=getattr(args, "memory_safety_fraction", 0.1),
+            )
+        else:
+            clumping_factor, transmission_timings, transmission_diagnostics = _compute_voronoi_transmission_chunked(
+                chunk_factory,
+                metadata.lbox,
+                metadata.scale_factor,
+                metadata.hubble_param,
+                args.sigma_bar_ion_cm2,
+                stream_chunk_size,
+                neighbor_count=args.voronoi_neighbors,
+                gradient_batch_size=args.voronoi_gradient_batch_size,
+                workers=getattr(args, "threads", 1),
+                progress=_progress_callback(args),
+                progress_interval=getattr(args, "progress_interval", 25),
+                memory_limit=getattr(args, "memory_limit", None),
+                memory_safety_fraction=getattr(args, "memory_safety_fraction", 0.1),
+            )
         transmission_diagnostics["load_mode"] = selected_load_mode
         timings = {**transmission_timings, "total": perf_counter() - total_t0}
+        effective_grid_size = args.grid_size if args.backend == "raw-transmission" else None
+        effective_mas = getattr(args, "mas", "CIC") if args.backend == "raw-transmission" else None
         parameters = {
             "base_path": args.base_path,
             "simulation_name": simulation_name,
             "snapshot": args.snapshot,
-            "grid_size": args.grid_size,
-            "mas": getattr(args, "mas", "CIC"),
+            "grid_size": effective_grid_size,
+            "mas": effective_mas,
+            "voronoi_neighbors": getattr(args, "voronoi_neighbors", None),
+            "voronoi_gradient_batch_size": getattr(args, "voronoi_gradient_batch_size", None),
             "load_mode": selected_load_mode,
             "chunk_size": stream_chunk_size if selected_load_mode == "chunked" else None,
             "estimated_full_load_gb": estimated_gb,
@@ -890,8 +929,12 @@ def run_compute(args: argparse.Namespace) -> Path:
             "statistic": "transmission_weighted_raw_gas_density",
             "parameters": parameters,
             "backend": {
-                "backend": "raw-transmission",
-                "method": "native gas-cell volume moments with grid-derived exp(-tau_eff)",
+                "backend": args.backend,
+                "method": (
+                    "native gas-cell volume moments with grid-derived exp(-tau_eff)"
+                    if args.backend == "raw-transmission"
+                    else "native gas-cell volume moments with periodic native-cell-neighbor-derived exp(-tau_eff)"
+                ),
                 "load_mode": selected_load_mode,
             },
             "clumping_factor": None if not np.isfinite(clumping_factor) else float(clumping_factor),
@@ -905,7 +948,7 @@ def run_compute(args: argparse.Namespace) -> Path:
             args.particle_type,
             args.backend,
             args.snapshot,
-            args.grid_size,
+            effective_grid_size,
             simulation_name,
         )
         return _write_json_result(document, output_path)

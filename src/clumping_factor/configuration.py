@@ -5,11 +5,14 @@ from typing import Any
 import numpy as np
 
 
+TRANSMISSION_BACKENDS = {"raw-transmission", "voronoi-transmission"}
+
+
 def validate_compute_config(args: Any) -> None:
     """Validate cross-option compute invariants independently of CLI parsing."""
-    if args.backend != "raw-transmission" and args.threshold_count < 1:
+    if args.backend not in TRANSMISSION_BACKENDS and args.threshold_count < 1:
         raise ValueError("--threshold-count must be at least 1.")
-    if args.backend != "raw-transmission" and args.threshold_min >= args.threshold_max:
+    if args.backend not in TRANSMISSION_BACKENDS and args.threshold_min >= args.threshold_max:
         raise ValueError("--threshold-min must be less than --threshold-max.")
     if args.threads < 1:
         raise ValueError("--threads must be at least 1.")
@@ -25,12 +28,13 @@ def validate_compute_config(args: Any) -> None:
             raise ValueError(f"{option} must be positive.")
     if not 0 <= getattr(args, "memory_safety_fraction", 0.1) < 1:
         raise ValueError("--memory-safety-fraction must be in [0, 1).")
-    if args.backend not in {"raw", "raw-volume"}:
+    if args.backend not in {"raw", "raw-volume", *TRANSMISSION_BACKENDS}:
         if args.grid_size < 1:
             raise ValueError("--grid-size must be at least 1.")
         if args.radius_bins < 1:
             raise ValueError("--radius-bins must be at least 1.")
-    if args.backend in {"raw", "raw-volume", "raw-transmission"} and args.particle_type != "gas":
+    raw_backends = {"raw", "raw-volume", *TRANSMISSION_BACKENDS}
+    if args.backend in raw_backends and args.particle_type != "gas":
         raise ValueError("raw backends are only valid with --particle-type gas.")
     if getattr(args, "mas", "CIC") != "CIC" and args.backend in {"raw", "raw-volume"}:
         raise ValueError("--mas TSC is only valid for gridded backends.")
@@ -43,11 +47,16 @@ def validate_compute_config(args: Any) -> None:
         "target_particle_type", "target_backend", "mask_particle_type", "mask_backend",
         "target_radius_mode", "mask_radius_mode",
     )
-    if args.backend in {"raw", "raw-volume", "raw-transmission"} and any(getattr(args, name, None) for name in separate_fields):
+    if args.backend in raw_backends and any(getattr(args, name, None) for name in separate_fields):
         raise ValueError("raw backends do not support separate mask/target fields.")
-    if args.backend == "raw-transmission":
+    if args.backend in TRANSMISSION_BACKENDS:
         sigma = getattr(args, "sigma_bar_ion_cm2", None)
         if sigma is None or not np.isfinite(sigma) or sigma <= 0:
-            raise ValueError("--backend raw-transmission requires a positive --sigma-bar-ion-cm2.")
+            raise ValueError(f"--backend {args.backend} requires a positive --sigma-bar-ion-cm2.")
         if not str(getattr(args, "sigma_bar_ion_source", "") or "").strip():
-            raise ValueError("--backend raw-transmission requires --sigma-bar-ion-source.")
+            raise ValueError(f"--backend {args.backend} requires --sigma-bar-ion-source.")
+    if args.backend == "voronoi-transmission":
+        if getattr(args, "voronoi_neighbors", 32) < 3:
+            raise ValueError("--voronoi-neighbors must be at least 3.")
+        if getattr(args, "voronoi_gradient_batch_size", 100_000) < 1:
+            raise ValueError("--voronoi-gradient-batch-size must be positive.")

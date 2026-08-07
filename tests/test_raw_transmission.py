@@ -1,10 +1,18 @@
+import json
+
 import h5py
 import numpy as np
 
 from clumping_factor.cli import build_compute_parser, run_compute
-from clumping_factor.loaders import inspect_raw_transmission_fields, iter_raw_transmission_chunks, read_snapshot_metadata
+from clumping_factor.loaders import (
+    inspect_raw_transmission_fields,
+    iter_raw_transmission_chunks,
+    read_snapshot_metadata,
+)
 from clumping_factor.raw_transmission import (
     compute_raw_transmission_chunked,
+    compute_voronoi_transmission_chunked,
+    native_cell_least_squares_gradient,
     raw_transmission_clumping,
     transmission_from_neutral_grid,
 )
@@ -88,6 +96,67 @@ def test_periodic_gradient_is_finite_and_wrapped():
     assert np.isclose(tau[0, 0, 0], tau[0, 1, 1])
 
 
+def test_native_cell_gradient_is_zero_for_a_uniform_field():
+    coords = np.array(
+        [[0.1, 0.1, 0.1], [0.1, 0.1, 0.6], [0.1, 0.6, 0.1], [0.6, 0.1, 0.1],
+         [0.6, 0.6, 0.6], [0.6, 0.6, 0.1], [0.6, 0.1, 0.6], [0.1, 0.6, 0.6]],
+        dtype=np.float64,
+    )
+    gradient, diagnostics = native_cell_least_squares_gradient(
+        np.ones(coords.shape[0]), coords, 1.0, neighbor_count=7, batch_size=3
+    )
+    assert np.allclose(gradient, 0.0)
+    assert diagnostics["gradient_method"].startswith("periodic native-cell")
+
+
+def test_native_cell_transmission_is_chunk_size_independent(tmp_path):
+    base_path = _write_snapshot(tmp_path)
+    metadata = read_snapshot_metadata(base_path, 0)
+
+    def calculate(chunk_size):
+        return compute_voronoi_transmission_chunked(
+            lambda: iter_raw_transmission_chunks(base_path, 0, chunk_size),
+            metadata.lbox,
+            metadata.scale_factor,
+            metadata.hubble_param,
+            sigma_bar_ion_cm2=1e-18,
+            chunk_size=chunk_size,
+            neighbor_count=3,
+            gradient_batch_size=2,
+        )
+
+    factor_one, _, diagnostics_one = calculate(1)
+    factor_four, _, diagnostics_four = calculate(4)
+    assert np.isclose(factor_one, factor_four)
+    assert diagnostics_one["cell_count"] == diagnostics_four["cell_count"] == 4
+
+
+def test_voronoi_transmission_cli_writes_scalar_result(tmp_path):
+    base_path = _write_snapshot(tmp_path / "snapshot")
+    output = tmp_path / "result.json"
+    args = build_compute_parser().parse_args(
+        [
+            "--base-path", str(base_path),
+            "--snapshot", "0",
+            "--particle-type", "gas",
+            "--backend", "voronoi-transmission",
+            "--load-mode", "chunked",
+            "--chunk-size", "2",
+            "--voronoi-neighbors", "3",
+            "--voronoi-gradient-batch-size", "2",
+            "--sigma-bar-ion-cm2", "1e-18",
+            "--sigma-bar-ion-source", "synthetic test",
+            "--output", str(output),
+        ]
+    )
+    written = run_compute(args)
+    document = json.loads(written.read_text())
+    assert document["backend"]["backend"] == "voronoi-transmission"
+    assert "native-cell-neighbor" in document["backend"]["method"]
+    assert document["clumping_factor"] is not None
+    assert "grid_size" in document["parameters"]
+
+
 def test_thesan_field_convention_and_chunk_loading(tmp_path):
     base_path = _write_snapshot(tmp_path)
     fields = inspect_raw_transmission_fields(base_path, 0)
@@ -149,8 +218,6 @@ def test_raw_transmission_cli_writes_scalar_result(tmp_path):
     )
     written = run_compute(args)
     assert written == output
-    import json
-
     document = json.loads(output.read_text())
     assert document["schema_version"] == 2
     assert document["backend"]["backend"] == "raw-transmission"

@@ -146,6 +146,35 @@ For Thesan-1 snapshot 81, set `BASE_PATH=../Thesan-1/output SNAPSHOT=81 SIMULATI
 
 Submit larger grids only after checking queue limits with `qstat -Q` or `qstat -Qf`.
 
+To submit the grid-free native-cell transmission calculation for every available
+AIDA-TNG model and snapshot:
+
+```bash
+SIGMA_BAR_ION_CM2=<cross-section> \
+SIGMA_BAR_ION_SOURCE="documented cross-section source" \
+MEM_256=64gb WALLTIME_256=24:00:00 \
+bash scripts/submit_aida_tng_jobs.sh
+```
+
+The AIDA wrapper defaults to `BACKENDS=voronoi-transmission`, `PARTICLES=gas`,
+and one placeholder `GRIDS=256` label. Override `SIMULATIONS`, `BACKENDS`,
+`GRIDS`, `VORONOI_NEIGHBORS`, `VORONOI_GRADIENT_BATCH_SIZE`, or use
+`DRY_RUN=1` to inspect the discovered snapshot set.
+
+The equivalent all-snapshot submission for both Thesan simulations is:
+
+```bash
+SIGMA_BAR_ION_CM2=<cross-section> \
+SIGMA_BAR_ION_SOURCE="documented cross-section source" \
+THESAN_ROOT=/lustre/work/carlos.lopez \
+MEM_256=64gb WALLTIME_256=24:00:00 \
+bash scripts/submit_thesan_jobs.sh
+```
+
+Use `SIMULATIONS="Thesan-1"` or `SIMULATIONS="Thesan-2"` to restrict the
+submission. These wrappers scan each simulation's `output/snapdir_*` folders
+and submit one PBS job per available snapshot.
+
 For redshift evolution, submit one bounded array task per snapshot. Each task keeps the existing same-node worker pool, while `MAX_CONCURRENT` limits simultaneous snapshot reads:
 
 ```bash

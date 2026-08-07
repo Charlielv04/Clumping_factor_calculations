@@ -109,6 +109,208 @@ def raw_transmission_clumping(
     return float(factor), diagnostics
 
 
+def native_cell_least_squares_gradient(
+    neutral_number_density: np.ndarray,
+    coords: np.ndarray,
+    lbox: float,
+    neighbor_count: int = 32,
+    batch_size: int = 100_000,
+    workers: int = 1,
+) -> tuple[np.ndarray, dict]:
+    """Estimate a periodic native-cell gradient without depositing onto a grid.
+
+    The snapshot does not currently expose Voronoi face areas or connectivity.
+    We therefore use a periodic nearest-cell stencil from cKDTree and solve a
+    weighted local linear reconstruction around each cell. The resulting
+    gradient uses the native cell-center field and minimum-image neighbor
+    separations; no mass assignment is performed. This is a native-cell
+    Voronoi-neighbor approximation, not an exact face-area Gauss reconstruction.
+    """
+    from scipy.spatial import cKDTree
+
+    n_hi = np.asarray(neutral_number_density, dtype=np.float64)
+    positions = np.asarray(coords, dtype=np.float64)
+    if n_hi.ndim != 1 or positions.shape != (n_hi.size, 3):
+        raise ValueError("neutral_number_density and coords must have matching shapes (N,) and (N, 3).")
+    if n_hi.size < 4:
+        raise ValueError("native-cell transmission requires at least four gas cells for a 3D gradient.")
+    if not np.all(np.isfinite(n_hi)) or np.any(n_hi < 0):
+        raise ValueError("neutral_number_density must be finite and non-negative.")
+    if not np.all(np.isfinite(positions)):
+        raise ValueError("coords must contain only finite values.")
+    if not np.isfinite(lbox) or lbox <= 0:
+        raise ValueError("lbox must be positive and finite.")
+    if neighbor_count < 3:
+        raise ValueError("neighbor_count must be at least 3.")
+    if batch_size < 1:
+        raise ValueError("batch_size must be at least 1.")
+    if workers < 1:
+        raise ValueError("workers must be at least 1.")
+
+    effective_neighbors = min(int(neighbor_count), n_hi.size - 1)
+    wrapped = np.mod(positions, float(lbox))
+    tree = cKDTree(wrapped, boxsize=float(lbox))
+    _, neighbor_indices = tree.query(wrapped, k=effective_neighbors + 1, workers=int(workers))
+    neighbor_indices = np.asarray(neighbor_indices, dtype=np.int64)[:, 1:]
+
+    gradient = np.zeros((n_hi.size, 3), dtype=np.float64)
+    zero_distance_count = 0
+    singular_count = 0
+    distance_floor = max(float(lbox) * 1.0e-12, np.finfo(np.float64).eps)
+    for start in range(0, n_hi.size, int(batch_size)):
+        stop = min(start + int(batch_size), n_hi.size)
+        indices = neighbor_indices[start:stop]
+        displacement = wrapped[indices] - wrapped[start:stop, None, :]
+        displacement -= float(lbox) * np.rint(displacement / float(lbox))
+        distance_squared = np.sum(displacement**2, axis=2)
+        valid = distance_squared > distance_floor**2
+        zero_distance_count += int(np.count_nonzero(~valid))
+
+        weights = np.zeros_like(distance_squared)
+        weights[valid] = 1.0 / distance_squared[valid]
+        delta_n = n_hi[indices] - n_hi[start:stop, None]
+        matrix = np.einsum("bki,bkj,bk->bij", displacement, displacement, weights, optimize=True)
+        vector = np.einsum("bki,bk,bk->bi", displacement, delta_n, weights, optimize=True)
+        matrix_pinv = np.linalg.pinv(matrix, rcond=1.0e-12)
+        gradient[start:stop] = np.einsum("bij,bj->bi", matrix_pinv, vector, optimize=True)
+        singular = np.linalg.matrix_rank(matrix, tol=1.0e-12) < 3
+        singular_count += int(np.count_nonzero(singular))
+
+    diagnostics = {
+        "gradient_method": "periodic native-cell weighted least-squares reconstruction (Voronoi-neighbor approximation)",
+        "neighbor_count_requested": int(neighbor_count),
+        "neighbor_count_used": int(effective_neighbors),
+        "gradient_batch_size": int(batch_size),
+        "gradient_workers": int(workers),
+        "zero_distance_neighbor_count": zero_distance_count,
+        "rank_deficient_cell_count": singular_count,
+    }
+    return gradient, diagnostics
+
+
+def compute_voronoi_transmission_chunked(
+    chunk_factory: Callable[[], Iterable[dict]],
+    lbox: float,
+    scale_factor: float,
+    hubble_param: float,
+    sigma_bar_ion_cm2: float,
+    chunk_size: int,
+    neighbor_count: int = 32,
+    gradient_batch_size: int = 100_000,
+    workers: int = 1,
+    progress: Callable[[str], None] | None = None,
+    progress_interval: int = 25,
+    memory_limit: str | float | int | None = None,
+    memory_safety_fraction: float = 0.1,
+) -> tuple[float, dict[str, float], dict]:
+    """Compute transmission-weighted clumping from native gas cells.
+
+    This is the grid-free companion to :func:`compute_raw_transmission_chunked`.
+    It retains valid native cells in memory because the neighbor search requires
+    the complete periodic point set.
+    """
+    total_t0 = perf_counter()
+    if not np.isfinite(scale_factor) or scale_factor <= 0:
+        raise ValueError("native-cell transmission requires a positive snapshot scale factor.")
+    if not np.isfinite(hubble_param) or hubble_param <= 0:
+        raise ValueError("native-cell transmission requires a positive HubbleParam header attribute.")
+    if not np.isfinite(sigma_bar_ion_cm2) or sigma_bar_ion_cm2 <= 0:
+        raise ValueError("sigma_bar_ion_cm2 must be positive and finite.")
+    if not 0 <= memory_safety_fraction < 1:
+        raise ValueError("memory_safety_fraction must be in [0, 1).")
+    memory_limit_bytes = _parse_memory_bytes(memory_limit)
+
+    arrays: dict[str, list[np.ndarray]] = {
+        "coords": [], "density": [], "cell_volume": [], "hi_fraction": [], "hydrogen_mass_fraction": [],
+    }
+    input_count = valid_count = dropped_count = chunks = 0
+    t0 = perf_counter()
+    if progress:
+        progress("loading native gas cells for Voronoi-neighbor gradient")
+    for chunk in chunk_factory():
+        chunks += 1
+        input_count += int(chunk["input_count"])
+        valid_count += int(chunk["valid_count"])
+        dropped_count += int(chunk["dropped_count"])
+        for key in arrays:
+            arrays[key].append(np.asarray(chunk[key], dtype=np.float64))
+        if progress and chunks % progress_interval == 0:
+            progress(f"native cells loaded {chunks} chunks")
+    load_time = perf_counter() - t0
+    if valid_count == 0:
+        raise ValueError("Cannot compute native-cell transmission from an empty valid gas stream.")
+    estimated_bytes_per_cell = (16 + int(min(neighbor_count, valid_count - 1))) * np.dtype(np.float64).itemsize
+    estimated_bytes_per_cell += int(min(neighbor_count, valid_count - 1)) * np.dtype(np.int64).itemsize
+    estimated_peak_bytes = int(valid_count) * estimated_bytes_per_cell
+    if memory_limit_bytes is not None:
+        usable_bytes = int(memory_limit_bytes * (1.0 - memory_safety_fraction))
+        if estimated_peak_bytes > usable_bytes:
+            raise MemoryError(
+                "voronoi-transmission requires approximately "
+                f"{estimated_peak_bytes / 1024**3:.2f} GiB, exceeding the usable "
+                f"{usable_bytes / 1024**3:.2f} GiB from --memory-limit."
+            )
+
+    coords = np.concatenate(arrays["coords"])
+    density = np.concatenate(arrays["density"])
+    cell_volume = np.concatenate(arrays["cell_volume"])
+    hi_fraction = np.concatenate(arrays["hi_fraction"])
+    hydrogen_mass_fraction = np.concatenate(arrays["hydrogen_mass_fraction"])
+    arrays.clear()
+    density_unit = (1e10 * MSUN_G / hubble_param) / (KPC_CM / hubble_param) ** 3 / scale_factor**3
+    n_hi = density * hydrogen_mass_fraction * hi_fraction * density_unit / PROTON_MASS_G
+    coordinate_unit_cm = scale_factor / hubble_param * KPC_CM
+
+    t0 = perf_counter()
+    if progress:
+        progress("estimating native-cell neutral-hydrogen gradient")
+    gradient_code, gradient_diagnostics = native_cell_least_squares_gradient(
+        n_hi,
+        coords,
+        lbox,
+        neighbor_count=neighbor_count,
+        batch_size=gradient_batch_size,
+        workers=workers,
+    )
+    gradient_magnitude = np.linalg.norm(gradient_code, axis=1) / coordinate_unit_cm
+    zero_gradient = gradient_magnitude == 0.0
+    tau = np.empty_like(n_hi)
+    finite_gradient = ~zero_gradient
+    tau[finite_gradient] = 0.5 * sigma_bar_ion_cm2 * n_hi[finite_gradient] ** 2 / gradient_magnitude[finite_gradient]
+    tau[zero_gradient & (n_hi == 0.0)] = 0.0
+    tau[zero_gradient & (n_hi > 0.0)] = np.inf
+    tau = np.clip(tau, 0.0, 700.0)
+    transmission = np.exp(-tau)
+    gradient_time = perf_counter() - t0
+
+    factor, diagnostics = raw_transmission_clumping(density, cell_volume, transmission, tau=tau)
+    diagnostics.update({
+        "input_count": input_count,
+        "valid_count": valid_count,
+        "dropped_count": dropped_count,
+        "chunk_count": chunks,
+        "chunk_size": int(chunk_size),
+        "load_mode": "native-cell-array",
+        "neighbor_count": int(min(neighbor_count, valid_count - 1)),
+        "cell_count": int(valid_count),
+        "mean_neutral_hydrogen_number_density_cm3": float(np.average(n_hi, weights=cell_volume)),
+        "coordinate_unit_cm": coordinate_unit_cm,
+        "estimated_peak_bytes": estimated_peak_bytes,
+        "memory_limit_bytes": memory_limit_bytes,
+        "memory_safety_fraction": memory_safety_fraction,
+        "zero_gradient_cells": int(np.count_nonzero(zero_gradient)),
+        "zero_gradient_neutral_cells": int(np.count_nonzero(zero_gradient & (n_hi > 0.0))),
+        "tau_clipped_cells": int(np.count_nonzero(tau >= 700.0)),
+        **gradient_diagnostics,
+    })
+    timings = {
+        "native_cell_load": load_time,
+        "native_cell_gradient": gradient_time,
+        "native_cell_transmission_total": perf_counter() - total_t0,
+    }
+    return factor, timings, diagnostics
+
+
 def compute_raw_transmission_chunked(
     chunk_factory: Callable[[], Iterable[dict]],
     lbox: float,

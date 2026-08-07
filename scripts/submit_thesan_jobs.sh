@@ -2,12 +2,12 @@
 
 set -euo pipefail
 
-AIDA_ROOT="${AIDA_ROOT:-/lustre/work/egaraldi/AIDA-TNG}"
-SIMULATIONS="${SIMULATIONS:-L35n1080_CDM L35n1080_SIDM1 L35n1080_vSIDM L35n1080_WDM3 L75n910_CDM L75n910_SIDM1 L75n910_vSIDM L75n910_WDM3}"
-RESULTS_FAMILY="${RESULTS_FAMILY:-aida-tng}"
+THESAN_ROOT="${THESAN_ROOT:-/lustre/work/carlos.lopez}"
+SIMULATIONS="${SIMULATIONS:-Thesan-1 Thesan-2}"
+RESULTS_FAMILY="${RESULTS_FAMILY:-thesan}"
 PARTICLES="${PARTICLES:-gas}"
 BACKENDS="${BACKENDS:-voronoi-transmission}"
-# The native-cell backend does not use a Cartesian grid.  The shared PBS
+# The native-cell backend does not use a Cartesian grid. The shared PBS
 # submitter still expects one grid label for resource and output naming.
 GRIDS="${GRIDS:-256}"
 SIGMA_BAR_ION_CM2="${SIGMA_BAR_ION_CM2:-}"
@@ -35,7 +35,7 @@ fi
 found=0
 submitted=0
 for simulation in ${SIMULATIONS}; do
-  output_dir="${AIDA_ROOT}/${simulation}/output"
+  output_dir="${THESAN_ROOT}/${simulation}/output"
   if [[ ! -d "${output_dir}" ]]; then
     echo "Skipping missing simulation output: ${output_dir}" >&2
     continue
@@ -60,7 +60,7 @@ for simulation in ${SIMULATIONS}; do
     fi
     snapshot="$((10#${snapshot}))"
     ((found += 1))
-    echo "AIDA-TNG ${simulation}: snapshot ${snapshot} (${snapshot_dir})"
+    echo "THESAN ${simulation}: snapshot ${snapshot} (${snapshot_dir})"
 
     if [[ "${DRY_RUN}" == "1" ]]; then
       continue
@@ -71,7 +71,7 @@ for simulation in ${SIMULATIONS}; do
     PARTICLES="${PARTICLES}" \
     BACKENDS="${BACKENDS}" \
     GRIDS="${GRIDS}" \
-    SOURCE_CAMPAIGN="AIDA-TNG" \
+    SOURCE_CAMPAIGN="THESAN" \
     RESULTS_LAYOUT="canonical" \
     RESULTS_FAMILY="${RESULTS_FAMILY}" \
     SNAPSHOT="${snapshot}" \
@@ -85,7 +85,7 @@ for simulation in ${SIMULATIONS}; do
 done
 
 if (( found == 0 )); then
-  echo "No AIDA-TNG snapshots were found under ${AIDA_ROOT}." >&2
+  echo "No Thesan snapshots were found under ${THESAN_ROOT}." >&2
   exit 1
 fi
 
