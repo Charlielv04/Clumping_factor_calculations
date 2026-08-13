@@ -1,0 +1,96 @@
+{
+  "workflow_version": 1,
+  "status": "success",
+  "started_at": "2026-08-07T05:38:22.662285+00:00",
+  "updated_at": "2026-08-07T05:38:35.511997+00:00",
+  "simulation": "output_4_128_sl",
+  "snapshot": 8,
+  "requested_products": [
+    "equations"
+  ],
+  "configuration": {
+    "base_path": "/lustre/work/carlos.lopez/Simulations/output_4_128_sl",
+    "snapshot": 8,
+    "simulation_name": "output_4_128_sl",
+    "products": [
+      "equations"
+    ],
+    "los_file": "/lustre/work/carlos.lopez/Simulations/output_4_128_sl_rays/rays_008.hdf5",
+    "output_root": "results/forest/output_4_128_sl",
+    "refresh_products": true,
+    "verbose": true,
+    "threads": 8,
+    "equation_workers": null,
+    "gamma_workers": null,
+    "mfp_workers": null,
+    "only_rays": null,
+    "line": "Ly a",
+    "resolution_kms": 1.0,
+    "static": false,
+    "mfp_starts_per_ray": 100,
+    "mfp_seed": 0,
+    "mfp_cross_check": false,
+    "gamma_hi_threshold": 0.5,
+    "gamma_cross_check": false,
+    "gamma_chunk_size": 1000000,
+    "progress_interval": 10,
+    "sigma_hi_cm2": 6.3e-18,
+    "temperature_file": null,
+    "compute_missing_temperature": true,
+    "mean_molecular_weight": 1.6,
+    "temperature_weighting": "volume",
+    "recombination_temperature_mode": "tigm",
+    "reduced_speed_of_light_fraction": 1.0,
+    "photon_groups": [
+      0
+    ],
+    "photon_group_tests": null,
+    "thresholds": null,
+    "threshold_min": -1.0,
+    "threshold_max": 100.0,
+    "threshold_count": 200,
+    "ionized_density_thresholds": [
+      10.0,
+      15.0,
+      20.0
+    ],
+    "ionized_cuts": null,
+    "ionized_sweep": true,
+    "ionized_cut_min": 0.9,
+    "ionized_cut_max": 0.9999,
+    "ionized_cut_count": 200,
+    "equation_chunk_size": 1000000,
+    "allow_legacy_ionizing_table": false,
+    "refresh_ionizing_cache": false
+  },
+  "products": {
+    "lya": {
+      "status": "success",
+      "fingerprint": "066c984c4b13be9538edaff968bbc3a1c5342599cf4a4531d47085472a4f50b1",
+      "outputs": [
+        "results/forest/output_4_128_sl/unknown/output_4_128_sl/snapshot008/lya/rays_008_lya.hdf5"
+      ],
+      "duration_seconds": 0.01940373331308365,
+      "details": {
+        "line": "Ly a",
+        "ray_count": 5
+      }
+    },
+    "equations": {
+      "status": "success",
+      "fingerprint": "bccec04968e3e4aed14c3a086bd81b1c87c3b6d9f2c0de7126d63df47d9286d9",
+      "outputs": [
+        "results/forest/output_4_128_sl/unknown/output_4_128_sl/snapshot008/equations/equations.json",
+        "results/forest/output_4_128_sl/unknown/output_4_128_sl/snapshot008/equations/equations.csv"
+      ],
+      "duration_seconds": 12.80698331700114,
+      "details": {
+        "row_count": 801,
+        "workers": 8
+      }
+    }
+  },
+  "warnings": [],
+  "failures": [],
+  "finished_at": "2026-08-07T05:38:35.511987+00:00"
+}
