@@ -54,7 +54,12 @@ def run_temperature(args: argparse.Namespace) -> Path:
             workers=args.workers,
             progress_interval=args.progress_interval,
         )
-        atomic_write_json(args.output, temperature_result_document(result, source_files=paths))
+        atomic_write_json(
+            args.output,
+            temperature_result_document(result, source_files=paths),
+            normalize_result=True,
+            method_id="thermodynamics.snapshot-temperature",
+        )
         return Path(args.output)
     return table
 

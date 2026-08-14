@@ -714,7 +714,8 @@ def _run_raw_clumping(args: argparse.Namespace, simulation_name: str, cosmology:
         None,
         simulation_name,
     )
-    return _write_json_result(document, output_path)
+    method_id = "clumping.raw-cell-weighted" if args.backend == "raw" else "clumping.raw-volume-weighted"
+    return _write_json_result(document, output_path, method_id=method_id)
 
 
 def _build_single_density_grid(args: argparse.Namespace, particle_type: str, backend: str, radius_mode: str) -> tuple:
@@ -960,7 +961,8 @@ def run_compute(args: argparse.Namespace) -> Path:
             effective_grid_size,
             simulation_name,
         )
-        return _write_json_result(document, output_path)
+        method_id = "transmission.raw" if args.backend == "raw-transmission" else "transmission.voronoi"
+        return _write_json_result(document, output_path, method_id=method_id)
 
     if args.backend in {"raw", "raw-volume"}:
         return _run_raw_clumping(args, simulation_name, cosmology, total_t0)
@@ -1067,7 +1069,9 @@ def run_compute(args: argparse.Namespace) -> Path:
         args.grid_size,
         simulation_name,
     )
-    return _write_json_result(document, output_path)
+    uses_separate_fields = target_spec_key != mask_spec_key
+    method_id = "clumping.mask-target" if uses_separate_fields else f"clumping.{target_backend}"
+    return _write_json_result(document, output_path, method_id=method_id)
 
 
 def compute_main(argv: list[str] | None = None) -> None:

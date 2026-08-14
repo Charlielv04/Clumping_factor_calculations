@@ -1432,7 +1432,7 @@ def write_equation_tests_result(
 ) -> tuple[Path, Path]:
     """Write the diagnostic document as JSON plus a flat CSV row table."""
 
-    output = write_json_result(result.document, output_path)
+    output = write_json_result(result.document, output_path, method_id="diagnostics.equations")
     csv_output = output.with_suffix(".csv")
     rows = result.document["rows"]
     if rows:

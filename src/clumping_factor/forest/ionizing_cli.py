@@ -102,7 +102,8 @@ def run_ionizing(args: argparse.Namespace) -> Path:
                 print("[gamma] independent scalar cross-check accumulated during the primary pass", flush=True)
         if args.verbose:
             print(f"[gamma] completed in {perf_counter() - started:.1f}s; Gamma_HI={gamma_result.gamma_hi_s_1:.8e} s^-1", flush=True)
-    atomic_write_json(output, document)
+    method_id = "forest.mfp" if args.quantity == "mfp" else "forest.gamma-hi"
+    atomic_write_json(output, document, normalize_result=True, method_id=method_id)
     return output
 
 

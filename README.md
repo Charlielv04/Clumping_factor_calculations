@@ -4,23 +4,90 @@ Modular clumping factor tools for TNG gas and dark matter snapshots.
 
 The calculation command writes JSON summaries. Plotting is intentionally separate, so compute runs do not create figures unless requested.
 
-## Repository Structure
+## Repository structure
 
 ```text
 Clumping_factor_calculations/
+  campaigns/                    Declarative simulation and method matrices.
+  docs/
+    architecture.md             Architectural overview and public interfaces.
+    decisions/                  Architecture decision records (ADRs).
+    guardrails.md               Rules that keep scientific code out of adapters and shell scripts.
   src/clumping_factor/
-    cli.py          Command-line entry points for compute and plot.
-    grid.py         Density-grid construction, smoothing, and same-node chunked parallelism.
-    loaders.py      Snapshot metadata, full particle loading, and chunked HDF5 readers.
-    clumping.py     Threshold sweeps and mask/target clumping-factor calculations.
-    raw_gas.py      Raw gas-cell clumping paths that do not build particle grids.
-    preprocess.py   Validation, gas-cell radius calculation, and particle indexing helpers.
-    plotting.py     Plot generation from JSON result files.
-    results.py      Output path handling and JSON serialization.
-  tests/            Unit tests for CLI behavior, loading, grids, masks, plotting, and raw gas paths.
-  scripts/          PBS helper scripts for same-node cluster runs.
-  pyproject.toml    Package metadata and console scripts.
+    methods/
+      registry.py                Stable method specifications and legacy presets.
+      clumping/                  Clumping and alternative-estimator boundaries.
+      power_spectrum/            NumPy, Pylians, comparison, and plotting boundaries.
+      forest/                    Forest and radiation workflow boundaries.
+      thermodynamics/            Particle and snapshot-temperature boundaries.
+    diagnostics/                 Equation and density-ratio diagnostics.
+    visualization/               Campaign, evolution, and IGM plotting adapters.
+    infrastructure/              Campaign planning, paths, provenance, validation, and PBS rendering.
+    forest/                      Established forest/radiation numerical implementations.
+    command.py                   Unified public command router.
+    results.py                   Normalized result contracts and canonical paths.
+    cli.py, grid.py, ...         Established numerical kernels and compatibility entry points.
+  tests/                         Numerical, contract, CLI, campaign, and architecture tests.
+  scripts/                       Legacy operational helpers retained where still needed.
+  results/                       Generated scientific and analysis artifacts.
+  pyproject.toml                 Package metadata and compatibility console commands.
 ```
+
+The organization is **domain-first**. Each domain exposes a configuration
+model, service, result model, and thin CLI adapter. Scientific formulas remain
+in the established Python implementations; adapters only parse, validate, and
+delegate. Shared concerns such as loading, deposition, units, result paths,
+provenance, caching, and cluster planning have one owner outside the domain
+adapters.
+
+### Where new code belongs
+
+- Add or modify a scientific calculation in its domain service or established
+  numerical module, never in `command.py`, a CLI adapter, or a shell script.
+- Register every public computational method in
+  `clumping_factor.methods.registry` with its stable identifier, supported
+  particles, field representation, weighting, selection semantics, grid
+  requirements, optional dependencies, execution modes, and command capability.
+- Put reusable loading, serialization, provenance, path, cache, or scheduler
+  behavior in the shared infrastructure layer.
+- Put plots and campaign analysis in `visualization`; put scientific checks and
+  equation tests in `diagnostics`.
+- Add a compatibility alias only when an existing command or import must remain
+  usable during the migration.
+
+## Architecture and public commands
+
+New integrations should use the domain facades and declarative method registry
+described in [`docs/architecture.md`](docs/architecture.md). The long-term
+interface is the single `clumping` command tree:
+
+```text
+clumping clumping compute|alternative
+clumping power compute|plot|compare
+clumping forest spectra|ionizing|snapshot
+clumping temperature compute
+clumping diagnostics equations|density-ratio
+clumping plot campaign|evolution|igm
+clumping results validate|organize
+clumping campaign plan|submit
+clumping methods catalog
+```
+
+Existing console commands and legacy imports remain supported as compatibility
+aliases. Existing result documents are read unchanged; newly written result
+documents add normalized method, selection, and execution specifications.
+
+Inspect the complete generated method catalog with:
+
+```bash
+clumping methods catalog
+```
+
+Legacy backend names such as `sphere`, `raw-volume`, and `pylians` are presets.
+They expand to stable identifiers such as `clumping.sphere`,
+`clumping.raw-volume-weighted`, and `clumping.pylians`. A result producer must
+write an explicit registered identifier; unrecognized historical results are
+reported as `legacy.unknown` rather than guessed.
 
 The primary workflow uses `clumping-compute` and `clumping-plot`. Additional
 installed commands support evolution/campaign plots, equation diagnostics,
@@ -28,6 +95,51 @@ forest and ionizing calculations, and the alternative estimator. Run any
 command with `--help` for its supported interface. The previous multi-node
 partial/shard workflow has been removed; chunked gridded runs now parallelize
 on one node through `clumping-compute --load-mode chunked --threads N`.
+
+## Declarative campaigns
+
+New cluster campaigns describe scientific and execution choices in TOML rather
+than duplicating them across submission scripts. A campaign declares one or
+more simulations and a snapshot × particle × method × grid matrix:
+
+```toml
+name = "tng-smoke"
+output_root = "results"
+
+[[simulations]]
+family = "tng"
+name = "tng100-3"
+base_path = "./tng100-3/output"
+
+[matrix]
+snapshots = [98]
+particle_types = ["gas", "dm"]
+methods = ["clumping.sphere", "power-spectrum.numpy"]
+grids = [256]
+
+[execution]
+threads = 4
+load_mode = "chunked"
+
+[resources]
+cpus = 4
+memory = "16gb"
+walltime = "01:00:00"
+queue = "mini"
+```
+
+Plan a deterministic manifest before submitting anything:
+
+```bash
+clumping campaign plan campaigns/tng-smoke.toml
+clumping campaign submit campaigns/tng-smoke.toml
+```
+
+Submission is a dry run unless `--execute` is supplied. The planner validates
+method compatibility, expands the matrix, derives canonical output paths, and
+renders generic PBS workers. Scheduler resources do not silently change
+scientific execution settings. See [`campaigns/README.md`](campaigns/README.md)
+for method-specific options and compatibility behavior.
 
 ## Install
 
@@ -213,6 +325,112 @@ Verify that an output was produced by the current pipeline:
 python scripts/validate_chunked_result.py results/thesan/Thesan-2/gas/sphere/snapshot080_grid256/*.json
 ```
 
+## AREPO/THESAN DM Power Spectrum Post-processing
+
+The standard AREPO power-spectrum workflow reads the complete snapshot and
+allocates the full particle array `P`. This is not practical for the full
+THESAN snapshot. For snapshot 081, a one-rank test attempted to allocate
+approximately 134 GB for hundreds of millions of particles on the rank, which
+exceeded the available memory.
+
+To make the calculation feasible, enable `POWERSPECTRUM_IN_POSTPROCESSING`.
+This selects the streaming implementation in `pm_periodic.c`: snapshot files
+are read in rounds, and the selected particle type is processed in chunks of
+up to one million particles. For the dark-matter spectrum, use particle mask
+`2`, which selects Type 1 dark matter. In the successful run, 30 MPI ranks
+processed 1,200 snapshot files, with 40 rounds per rank. The density field was
+accumulated directly on the PM mesh, keeping memory use modest on each rank.
+
+Several changes were required for this post-processing route:
+
+1. `calculate_power_spectra()` was changed to honor the requested particle
+   mask on its first pass. It now enables only the particle types selected by
+   the mask instead of constructing an all-particle spectrum before computing
+   individual types. This makes the calculation genuinely DM-only.
+2. The `MTNG` compile flag caused `long_range_init()` to return before
+   `pm_init_periodic()` was called. Consequently, the FFT decomposition object
+   `myplan` and `maxfftsize` were uninitialized when the streaming routine ran.
+   The post-processing branch in `main.c` now calls `pm_init_periodic()`
+   immediately before `calculate_power_spectra()`.
+3. Cleanup was reordered to respect AREPO's stack-like `mymalloc()` allocator.
+   The streaming routine allocates `Sndpm_count`, `Sndpm_offset`,
+   `Rcvpm_count`, `Rcvpm_offset`, and `rhogrid`; therefore the post-processing
+   cleanup must free them in reverse allocation order: `rhogrid`,
+   `Rcvpm_offset`, `Rcvpm_count`, `Sndpm_offset`, and `Sndpm_count`. The
+   original order caused `Wrong call of myfree(): not the last allocated block`.
+
+With these changes, the full DM calculation completed successfully. It
+processed all 1,200 files and 9,261,000,000 dark-matter particles. The power-
+spectrum calculation itself took approximately 365 seconds. The output file
+was:
+
+```text
+powerspec_081.txt
+```
+
+The file contains three appended spectra: the normal PM spectrum, a folded
+spectrum, and a double-folded spectrum. These are produced because
+`pmforce_do_powerspec()` calls `pmforce_periodic(1, typeflag)`,
+`pmforce_periodic(2, typeflag)`, and `pmforce_periodic(3, typeflag)`.
+
+Each spectrum block begins with four header lines containing, in order:
+`a`, `BINS_PS`, total particle mass, and total particle number. The header is
+followed by `BINS_PS = 2000` rows. The five columns are written explicitly as
+`Kbin[i]`, `DeltaUncorrected[i]`, `PowerUncorrected[i]`, `CountModes[i]`, and
+`ShotLimit[i]`. They represent, respectively, wavenumber `k`, dimensionless
+power `Delta^2(k)`, uncorrected power, the number of Fourier modes in the bin,
+and the shot-noise limit.
+
+The wavenumbers are in inverse internal length units. Since the simulation
+uses kpc/h for length, multiply the first column by 1,000 to obtain
+`h Mpc^-1`. The first populated bin is approximately `9.73e-05` internal
+units, or `0.0973 h/Mpc`, consistent with the fundamental mode of the
+64.69 cMpc/h simulation box.
+
+The local JSON result can be compared directly with an AREPO text output using
+the dedicated plotting command:
+
+```bash
+clumping-power-spectrum-compare \
+  --arepo results/thesan/Thesan-1/powerspec_081.txt \
+  --local results/thesan/Thesan-1/dm/power-spectrum/mas-only_both/snapshot081_grid256/threads8_run001.json \
+  --arepo-block 0 \
+  --local-engine numpy \
+  --output results/analysis/power-spectra/thesan/Thesan-1/snapshot081/dm/arepo_vs_local.png
+```
+
+The command produces an upper panel with the two spectra and a lower panel
+showing the local-to-AREPO ratio. AREPO blocks `0`, `1`, and `2` select the
+normal, folded, and double-folded spectra, respectively. The default
+`--k-unit-factor 1000` converts the stored inverse kpc/h wavenumbers to
+`h Mpc^-1`; set it to `1` for plots in internal units. Use `--field power` to
+compare the uncorrected power instead of `Delta^2(k)`.
+
+To compare AREPO against both local density-grid constructions and both local
+estimators in one figure, pass both JSON files and select `--local-engine both`:
+
+```bash
+clumping-power-spectrum-compare \
+  --arepo results/thesan/Thesan-1/powerspec_081.txt \
+  --local results/thesan/Thesan-1/dm/power-spectrum/mas-only_both/snapshot081_grid256/threads8_run001.json \
+         results/thesan/Thesan-1/dm/power-spectrum/smoothed-pylians_both/snapshot081_grid256/threads8_run001.json \
+  --arepo-block all \
+  --local-engine both \
+  --output results/analysis/power-spectra/thesan/Thesan-1/snapshot081/dm/arepo_vs_all_local.png
+```
+
+This compares AREPO with NumPy and Pylians on the mass-assignment-only grid,
+and with NumPy and Pylians on the Pylians-smoothed grid. Use repeated
+`--local-label` options to provide custom legend labels.
+
+One remaining robustness issue affects single-rank runs only: an `int`
+particle counter overflows for 9.26 billion dark-matter particles and reports
+the low 32-bit remainder. The 30-rank calculation avoids this because each
+rank counts only a fraction of the files before the global reduction. The
+local particle counters should nevertheless be changed to a 64-bit type
+before treating the post-processing mode as fully robust for arbitrary MPI
+layouts.
+
 ## Separate IGM Mask And Target Fields
 
 By default, the same density field defines the threshold mask and the clumping factor. To define the IGM mask from one field but measure clumping on another, use the `--mask-*` and `--target-*` options.
@@ -363,11 +581,16 @@ results/
   analysis/
 ```
 
-Clumping JSON outputs use:
+Legacy direct commands commonly write backend-named clumping paths:
 
 ```text
 results/<family>/<simulation>/<particle>/<backend>/snapshot<SNAPSHOT>_grid<GRID>/threads<THREADS>_batch<BATCH>_run<RUN>.json
 ```
+
+Declarative campaigns instead derive this component from the stable registered
+method identifier. In both cases, path construction is owned by
+`clumping_factor.results`; submission scripts must not construct result paths
+independently.
 
 Examples:
 

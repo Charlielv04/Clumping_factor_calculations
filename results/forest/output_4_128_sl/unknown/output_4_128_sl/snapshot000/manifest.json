@@ -1,0 +1,101 @@
+{
+  "workflow_version": 1,
+  "status": "failed",
+  "started_at": "2026-08-07T05:37:39.998267+00:00",
+  "updated_at": "2026-08-07T05:37:40.322346+00:00",
+  "simulation": "output_4_128_sl",
+  "snapshot": 0,
+  "requested_products": [
+    "equations"
+  ],
+  "configuration": {
+    "base_path": "/lustre/work/carlos.lopez/Simulations/output_4_128_sl",
+    "snapshot": 0,
+    "simulation_name": "output_4_128_sl",
+    "products": [
+      "equations"
+    ],
+    "los_file": "/lustre/work/carlos.lopez/Simulations/output_4_128_sl_rays/rays_000.hdf5",
+    "output_root": "results/forest/output_4_128_sl",
+    "refresh_products": true,
+    "verbose": true,
+    "threads": 8,
+    "equation_workers": null,
+    "gamma_workers": null,
+    "mfp_workers": null,
+    "only_rays": null,
+    "line": "Ly a",
+    "resolution_kms": 1.0,
+    "static": false,
+    "mfp_starts_per_ray": 100,
+    "mfp_seed": 0,
+    "mfp_cross_check": false,
+    "gamma_hi_threshold": 0.5,
+    "gamma_cross_check": false,
+    "gamma_chunk_size": 1000000,
+    "progress_interval": 10,
+    "sigma_hi_cm2": 6.3e-18,
+    "temperature_file": null,
+    "compute_missing_temperature": true,
+    "mean_molecular_weight": 1.6,
+    "temperature_weighting": "volume",
+    "recombination_temperature_mode": "tigm",
+    "reduced_speed_of_light_fraction": 1.0,
+    "photon_groups": [
+      0
+    ],
+    "photon_group_tests": null,
+    "thresholds": null,
+    "threshold_min": -1.0,
+    "threshold_max": 100.0,
+    "threshold_count": 200,
+    "ionized_density_thresholds": [
+      10.0,
+      15.0,
+      20.0
+    ],
+    "ionized_cuts": null,
+    "ionized_sweep": true,
+    "ionized_cut_min": 0.9,
+    "ionized_cut_max": 0.9999,
+    "ionized_cut_count": 200,
+    "equation_chunk_size": 1000000,
+    "allow_legacy_ionizing_table": false,
+    "refresh_ionizing_cache": false
+  },
+  "products": {
+    "lya": {
+      "status": "success",
+      "fingerprint": "9779a29767fa15f3c9bc5d91142f0bcc089b6cbd72d059e672ff9db466ac5714",
+      "outputs": [
+        "results/forest/output_4_128_sl/unknown/output_4_128_sl/snapshot000/lya/rays_000_lya.hdf5"
+      ],
+      "duration_seconds": 0.37386293400777504,
+      "details": {
+        "line": "Ly a",
+        "ray_count": 5
+      }
+    },
+    "equations": {
+      "status": "failed",
+      "fingerprint": "fc4712ecf14a435a78b78cee4dfda1a87c9796c0cc44ac8aed90ec7a2c0eb445",
+      "outputs": [],
+      "duration_seconds": 0.19778319999750238,
+      "error": {
+        "type": "ValueError",
+        "message": "No positive-volume cells satisfy the HI-fraction threshold."
+      }
+    }
+  },
+  "warnings": [],
+  "failures": [
+    {
+      "product": "equations",
+      "error": {
+        "type": "ValueError",
+        "message": "No positive-volume cells satisfy the HI-fraction threshold."
+      }
+    }
+  ],
+  "finished_at": "2026-08-07T05:37:40.322335+00:00"
+}

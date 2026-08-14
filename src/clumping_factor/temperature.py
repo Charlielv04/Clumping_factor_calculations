@@ -298,4 +298,8 @@ def compute_and_cache_snapshot_temperature(
 
 
 def write_temperature_result(result: SnapshotTemperatureResult, output_path: str | Path) -> Path:
-    return write_json_result(temperature_result_document(result), output_path)
+    return write_json_result(
+        temperature_result_document(result),
+        output_path,
+        method_id="thermodynamics.snapshot-temperature",
+    )

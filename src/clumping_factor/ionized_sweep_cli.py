@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 from time import perf_counter
 
@@ -9,7 +8,7 @@ import numpy as np
 
 from .loaders import iter_particle_chunks, read_snapshot_metadata
 from .raw_gas import _raw_hii_fraction
-from .results import resolve_simulation_name, sanitize_simulation_name
+from .results import resolve_simulation_name, sanitize_simulation_name, write_json_result
 
 
 def _build_ionized_cuts(cut_min: float, cut_max: float, cut_count: int) -> np.ndarray:
@@ -172,8 +171,7 @@ def compute_ionized_sweep(args: argparse.Namespace) -> Path:
         },
         "timings": {"total": perf_counter() - total_start},
     }
-    output.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
-    return output
+    return write_json_result(document, output, method_id="alternative.ionized-sweep")
 
 
 def build_parser() -> argparse.ArgumentParser:

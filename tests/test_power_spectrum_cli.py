@@ -5,6 +5,7 @@ import numpy as np
 
 from clumping_factor.models import GridResult, ParticleData
 from clumping_factor.power_spectrum_cli import build_power_spectrum_parser, run_power_spectrum
+from clumping_factor.power_spectrum_plotting import load_arepo_power_spectra, plot_arepo_local_comparison
 
 
 class Metadata:
@@ -53,6 +54,7 @@ def test_run_power_spectrum_defaults_to_mas_only(monkeypatch, tmp_path):
 
     assert written == output
     assert document["parameters"]["smoothing"] == "none"
+    assert document["method_spec"]["identifier"] == "power-spectrum.numpy"
     assert document["grid"]["backend"]["backend"] == "mass-assignment"
     assert document["grid"]["backend"]["smoothing"] == "none"
     assert len(document["k"]) > 0
@@ -140,6 +142,54 @@ def test_run_power_spectrum_can_write_both_engines(monkeypatch, tmp_path):
 
     assert written == output
     assert document["parameters"]["spectrum_engine"] == "both"
+    assert document["method_spec"]["identifier"] == "power-spectrum.combined"
     assert document["primary_spectrum_engine"] == "numpy"
     assert sorted(document["spectra"]) == ["numpy", "pylians"]
     assert document["spectra"]["pylians"]["power"] == [2.0]
+
+
+def test_load_arepo_power_spectra_reads_appended_blocks(tmp_path):
+    source = tmp_path / "powerspec_081.txt"
+    source.write_text(
+        "0.15483\n2\n1.0\n10\n"
+        "1e-4 2e-2 3e-3 6 1e-9\n"
+        "2e-4 4e-2 5e-3 12 2e-9\n\n"
+        "0.15483\n2\n1.0\n10\n"
+        "1e-4 3e-2 4e-3 6 1e-9\n"
+        "2e-4 5e-2 6e-3 12 2e-9\n",
+        encoding="utf-8",
+    )
+
+    spectra = load_arepo_power_spectra(source)
+
+    assert len(spectra) == 2
+    assert spectra[0].total_number == 10
+    np.testing.assert_allclose(spectra[1].dimensionless_power, [3e-2, 5e-2])
+
+
+def test_plot_arepo_local_comparison(tmp_path):
+    arepo = tmp_path / "powerspec.txt"
+    arepo.write_text(
+        "0.15\n3\n1.0\n10\n"
+        "1e-4 1e-2 1e-3 1 1e-9\n"
+        "2e-4 2e-2 2e-3 1 1e-9\n"
+        "4e-4 4e-2 4e-3 1 1e-9\n",
+        encoding="utf-8",
+    )
+    local = tmp_path / "local.json"
+    local.write_text(
+        json.dumps(
+            {
+                "statistic": "density_power_spectrum",
+                "particle_type": "dm",
+                "parameters": {"simulation_name": "Thesan-1", "snapshot": 81, "grid_size": 4, "smoothing": "none"},
+                "spectra": {"numpy": {"k": [1e-4, 2e-4, 4e-4], "dimensionless_power": [1e-2, 2e-2, 4e-2]}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    output = plot_arepo_local_comparison(arepo, local, tmp_path / "comparison.png")
+
+    assert output.exists()
+    assert output.stat().st_size > 0

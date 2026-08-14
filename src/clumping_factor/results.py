@@ -13,6 +13,8 @@ from typing import Any
 
 import numpy as np
 
+from .methods.registry import METHOD_REGISTRY
+
 from .models import GridResult, ParticleData
 
 CURRENT_SCHEMA_VERSION = 2
@@ -97,21 +99,155 @@ def build_result_document(
     parameters: dict[str, Any],
     timings: dict[str, float],
 ) -> dict[str, Any]:
-    return _clean_json(
-        {
-            "schema_version": CURRENT_SCHEMA_VERSION,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "particle_type": particles.particle_type,
-            "parameters": parameters,
-            "particle_metadata": particles.metadata,
-            "backend": grid_result.backend_metadata,
-            "thresholds": thresholds,
-            "clumping_factors": clumping_factors,
-            "diagnostics": grid_result.diagnostics,
-            "timings": timings,
-            "provenance": build_provenance(parameters),
+    document = {
+        "schema_version": CURRENT_SCHEMA_VERSION,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "particle_type": particles.particle_type,
+        "parameters": parameters,
+        "particle_metadata": particles.metadata,
+        "backend": grid_result.backend_metadata,
+        "thresholds": thresholds,
+        "clumping_factors": clumping_factors,
+        "diagnostics": grid_result.diagnostics,
+        "timings": timings,
+        "provenance": build_provenance(parameters),
+    }
+    return _clean_json(with_result_specs(document))
+
+
+def _method_candidate(parameters: dict[str, Any], document: dict[str, Any]) -> str | None:
+    # Identify the result domain before interpreting historical backend names.
+    # Names such as ``pylians`` occur in more than one domain.
+    statistic = str(document.get("statistic", "")).lower()
+    backend = parameters.get("backend")
+    if not backend:
+        backend_value = document.get("backend")
+        backend = backend_value.get("backend") if isinstance(backend_value, dict) else backend_value
+    if "power_spectrum" in statistic or "power spectrum" in statistic or parameters.get("spectrum_engine"):
+        engine = parameters.get("spectrum_engine") or parameters.get("primary_spectrum_engine")
+        if engine is None:
+            engine = backend
+        return {
+            "numpy": "power-spectrum.numpy",
+            "pylians": "power-spectrum.pylians",
+            "both": "power-spectrum.combined",
+        }.get(str(engine))
+    calculation = str(document.get("calculation", "")).lower()
+    quantity = str(document.get("quantity", "")).lower()
+    if "alternative_clumping" in calculation or "alternative_clumping" in statistic:
+        return {
+            "raw-volume": "alternative.raw-volume",
+            "grid": "alternative.grid-masked",
+        }.get(str(parameters.get("backend")))
+    if "ionized_igm" in calculation or "ionized_sweep" in calculation:
+        return "alternative.ionized-sweep"
+    if "temperature" in calculation or quantity == "tigm":
+        return "thermodynamics.snapshot-temperature"
+    if quantity == "electron_density_nhii_over_ne":
+        return "diagnostics.density-ratio"
+    if "gamma" in calculation:
+        return "forest.gamma-hi"
+    if "mfp" in calculation or "mean_free_path" in calculation:
+        return "forest.mfp"
+    if "lya" in calculation or "spectrum" in calculation:
+        return "forest.lyman-alpha"
+    if document.get("equations") or parameters.get("ionized_density_thresholds"):
+        return "diagnostics.equations"
+    if backend in {"sphere", "cube", "pylians", "raw", "raw-volume", "raw-transmission", "voronoi-transmission"}:
+        return str(backend)
+    return None
+
+
+def _method_spec(
+    parameters: dict[str, Any],
+    document: dict[str, Any],
+    method_id: str | None = None,
+) -> dict[str, Any]:
+    candidate = method_id or _method_candidate(parameters, document)
+    if candidate is None:
+        candidate = "legacy.unknown"
+    try:
+        return METHOD_REGISTRY.get(candidate).to_dict()
+    except KeyError:
+        if method_id is not None:
+            raise ValueError(f"Producer supplied an unregistered method identifier: {method_id!r}") from None
+        return {
+            "identifier": "legacy.unknown",
+            "domain": "legacy",
+            "description": "Legacy-compatible method metadata",
+            "supported_particle_types": (parameters.get("particle_type", document.get("particle_type", "unknown")),),
+            "field_representation": "legacy",
+            "weighting": "legacy",
+            "mask_semantics": "legacy",
+            "field_builder": "legacy.unknown",
+            "estimator": "legacy.unknown",
+            "selection": "legacy.unknown",
+            "producer": "legacy.unknown",
+            "grid_requirements": (),
+            "optional_dependencies": (),
+            "execution_modes": ("local",),
+            "presets": (),
+            "legacy_backends": (candidate,),
         }
+
+
+def with_result_specs(document: dict[str, Any], *, method_id: str | None = None) -> dict[str, Any]:
+    """Add normalized contracts while retaining all historical result keys."""
+
+    normalized = dict(document)
+    parameters = dict(normalized.get("parameters", {}))
+    normalized["parameters"] = parameters
+    if method_id is not None:
+        # The writer is authoritative for new output. Existing metadata is
+        # retained only when reading/normalizing a legacy document without an
+        # explicit producer contract.
+        normalized["method_spec"] = _method_spec(parameters, normalized, method_id)
+    else:
+        normalized.setdefault("method_spec", _method_spec(parameters, normalized))
+    normalized.setdefault(
+        "selection_spec",
+        {
+            "particle_type": parameters.get("particle_type", normalized.get("particle_type")),
+            "target_particle_type": parameters.get("target_particle_type"),
+            "mask_particle_type": parameters.get("mask_particle_type"),
+            "target_backend": parameters.get("target_backend"),
+            "mask_backend": parameters.get("mask_backend"),
+            "thresholds": {
+                "min": parameters.get("threshold_min"),
+                "max": parameters.get("threshold_max"),
+                "count": parameters.get("threshold_count"),
+            },
+            "ionized_cuts": parameters.get("ionized_cuts"),
+            "ionized_cut_range": {
+                "min": parameters.get("ionized_cut_min"),
+                "max": parameters.get("ionized_cut_max"),
+                "count": parameters.get("ionized_cut_count"),
+            },
+            "ionized_density_thresholds": parameters.get("ionized_density_thresholds"),
+            "photon_groups": parameters.get("photon_groups"),
+            "hii_source": parameters.get("hii_source") or parameters.get("raw_hii_source"),
+            "fully_ionized": parameters.get("fully_ionized", parameters.get("fully_ionized_approximation")),
+        },
     )
+    normalized.setdefault(
+        "execution_spec",
+        {
+            "mode": parameters.get("execution_mode", "local"),
+            "load_mode": parameters.get("load_mode"),
+            "threads": parameters.get("threads", 1),
+            "chunk_size": parameters.get("chunk_size"),
+            "radius_bin_batch_size": parameters.get("radius_bin_batch_size"),
+            "work_partition": parameters.get("work_partition"),
+            "memory_limit": parameters.get("memory_limit"),
+            "resource_size": parameters.get("resource_size"),
+            "source_campaign": parameters.get("source_campaign"),
+            "queue": parameters.get("queue"),
+            "walltime": parameters.get("walltime"),
+            "cpus": parameters.get("cpus") or parameters.get("ncpus"),
+            "task_id": parameters.get("task_id"),
+        },
+    )
+    return normalized
 
 
 def infer_simulation_name(base_path: str | Path) -> str:
@@ -158,22 +294,56 @@ def canonical_thesan_result_path(
     batch_size: int,
     run: int | str = 1,
 ) -> Path:
-    run_number = int(run)
-    return (
-        Path(output_dir)
-        / "thesan"
-        / sanitize_simulation_name(simulation_name)
-        / particle_type
-        / backend
-        / f"snapshot{snapshot:03d}_grid{grid_size}"
-        / f"threads{int(threads)}_batch{int(batch_size)}_run{run_number:03d}.json"
+    return canonical_result_path(
+        output_dir,
+        family="thesan",
+        simulation_name=simulation_name,
+        particle_type=particle_type,
+        method=backend,
+        snapshot=snapshot,
+        grid_size=grid_size,
+        threads=threads,
+        batch_size=batch_size,
+        run=run,
     )
 
 
-def write_json_result(document: dict[str, Any], output_path: str | Path) -> Path:
+def canonical_result_path(
+    output_root: str | Path,
+    *,
+    family: str,
+    simulation_name: str,
+    particle_type: str,
+    method: str,
+    snapshot: int,
+    grid_size: int | None = None,
+    threads: int = 1,
+    batch_size: int = 1,
+    run: int | str = 1,
+) -> Path:
+    """Derive canonical result paths for all campaign families."""
+
+    grid = f"grid{int(grid_size)}" if grid_size is not None else "nogrid"
+    return (
+        Path(output_root)
+        / sanitize_simulation_name(family)
+        / sanitize_simulation_name(simulation_name)
+        / sanitize_simulation_name(particle_type)
+        / sanitize_simulation_name(method)
+        / f"snapshot{int(snapshot):03d}_{grid}"
+        / f"threads{int(threads)}_batch{int(batch_size)}_run{int(run):03d}.json"
+    )
+
+
+def write_json_result(
+    document: dict[str, Any],
+    output_path: str | Path,
+    *,
+    method_id: str | None = None,
+) -> Path:
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(_clean_json(document), indent=2, sort_keys=True)
+    payload = json.dumps(_clean_json(with_result_specs(document, method_id=method_id)), indent=2, sort_keys=True)
     temporary_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(

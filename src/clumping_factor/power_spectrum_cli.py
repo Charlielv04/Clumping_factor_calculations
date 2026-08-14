@@ -315,7 +315,13 @@ def run_power_spectrum(args: argparse.Namespace) -> Path:
     if primary_spectrum.k_edges.size:
         document["k_edges"] = primary_spectrum.k_edges
     output_path = Path(args.output) if args.output else _default_output_path(args, simulation_name)
-    return write_json_result(document, output_path)
+    engine = str(parameters.get("spectrum_engine") or "numpy")
+    method_id = {
+        "numpy": "power-spectrum.numpy",
+        "pylians": "power-spectrum.pylians",
+        "both": "power-spectrum.combined",
+    }[engine]
+    return write_json_result(document, output_path, method_id=method_id)
 
 
 def power_spectrum_main(argv: list[str] | None = None) -> None:

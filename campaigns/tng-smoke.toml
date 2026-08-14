@@ -1,0 +1,26 @@
+name = "tng-smoke"
+output_root = "results"
+
+[[simulations]]
+family = "tng"
+name = "tng100-3"
+base_path = "./tng100-3/output"
+
+[matrix]
+snapshots = [98]
+particle_types = ["gas", "dm"]
+methods = ["sphere", "cube"]
+grids = [256]
+
+[execution]
+threads = 4
+load_mode = "chunked"
+chunk_size = 1000000
+mas = "CIC"
+radius_bin_batch_size = 1
+
+[resources]
+cpus = 4
+memory = "16gb"
+walltime = "01:00:00"
+queue = "mini"

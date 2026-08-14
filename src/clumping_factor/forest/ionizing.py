@@ -512,13 +512,22 @@ def cache_metadata_path(table_path: str | Path) -> Path:
     return Path(str(table_path) + ".meta.json")
 
 
-def atomic_write_json(path: str | Path, document: dict) -> Path:
+def atomic_write_json(
+    path: str | Path,
+    document: dict,
+    *,
+    normalize_result: bool = False,
+    method_id: str | None = None,
+) -> Path:
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=f".{output.name}.", suffix=".tmp", dir=output.parent)
     try:
+        from ..results import with_result_specs
+
+        payload = with_result_specs(document, method_id=method_id) if normalize_result else document
         with os.fdopen(fd, "w", encoding="utf-8") as stream:
-            json.dump(document, stream, indent=2)
+            json.dump(payload, stream, indent=2)
             stream.write("\n")
             stream.flush()
             os.fsync(stream.fileno())

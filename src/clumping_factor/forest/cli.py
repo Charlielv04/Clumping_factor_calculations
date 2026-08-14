@@ -106,7 +106,7 @@ def _compute_and_write_mfp(args: argparse.Namespace, los_file: Path, simulation:
         reference = calculate_mean_free_paths_reference(data, result.starting_indices)
     document = mfp_result_document(result, source_los_file=los_file, simulation=simulation,
                                    snapshot=snapshot, reference=reference)
-    atomic_write_json(output, document)
+    atomic_write_json(output, document, normalize_result=True, method_id="forest.mfp")
     return output
 
 

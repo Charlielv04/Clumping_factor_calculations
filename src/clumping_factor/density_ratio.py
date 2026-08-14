@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import csv
 from datetime import datetime, timezone
-import json
 from pathlib import Path
 from typing import Sequence
 
@@ -18,6 +17,7 @@ from .alternative_clumping import (
 from .equation_tests import _build_thresholds, _format_mask_value
 from .forest.constants import PROTON_MASS_G
 from .loaders import read_snapshot_metadata, snapshot_file_paths
+from .results import write_json_result
 
 
 def compute_density_ratio(
@@ -205,7 +205,7 @@ def write_density_ratio_result(document: dict, output: str | Path) -> tuple[Path
 
     output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(document, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+    write_json_result(document, output_path, method_id="diagnostics.density-ratio")
     csv_path = output_path.with_suffix(".csv")
     rows = document["rows"]
     with csv_path.open("w", newline="", encoding="utf-8") as handle:

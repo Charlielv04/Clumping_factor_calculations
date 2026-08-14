@@ -133,7 +133,9 @@ def test_commands_report_passing_cross_checks(tmp_path: Path):
         "--cross-check", "--output", str(mfp_output),
     ])
     run_ionizing(mfp_args)
-    assert json.loads(mfp_output.read_text())["cross_check"]["passed"] is True
+    mfp_document = json.loads(mfp_output.read_text())
+    assert mfp_document["cross_check"]["passed"] is True
+    assert mfp_document["method_spec"]["identifier"] == "forest.mfp"
 
     snapshot = tmp_path / "snap.hdf5"
     with h5py.File(snapshot, "w") as f:
@@ -152,7 +154,9 @@ def test_commands_report_passing_cross_checks(tmp_path: Path):
         "--output", str(gamma_output),
     ])
     run_ionizing(gamma_args)
-    assert json.loads(gamma_output.read_text())["cross_check"]["passed"] is True
+    gamma_document = json.loads(gamma_output.read_text())
+    assert gamma_document["cross_check"]["passed"] is True
+    assert gamma_document["method_spec"]["identifier"] == "forest.gamma-hi"
 
 
 def test_gamma_command_discovers_snapshot_from_base_path(tmp_path: Path):

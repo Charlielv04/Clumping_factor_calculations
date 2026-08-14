@@ -356,3 +356,4 @@ def test_write_equation_tests_result_returns_json_and_csv(tmp_path):
     json_output, csv_output = write_equation_tests_result(result, tmp_path / "out.json")
     assert json_output.exists()
     assert csv_output.exists()
+    assert json.loads(json_output.read_text())["method_spec"]["identifier"] == "diagnostics.equations"

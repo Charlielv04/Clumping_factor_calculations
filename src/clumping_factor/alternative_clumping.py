@@ -1060,4 +1060,10 @@ def compute_alternative_clumping(
 
 
 def write_alternative_clumping_result(result: AlternativeClumpingResult, output_path: str | Path) -> Path:
-    return write_json_result(result.document, output_path)
+    backend = str(result.document.get("parameters", {}).get("backend", "raw-volume"))
+    method_ids = {"grid": "alternative.grid-masked", "raw-volume": "alternative.raw-volume"}
+    try:
+        method_id = method_ids[backend]
+    except KeyError:
+        raise ValueError(f"Unknown alternative-clumping backend in result document: {backend!r}") from None
+    return write_json_result(result.document, output_path, method_id=method_id)

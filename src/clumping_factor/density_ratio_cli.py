@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 
 
 def build_density_ratio_parser() -> argparse.ArgumentParser:
@@ -21,9 +20,7 @@ def build_density_ratio_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def density_ratio_main(argv: list[str] | None = None) -> None:
-    parser = build_density_ratio_parser()
-    args = parser.parse_args(argv)
+def run_density_ratio(args: argparse.Namespace):
     from .density_ratio import compute_density_ratio, write_density_ratio_result
 
     document = compute_density_ratio(
@@ -38,6 +35,13 @@ def density_ratio_main(argv: list[str] | None = None) -> None:
         simulation_name=args.simulation_name,
     )
     json_output, csv_output = write_density_ratio_result(document, args.output)
+    return json_output, csv_output
+
+
+def density_ratio_main(argv: list[str] | None = None) -> None:
+    parser = build_density_ratio_parser()
+    args = parser.parse_args(argv)
+    json_output, csv_output = run_density_ratio(args)
     print(f"Wrote density-ratio JSON result: {json_output}")
     print(f"Wrote density-ratio CSV table: {csv_output}")
 

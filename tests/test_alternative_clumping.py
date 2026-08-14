@@ -200,6 +200,7 @@ def test_alternative_clumping_verbose_reports_progress(tmp_path, capsys):
         ]
     )
     run_alternative_clumping(args)
+    assert json.loads(output.read_text())["method_spec"]["identifier"] == "alternative.raw-volume"
     stdout = capsys.readouterr().out
     assert "streaming" in stdout
     assert "processed" in stdout

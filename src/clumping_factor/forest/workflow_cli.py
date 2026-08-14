@@ -70,8 +70,7 @@ def build_snapshot_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def snapshot_main(argv: list[str] | None = None) -> None:
-    args = build_snapshot_parser().parse_args(argv)
+def run_snapshot(args: argparse.Namespace):
     config = SnapshotWorkflowConfig(
         base_path=args.base_path, snapshot=args.snapshot, simulation_name=args.simulation_name,
         products=args.products, los_file=args.los_file, output_root=args.output_dir,
@@ -102,7 +101,12 @@ def snapshot_main(argv: list[str] | None = None) -> None:
         refresh_ionizing_cache=args.refresh_ionizing_cache,
     )
     report = (lambda message: print(f"[snapshot] {message}", flush=True)) if args.verbose else None
-    result = run_snapshot_workflow(config, progress=report)
+    return run_snapshot_workflow(config, progress=report)
+
+
+def snapshot_main(argv: list[str] | None = None) -> None:
+    args = build_snapshot_parser().parse_args(argv)
+    result = run_snapshot(args)
     print(f"Wrote snapshot manifest: {result.manifest_path}")
     if not result.succeeded:
         for product, row in result.failures.items():

@@ -224,7 +224,8 @@ def run_snapshot_workflow(
                 reference = calculate_mean_free_paths_reference(los_data, result.starting_indices) if config.mfp_cross_check else None
                 atomic_write_json(output, mfp_result_document(result, source_los_file=config.los_file,
                                                               simulation=config.simulation_name, snapshot=config.snapshot,
-                                                              reference=reference))
+                                                              reference=reference), normalize_result=True,
+                                  method_id="forest.mfp")
                 compute_and_cache_snapshot_ionizing_inputs(
                     config.base_path, config.snapshot, mfp_los_file=config.los_file, need_mfp=True,
                     need_gamma=False, starts_per_ray=config.mfp_starts_per_ray, seed=config.mfp_seed,
@@ -241,7 +242,12 @@ def run_snapshot_workflow(
                                                  chunk_size=config.gamma_chunk_size,
                                                  progress_interval=config.progress_interval,
                                                  workers=gamma_workers)
-                atomic_write_json(output, gamma_result_document(result, source_files=snapshot_files))
+                atomic_write_json(
+                    output,
+                    gamma_result_document(result, source_files=snapshot_files),
+                    normalize_result=True,
+                    method_id="forest.gamma-hi",
+                )
                 compute_and_cache_snapshot_ionizing_inputs(
                     config.base_path, config.snapshot, need_mfp=False, need_gamma=True,
                     hi_threshold=config.gamma_hi_threshold, refresh=config.refresh_ionizing_cache,

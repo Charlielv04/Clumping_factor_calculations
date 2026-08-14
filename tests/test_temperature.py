@@ -111,4 +111,5 @@ def test_temperature_cli_writes_json_output(tmp_path):
     assert written == output
     document = json.loads(output.read_text())
     assert document["calculation"] == "thesan_temperature_from_internal_energy"
+    assert document["method_spec"]["identifier"] == "thermodynamics.snapshot-temperature"
     assert document["mean_molecular_weight"] == 1.6
