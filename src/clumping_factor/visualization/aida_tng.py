@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import json
 import re
 import shutil
 from collections import defaultdict
@@ -12,6 +11,7 @@ from pathlib import Path
 from typing import Iterable
 
 from clumping_factor.infrastructure.artifacts import analysis_directory, write_analysis_manifest
+from clumping_factor.infrastructure.results import read_json_result
 from clumping_factor.visualization.plotting import (
     plot_campaign_files,
     plot_evolution_files,
@@ -24,7 +24,6 @@ from clumping_factor.visualization.power_spectrum import (
 )
 
 
-_SNAPSHOT_RE = re.compile(r"snapshot(?P<snapshot>\d+)_grid(?P<grid>\d+)", re.IGNORECASE)
 _MODEL_RE = re.compile(r"^(?P<box>L\d+n\d+)_?(?P<model>CDM|SIDM1|vSIDM|WDM3)$", re.IGNORECASE)
 
 
@@ -40,55 +39,31 @@ class AidaResult:
     method: str
 
 
-def _metadata(path: Path) -> dict:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-
-
-def _snapshot_grid(path: Path, document: dict) -> tuple[int | None, int | None]:
-    simulation = document.get("simulation", {})
-    parameters = document.get("parameters", {})
-    snapshot = simulation.get("snapshot", parameters.get("snapshot"))
-    grid = parameters.get("grid_size")
-    match = _SNAPSHOT_RE.search(str(path))
-    if snapshot is None and match:
-        snapshot = int(match.group("snapshot"))
-    if grid is None and match:
-        grid = int(match.group("grid"))
-    return (int(snapshot) if isinstance(snapshot, int) else None, int(grid) if isinstance(grid, int) else None)
-
-
-def _simulation(path: Path, document: dict) -> str:
-    simulation = document.get("simulation", {})
-    parameters = document.get("parameters", {})
-    value = simulation.get("name") or parameters.get("simulation_name")
-    if value:
-        text = str(value)
-        match = _MODEL_RE.match(text)
-        return text if match else text
-    return path.parts[path.parts.index("aida-tng") + 1] if "aida-tng" in path.parts else "unknown"
-
-
 def discover_aida_tng_results(results_root: str | Path = "results") -> list[AidaResult]:
     root = Path(results_root)
     results: list[AidaResult] = []
     for path in sorted(root.rglob("*.json")) if root.exists() else []:
-        document = _metadata(path)
-        if not document:
+        try:
+            document = read_json_result(path)
+        except (OSError, ValueError):
             continue
-        simulation = _simulation(path, document)
-        snapshot, grid = _snapshot_grid(path, document)
-        particle = str(document.get("particle_type") or document.get("parameters", {}).get("particle_type") or ("gas" if "ionized-sweep" in path.parts else "unknown"))
-        backend = str(document.get("backend", {}).get("backend") or "unknown")
-        if document.get("statistic") == "density_power_spectrum":
-            smoothing = str(document.get("parameters", {}).get("smoothing") or "unknown")
-            method = path.parent.parent.name or smoothing
+        simulation_spec = document["simulation"]
+        if simulation_spec.get("family") != "aida-tng":
+            continue
+        configuration = document["method_spec"]["configuration"]
+        simulation = str(simulation_spec["name"])
+        snapshot = int(simulation_spec["snapshot"])
+        particle = str(simulation_spec["particle_type"])
+        grid_value = configuration.get("grid_size")
+        grid = int(grid_value) if isinstance(grid_value, int) else None
+        method_identifier = str(document["method_spec"]["identifier"])
+        backend = str(configuration.get("backend") or configuration.get("smoothing") or method_identifier.rsplit(".", 1)[-1])
+        if method_identifier.startswith("power-spectrum."):
+            method = method_identifier
             results.append(AidaResult(path, simulation, "power-spectrum", particle, backend, snapshot, grid, method))
-        elif document.get("calculation") == "ionized_igm_raw_volume_sweep" or "ionized-sweep" in path.parts:
+        elif method_identifier == "alternative.ionized-sweep":
             results.append(AidaResult(path, simulation, "ionization", particle, backend, snapshot, grid, "ionized-sweep"))
-        elif "clumping_factors" in document or "clumping_factor" in document:
+        elif document["method_spec"].get("domain") in {"clumping", "alternative", "transmission"}:
             results.append(AidaResult(path, simulation, "clumping", particle, backend, snapshot, grid, backend))
     return results
 

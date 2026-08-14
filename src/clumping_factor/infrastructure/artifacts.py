@@ -252,6 +252,30 @@ def validate_analysis_manifest(path: str | Path) -> list[str]:
     return errors
 
 
+def validate_external_analysis_sidecar(path: str | Path) -> list[str]:
+    sidecar = Path(path)
+    try:
+        document = json.loads(sidecar.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [f"unreadable manifest: {exc}"]
+    required = {"schema_version", "kind", "domain", "family", "analysis_kind", "options", "generator", "inputs", "artifacts"}
+    if not isinstance(document, dict) or required - document.keys() or document.get("schema_version") != 1 or document.get("kind") != "analysis-external":
+        return ["not a strict external analysis sidecar"]
+    errors = validate_artifact_records(sidecar, document["artifacts"], require_role=False)
+    if not isinstance(document["inputs"], list):
+        return [*errors, "inputs must be a list"]
+    for item in document["inputs"]:
+        if not isinstance(item, dict) or not isinstance(item.get("path"), str):
+            errors.append("input record is incomplete")
+            continue
+        source = Path(item["path"])
+        if not source.is_file():
+            errors.append(f"input is missing: {item['path']}")
+        elif item.get("sha256") and sha256_file(source) != item["sha256"]:
+            errors.append(f"input checksum mismatch: {item['path']}")
+    return errors
+
+
 def write_archive_manifest(directory: str | Path, *, import_id: str, files: Iterable[tuple[str | Path, str]]) -> Path:
     """Write the checksum inventory for preserved historical material."""
 

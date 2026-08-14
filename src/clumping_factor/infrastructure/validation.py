@@ -7,7 +7,7 @@ import json
 import re
 from pathlib import Path
 
-from clumping_factor.infrastructure.artifacts import validate_analysis_manifest, validate_archive_manifest, validate_artifact_records
+from clumping_factor.infrastructure.artifacts import validate_analysis_manifest, validate_archive_manifest, validate_artifact_records, validate_external_analysis_sidecar
 from clumping_factor.infrastructure.results import canonical_result_path
 from clumping_factor.infrastructure.results import read_json_result
 
@@ -43,6 +43,10 @@ def validate_paths(paths: list[Path]) -> list[dict[str, object]]:
             if isinstance(raw, dict) and raw.get("kind") == "archive":
                 errors = validate_archive_manifest(path)
                 report.append({"path": str(path), "valid": not errors, "kind": "archive", "errors": errors})
+                continue
+            if isinstance(raw, dict) and raw.get("kind") == "analysis-external":
+                errors = validate_external_analysis_sidecar(path)
+                report.append({"path": str(path), "valid": not errors, "kind": "analysis-external", "errors": errors})
                 continue
             document = read_json_result(path)
             simulation = document["simulation"]

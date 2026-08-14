@@ -57,6 +57,19 @@ def test_discover_groups_clumping_results_and_skips_malformed_json(tmp_path):
     assert results[0].kind == "clumping"
 
 
+def test_discovery_uses_strict_metadata_and_skips_manifests(tmp_path):
+    root = tmp_path / "results"
+    misleading = root / "archive" / "aida-tng" / "L35n1080_CDM" / "snapshot999_grid1024" / "run.json"
+    _write_clumping(misleading, "L35n1080_CDM", 17, "sphere", grid=256)
+    manifest = root / "analysis" / "clumping" / "aida-tng" / "manifest.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(json.dumps({"schema_version": 1, "kind": "analysis"}), encoding="utf-8")
+
+    discovered = discover_aida_tng_results(root)
+
+    assert [(item.snapshot, item.grid) for item in discovered] == [(17, 256)]
+
+
 def test_dry_run_writes_manifest_and_plans_method_and_evolution_outputs(tmp_path):
     root = tmp_path / "results" / "aida-tng"
     for snapshot in (17, 99):

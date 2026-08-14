@@ -6,6 +6,7 @@ from clumping_factor.infrastructure.artifacts import (
     analysis_directory, attach_artifacts, companion_artifact_path, validate_analysis_manifest, validate_archive_manifest,
     write_analysis_manifest, write_archive_manifest,
 )
+from clumping_factor.infrastructure.artifacts import validate_external_analysis_sidecar, write_explicit_analysis_sidecar
 from clumping_factor.infrastructure.models import GridResult, ParticleData
 from clumping_factor.infrastructure.results import build_result_document, normalize_simulation_identity, read_json_result, write_json_result
 
@@ -96,6 +97,15 @@ def test_archive_manifest_rejects_paths_outside_archive(tmp_path):
     document["files"][0]["path"] = "../../outside.png"
     manifest.write_text(json.dumps(document), encoding="utf-8")
     assert validate_archive_manifest(manifest)
+
+
+def test_explicit_analysis_sidecar_is_strictly_validated(tmp_path):
+    source = tmp_path / "source.json"
+    artifact = tmp_path / "plot.png"
+    source.write_text("{}", encoding="utf-8")
+    artifact.write_bytes(b"plot")
+    sidecar = write_explicit_analysis_sidecar(artifact, domain="plot", family="test", analysis_kind="result", options={}, inputs=[source], generator="tests")
+    assert validate_external_analysis_sidecar(sidecar) == []
 
 
 def test_mini_thesan_identities_are_normalized_from_name_or_base_path():
