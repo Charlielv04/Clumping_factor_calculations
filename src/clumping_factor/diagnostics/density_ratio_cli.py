@@ -21,7 +21,7 @@ def build_density_ratio_parser() -> argparse.ArgumentParser:
 
 
 def run_density_ratio(args: argparse.Namespace):
-    from .density_ratio import compute_density_ratio, write_density_ratio_result
+    from clumping_factor.diagnostics.density_ratio import compute_density_ratio, write_density_ratio_result
 
     document = compute_density_ratio(
         args.base_path,

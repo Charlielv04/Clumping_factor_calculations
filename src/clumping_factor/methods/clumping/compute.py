@@ -354,97 +354,97 @@ def build_campaign_plot_parser() -> argparse.ArgumentParser:
 
 
 def _load_tng_particles(*args, **kwargs):
-    from .loaders import load_tng_particles
+    from clumping_factor.infrastructure.loaders import load_tng_particles
 
     return load_tng_particles(*args, **kwargs)
 
 
 def _build_density_grid_scipy(*args, **kwargs):
-    from .grid import build_density_grid_scipy
+    from clumping_factor.methods.clumping.fields import build_density_grid_scipy
 
     return build_density_grid_scipy(*args, **kwargs)
 
 
 def _build_density_grid_pylians(*args, **kwargs):
-    from .grid import build_density_grid_pylians
+    from clumping_factor.methods.clumping.fields import build_density_grid_pylians
 
     return build_density_grid_pylians(*args, **kwargs)
 
 
 def _build_density_grid_scipy_chunked(*args, **kwargs):
-    from .grid import build_density_grid_scipy_chunked
+    from clumping_factor.methods.clumping.fields import build_density_grid_scipy_chunked
 
     return build_density_grid_scipy_chunked(*args, **kwargs)
 
 
 def _build_density_grid_scipy_chunked_parallel(*args, **kwargs):
-    from .grid import build_density_grid_scipy_chunked_parallel
+    from clumping_factor.methods.clumping.fields import build_density_grid_scipy_chunked_parallel
 
     return build_density_grid_scipy_chunked_parallel(*args, **kwargs)
 
 
 def _build_density_grid_pylians_chunked(*args, **kwargs):
-    from .grid import build_density_grid_pylians_chunked
+    from clumping_factor.methods.clumping.fields import build_density_grid_pylians_chunked
 
     return build_density_grid_pylians_chunked(*args, **kwargs)
 
 
 def _build_density_grid_pylians_chunked_parallel(*args, **kwargs):
-    from .grid import build_density_grid_pylians_chunked_parallel
+    from clumping_factor.methods.clumping.fields import build_density_grid_pylians_chunked_parallel
 
     return build_density_grid_pylians_chunked_parallel(*args, **kwargs)
 
 
 def _clumping_factor_sweep(*args, **kwargs):
-    from .clumping import clumping_factor_sweep_with_mask
+    from clumping_factor.methods.clumping.estimators import clumping_factor_sweep_with_mask
 
     return clumping_factor_sweep_with_mask(*args, **kwargs)
 
 
 def _build_result_document(*args, **kwargs):
-    from .results import build_result_document
+    from clumping_factor.infrastructure.results import build_result_document
 
     return build_result_document(*args, **kwargs)
 
 
 def _default_output_path(*args, **kwargs):
-    from .results import default_output_path
+    from clumping_factor.infrastructure.results import default_output_path
 
     return default_output_path(*args, **kwargs)
 
 
 def _resolve_simulation_name(*args, **kwargs):
-    from .results import resolve_simulation_name
+    from clumping_factor.infrastructure.results import resolve_simulation_name
 
     return resolve_simulation_name(*args, **kwargs)
 
 
 def _write_json_result(*args, **kwargs):
-    from .results import write_json_result
+    from clumping_factor.infrastructure.results import write_json_result
 
     return write_json_result(*args, **kwargs)
 
 
 def _load_tng_gas_cells(*args, **kwargs):
-    from .loaders import load_tng_gas_cells
+    from clumping_factor.infrastructure.loaders import load_tng_gas_cells
 
     return load_tng_gas_cells(*args, **kwargs)
 
 
 def _iter_particle_chunks(*args, **kwargs):
-    from .loaders import iter_particle_chunks
+    from clumping_factor.infrastructure.loaders import iter_particle_chunks
 
     return iter_particle_chunks(*args, **kwargs)
 
 
 def _read_snapshot_metadata(*args, **kwargs):
-    from .loaders import read_snapshot_metadata
+    from clumping_factor.infrastructure.loaders import read_snapshot_metadata
 
     return read_snapshot_metadata(*args, **kwargs)
 
 
 def _estimate_full_load_bytes(*args, **kwargs):
-    from .loaders import estimate_full_load_bytes
+    from clumping_factor.infrastructure.loaders import estimate_full_load_bytes
 
     return estimate_full_load_bytes(*args, **kwargs)
 
@@ -462,49 +462,49 @@ def _snapshot_cosmology(base_path: str, snapshot: int) -> dict[str, float | int 
 
 
 def _raw_gas_clumping_sweep(*args, **kwargs):
-    from .raw_gas import raw_gas_clumping_sweep
+    from clumping_factor.methods.clumping.raw import raw_gas_clumping_sweep
 
     return raw_gas_clumping_sweep(*args, **kwargs)
 
 
 def _raw_gas_volume_weighted_clumping_sweep(*args, **kwargs):
-    from .raw_gas import raw_gas_volume_weighted_clumping_sweep
+    from clumping_factor.methods.clumping.raw import raw_gas_volume_weighted_clumping_sweep
 
     return raw_gas_volume_weighted_clumping_sweep(*args, **kwargs)
 
 
 def _raw_gas_clumping_sweep_chunked(*args, **kwargs):
-    from .raw_gas import raw_gas_clumping_sweep_chunked
+    from clumping_factor.methods.clumping.raw import raw_gas_clumping_sweep_chunked
 
     return raw_gas_clumping_sweep_chunked(*args, **kwargs)
 
 
 def _iter_raw_transmission_chunks(*args, **kwargs):
-    from .loaders import iter_raw_transmission_chunks
+    from clumping_factor.infrastructure.loaders import iter_raw_transmission_chunks
 
     return iter_raw_transmission_chunks(*args, **kwargs)
 
 
 def _inspect_raw_transmission_fields(*args, **kwargs):
-    from .loaders import inspect_raw_transmission_fields
+    from clumping_factor.infrastructure.loaders import inspect_raw_transmission_fields
 
     return inspect_raw_transmission_fields(*args, **kwargs)
 
 
 def _compute_raw_transmission_chunked(*args, **kwargs):
-    from .raw_transmission import compute_raw_transmission_chunked
+    from clumping_factor.methods.clumping.transmission import compute_raw_transmission_chunked
 
     return compute_raw_transmission_chunked(*args, **kwargs)
 
 
 def _compute_voronoi_transmission_chunked(*args, **kwargs):
-    from .raw_transmission import compute_voronoi_transmission_chunked
+    from clumping_factor.methods.clumping.transmission import compute_voronoi_transmission_chunked
 
     return compute_voronoi_transmission_chunked(*args, **kwargs)
 
 
 def _validate_compute_args(args: argparse.Namespace) -> None:
-    from .configuration import validate_compute_config
+    from clumping_factor.infrastructure.configuration import validate_compute_config
 
     validate_compute_config(args)
 
@@ -1082,7 +1082,7 @@ def compute_main(argv: list[str] | None = None) -> None:
 
 
 def _eq5_default_output_path(args: argparse.Namespace) -> Path:
-    from .results import resolve_simulation_name, sanitize_simulation_name
+    from clumping_factor.infrastructure.results import resolve_simulation_name, sanitize_simulation_name
 
     simulation = resolve_simulation_name(args.base_path, args.simulation_name)
     return (
@@ -1124,7 +1124,7 @@ def eq5_main(argv: list[str] | None = None) -> None:
 
 
 def plot_main(argv: list[str] | None = None) -> None:
-    from .plotting import plot_result_files
+    from clumping_factor.visualization.plotting import plot_result_files
 
     parser = build_plot_parser()
     args = parser.parse_args(argv)
@@ -1145,7 +1145,7 @@ def plot_main(argv: list[str] | None = None) -> None:
 
 
 def evolution_plot_main(argv: list[str] | None = None) -> None:
-    from .plotting import plot_evolution_files
+    from clumping_factor.visualization.plotting import plot_evolution_files
 
     parser = build_evolution_plot_parser()
     args = parser.parse_args(argv)
@@ -1175,7 +1175,7 @@ def _parse_baseline_batches(values: list[str]) -> dict[int, int]:
 
 
 def campaign_plot_main(argv: list[str] | None = None) -> None:
-    from .plotting import plot_campaign_files
+    from clumping_factor.visualization.plotting import plot_campaign_files
 
     parser = build_campaign_plot_parser()
     args = parser.parse_args(argv)
@@ -1196,7 +1196,7 @@ def campaign_plot_main(argv: list[str] | None = None) -> None:
 
 
 def model_evolution_plot_main(argv: list[str] | None = None) -> None:
-    from .plotting import plot_model_evolution_files
+    from clumping_factor.visualization.plotting import plot_model_evolution_files
 
     parser = build_model_evolution_plot_parser()
     args = parser.parse_args(argv)
@@ -1214,3 +1214,4 @@ def model_evolution_plot_main(argv: list[str] | None = None) -> None:
 
 if __name__ == "__main__":
     compute_main()
+

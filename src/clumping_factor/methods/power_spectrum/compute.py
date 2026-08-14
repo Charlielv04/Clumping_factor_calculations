@@ -7,10 +7,10 @@ from typing import Any
 
 import numpy as np
 
-from .grid import build_density_grid_mass_assignment, build_density_grid_mass_assignment_chunked
-from .loaders import estimate_full_load_bytes, iter_particle_chunks, load_tng_particles, read_snapshot_metadata
-from .power_spectrum import PowerSpectrumResult, density_power_spectrum, density_power_spectrum_pylians
-from .results import build_provenance, resolve_simulation_name, sanitize_simulation_name, write_json_result
+from clumping_factor.methods.clumping.fields import build_density_grid_mass_assignment, build_density_grid_mass_assignment_chunked
+from clumping_factor.infrastructure.loaders import estimate_full_load_bytes, iter_particle_chunks, load_tng_particles, read_snapshot_metadata
+from clumping_factor.methods.power_spectrum.estimator import PowerSpectrumResult, density_power_spectrum, density_power_spectrum_pylians
+from clumping_factor.infrastructure.results import build_provenance, resolve_simulation_name, sanitize_simulation_name, write_json_result
 
 
 def build_power_spectrum_parser() -> argparse.ArgumentParser:
@@ -89,7 +89,7 @@ def _build_one_field(args: argparse.Namespace, particle_type: str, smoothing: st
         if smoothing == "none":
             grid_result = build_density_grid_mass_assignment(particles, args.grid_size, args.mas)
         elif smoothing == "pylians":
-            from .grid import build_density_grid_pylians
+            from clumping_factor.methods.clumping.fields import build_density_grid_pylians
 
             grid_result = build_density_grid_pylians(
                 particles,
@@ -100,7 +100,7 @@ def _build_one_field(args: argparse.Namespace, particle_type: str, smoothing: st
                 threads=args.threads,
             )
         else:
-            from .grid import build_density_grid_scipy
+            from clumping_factor.methods.clumping.fields import build_density_grid_scipy
 
             grid_result = build_density_grid_scipy(
                 particles,
@@ -131,7 +131,7 @@ def _build_one_field(args: argparse.Namespace, particle_type: str, smoothing: st
     if smoothing == "none":
         grid_result = build_density_grid_mass_assignment_chunked(chunk_factory, args.grid_size, args.mas)
     elif smoothing == "pylians":
-        from .grid import build_density_grid_pylians_chunked_parallel
+        from clumping_factor.methods.clumping.fields import build_density_grid_pylians_chunked_parallel
 
         grid_result = build_density_grid_pylians_chunked_parallel(
             args.base_path,
@@ -147,7 +147,7 @@ def _build_one_field(args: argparse.Namespace, particle_type: str, smoothing: st
             filter_type=args.filter_type,
         )
     else:
-        from .grid import build_density_grid_scipy_chunked_parallel
+        from clumping_factor.methods.clumping.fields import build_density_grid_scipy_chunked_parallel
 
         grid_result = build_density_grid_scipy_chunked_parallel(
             args.base_path,
@@ -329,3 +329,4 @@ def power_spectrum_main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     output_path = run_power_spectrum(args)
     print(f"Wrote power-spectrum JSON result: {output_path}")
+

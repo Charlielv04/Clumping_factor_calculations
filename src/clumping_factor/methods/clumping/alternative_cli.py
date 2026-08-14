@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 from time import perf_counter
 
-from .results import resolve_simulation_name, sanitize_simulation_name
+from clumping_factor.infrastructure.results import resolve_simulation_name, sanitize_simulation_name
 
 
 def _simulation_family(simulation_name: str) -> str:
@@ -123,8 +123,8 @@ def build_alternative_clumping_parser() -> argparse.ArgumentParser:
 
 
 def run_alternative_clumping(args: argparse.Namespace) -> Path:
-    from .alternative_clumping import compute_alternative_clumping, write_alternative_clumping_result
-    from .forest.ionizing import compute_and_cache_snapshot_ionizing_inputs, require_ionizing_table_provenance
+    from clumping_factor.methods.clumping.alternative import compute_alternative_clumping, write_alternative_clumping_result
+    from clumping_factor.methods.forest.ionizing import compute_and_cache_snapshot_ionizing_inputs, require_ionizing_table_provenance
 
     explicit_thresholds = None
     if args.igm_overdensity_threshold is not None:
@@ -228,7 +228,7 @@ def plot_alternative_quantities(
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from .results import read_json_result
+    from clumping_factor.infrastructure.results import read_json_result
 
     document = read_json_result(result_path)
     if document.get("calculation") != "alternative_clumping_eq13_davies_2024":
@@ -321,3 +321,4 @@ def alternative_quantity_plot_main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     output = plot_alternative_quantities(args.result, args.output, x_min=args.x_min)
     print(f"Wrote alternative quantity diagnostic plot: {output}")
+

@@ -154,7 +154,7 @@ def run_snapshot_workflow(
     }
     atomic_write_json(manifest_path, document)
 
-    from ..loaders import snapshot_file_paths
+    from clumping_factor.infrastructure.loaders import snapshot_file_paths
     snapshot_error: Exception | None = None
     try:
         snapshot_files = snapshot_file_paths(config.base_path, config.snapshot)
@@ -271,7 +271,7 @@ def run_snapshot_workflow(
                 else:
                     temperature = snapshot_files[0].parent / "Tigm_Thesan1.dat"
                     if not temperature.exists() and config.compute_missing_temperature:
-                        from ..temperature import compute_and_cache_snapshot_temperature
+                        from clumping_factor.methods.thermodynamics.temperature import compute_and_cache_snapshot_temperature
 
                         temperature = compute_and_cache_snapshot_temperature(
                             config.base_path,
@@ -282,7 +282,7 @@ def run_snapshot_workflow(
                             workers=equation_workers,
                             progress=progress,
                         )
-                from ..equation_tests import compute_equation_tests, write_equation_tests_result
+                from clumping_factor.diagnostics.equations import compute_equation_tests, write_equation_tests_result
                 result = compute_equation_tests(
                     config.base_path, config.snapshot, mfp_table, sigma_hi_cm2=config.sigma_hi_cm2,
                     temperature_file=temperature, gamma_hi_file=gamma_table,
@@ -320,3 +320,4 @@ def run_snapshot_workflow(
     document["updated_at"] = _now()
     atomic_write_json(manifest_path, document)
     return SnapshotWorkflowResult(manifest_path, document)
+

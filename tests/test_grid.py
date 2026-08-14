@@ -1,12 +1,12 @@
 import numpy as np
 
-from clumping_factor.grid import (
+from clumping_factor.methods.clumping.fields import (
     build_density_grid_mass_assignment,
     build_density_grid_mass_assignment_chunked,
     build_density_grid_scipy,
     spherical_tophat_kernel,
 )
-from clumping_factor.models import ParticleData
+from clumping_factor.infrastructure.models import ParticleData
 
 
 def synthetic_particles():
@@ -127,3 +127,4 @@ def test_grid_size_above_limit_is_rejected(monkeypatch):
         assert "supported maximum" in str(exc)
     else:
         raise AssertionError("build_density_grid_scipy should reject oversized grids")
+

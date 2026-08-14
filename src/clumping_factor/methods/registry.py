@@ -97,12 +97,12 @@ def _spec(
     command_variant: str | None = None,
 ) -> MethodSpec:
     producer_by_domain = {
-        "clumping": "clumping_factor.cli",
-        "transmission": "clumping_factor.cli",
-        "alternative": "clumping_factor.alternative_clumping",
-        "power-spectrum": "clumping_factor.power_spectrum_cli",
-        "forest": "clumping_factor.forest",
-        "thermodynamics": "clumping_factor.temperature",
+        "clumping": "clumping_factor.methods.clumping.compute",
+        "transmission": "clumping_factor.methods.clumping.compute",
+        "alternative": "clumping_factor.methods.clumping.alternative",
+        "power-spectrum": "clumping_factor.methods.power_spectrum.compute",
+        "forest": "clumping_factor.methods.forest",
+        "thermodynamics": "clumping_factor.methods.thermodynamics.temperature",
         "diagnostics": "clumping_factor.diagnostics",
         "campaign": "clumping_factor.visualization",
         "operations": "clumping_factor.infrastructure",

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from argparse import Namespace
+from typing import Any
 
 from ..registry import METHOD_REGISTRY, MethodSpec
 
@@ -13,6 +14,7 @@ class ThermodynamicsMethodConfig:
     snapshot: int
     weighting: str = "volume"
     workers: int = 1
+    options: dict[str, Any] = field(default_factory=dict, compare=False, repr=False)
 
     @classmethod
     def from_namespace(cls, args: Namespace) -> "ThermodynamicsMethodConfig":
@@ -20,6 +22,7 @@ class ThermodynamicsMethodConfig:
             snapshot=int(args.snapshot),
             weighting=str(getattr(args, "temperature_weighting", "volume")),
             workers=int(getattr(args, "workers", 1)),
+            options=dict(vars(args)),
         )
 
     def validate(self) -> MethodSpec:

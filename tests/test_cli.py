@@ -4,16 +4,16 @@ from pathlib import Path
 
 import numpy as np
 
-from clumping_factor.cli import (
+from clumping_factor.methods.clumping.compute import (
     build_campaign_plot_parser,
     build_compute_parser,
     evolution_plot_main,
     plot_main,
     run_compute,
 )
-from clumping_factor.models import GridResult, ParticleData
-from clumping_factor.plotting import _auto_plot_context, _campaign_simulation_name, _plot_label
-from clumping_factor.results import canonical_thesan_result_path, default_output_path, resolve_simulation_name
+from clumping_factor.infrastructure.models import GridResult, ParticleData
+from clumping_factor.visualization.plotting import _auto_plot_context, _campaign_simulation_name, _plot_label
+from clumping_factor.infrastructure.results import default_output_path, resolve_simulation_name
 
 
 def test_compute_help():
@@ -54,7 +54,7 @@ def test_voronoi_transmission_requires_sigma_and_provenance(tmp_path):
 
 
 def test_thesan_group_sigma_mode_does_not_require_scalar_sigma():
-    from clumping_factor.configuration import validate_compute_config
+    from clumping_factor.infrastructure.configuration import validate_compute_config
 
     args = build_compute_parser().parse_args(
         [
@@ -140,7 +140,7 @@ def test_raw_transmission_rejects_dm():
 
 
 def test_plot_help_includes_quantity():
-    from clumping_factor.cli import build_plot_parser
+    from clumping_factor.methods.clumping.compute import build_plot_parser
 
     help_text = build_plot_parser().format_help()
     assert "--quantity" in help_text
@@ -148,7 +148,7 @@ def test_plot_help_includes_quantity():
 
 
 def test_evolution_plot_help_includes_threshold():
-    from clumping_factor.cli import build_evolution_plot_parser
+    from clumping_factor.methods.clumping.compute import build_evolution_plot_parser
 
     help_text = build_evolution_plot_parser().format_help()
     assert "--threshold" in help_text
@@ -164,11 +164,6 @@ def test_simulation_name_inferred_from_base_path():
 def test_default_output_path_uses_simulation_subdirectory():
     output = default_output_path("results", "gas", "sphere", 81, 256, "Thesan-1")
     assert output.as_posix() == "results/Thesan-1/gas_sphere_snapshot081_grid256.json"
-
-
-def test_canonical_thesan_result_path():
-    output = canonical_thesan_result_path("results", "Thesan-1", "dm", "pylians", 81, 512, 16, 10, 1)
-    assert output.as_posix() == "results/thesan/Thesan-1/dm/pylians/snapshot081_grid512/threads16_batch10_run001.json"
 
 
 def test_run_compute_writes_json_with_mock_loader_and_grid(monkeypatch, tmp_path):
@@ -192,8 +187,8 @@ def test_run_compute_writes_json_with_mock_loader_and_grid(monkeypatch, tmp_path
             backend_metadata={"backend": "cube"},
         )
 
-    monkeypatch.setattr("clumping_factor.cli._load_tng_particles", fake_loader)
-    monkeypatch.setattr("clumping_factor.cli._build_density_grid_scipy", fake_grid)
+    monkeypatch.setattr("clumping_factor.methods.clumping.compute._load_tng_particles", fake_loader)
+    monkeypatch.setattr("clumping_factor.methods.clumping.compute._build_density_grid_scipy", fake_grid)
 
     output = tmp_path / "result.json"
     args = Namespace(
@@ -258,7 +253,7 @@ def test_raw_backend_default_output_path_has_no_grid(monkeypatch, tmp_path):
             "metadata": {"valid_count": 4},
         }, {"load_data": 0.0}
 
-    monkeypatch.setattr("clumping_factor.cli._load_tng_gas_cells", fake_loader)
+    monkeypatch.setattr("clumping_factor.methods.clumping.compute._load_tng_gas_cells", fake_loader)
 
     args = Namespace(
         base_path="./data",
@@ -307,8 +302,8 @@ def test_gas_radius_mode_is_passed_independently_from_backend(monkeypatch, tmp_p
             backend_metadata={"backend": "pylians"},
         )
 
-    monkeypatch.setattr("clumping_factor.cli._load_tng_particles", fake_loader)
-    monkeypatch.setattr("clumping_factor.cli._build_density_grid_pylians", fake_grid)
+    monkeypatch.setattr("clumping_factor.methods.clumping.compute._load_tng_particles", fake_loader)
+    monkeypatch.setattr("clumping_factor.methods.clumping.compute._build_density_grid_pylians", fake_grid)
 
     args = Namespace(
         base_path="./data",
@@ -702,3 +697,4 @@ def test_evolution_plot_accepts_scalar_transmission_results(monkeypatch, tmp_pat
     output = tmp_path / "scalar_evolution.png"
     evolution_plot_main([str(first), str(second), "--output", str(output)])
     assert output.read_bytes() == b"plot"
+

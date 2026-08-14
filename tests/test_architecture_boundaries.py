@@ -3,11 +3,14 @@ from pathlib import Path
 
 import pytest
 
-from clumping_factor.results import canonical_result_path, with_result_specs
+from clumping_factor.infrastructure.results import canonical_result_path, with_result_specs
 
 
-def test_new_result_specs_preserve_legacy_fields():
-    document = with_result_specs({"schema_version": 1, "thresholds": [1], "clumping_factors": [2], "parameters": {"backend": "cube", "particle_type": "dm"}})
+def test_new_result_specs_preserve_science_payload():
+    document = with_result_specs(
+        {"thresholds": [1], "clumping_factors": [2], "parameters": {"backend": "cube", "particle_type": "dm"}},
+        method_id="clumping.cube",
+    )
     assert document["thresholds"] == [1]
     assert document["clumping_factors"] == [2]
     assert document["method_spec"]["identifier"] == "clumping.cube"
@@ -15,8 +18,18 @@ def test_new_result_specs_preserve_legacy_fields():
 
 
 def test_canonical_path_is_pure_and_stable():
-    path = canonical_result_path("results", family="tng", simulation_name="TNG 100", particle_type="gas", method="raw-volume", snapshot=98, grid_size=None, threads=1, batch_size=1)
-    assert path == Path("results/tng/TNG-100/gas/raw-volume/snapshot098_nogrid/threads1_batch1_run001.json")
+    method_spec = with_result_specs(
+        {"parameters": {"backend": "raw-volume"}}, method_id="clumping.raw-volume-weighted"
+    )["method_spec"]
+    path = canonical_result_path(
+        "results", family="tng", simulation_name="TNG 100", particle_type="gas", snapshot=98,
+        method_spec=method_spec, selection_spec={"overdensity": 100}, execution_spec={"threads": 1},
+    )
+    assert path.parts[:7] == (
+        "results", "tng", "TNG-100", "clumping", "clumping.raw-volume-weighted", "gas", "snapshot098"
+    )
+    assert path.parts[7].startswith("science-")
+    assert path.name.startswith("execution-") and path.name.endswith("_run001.json")
 
 
 @pytest.mark.parametrize(
@@ -37,16 +50,9 @@ def test_explicit_method_ids_are_not_guessed(method_id: str, expected: str):
     assert document["method_spec"]["identifier"] == expected
 
 
-def test_unknown_legacy_document_is_not_mislabeled_as_sphere():
-    document = with_result_specs({"parameters": {}, "calculation": "unregistered_experiment"})
-    assert document["method_spec"]["identifier"] == "legacy.unknown"
-
-
-def test_power_spectrum_backend_is_domain_first_for_legacy_documents():
-    document = with_result_specs(
-        {"statistic": "density_power_spectrum", "backend": "pylians", "parameters": {}}
-    )
-    assert document["method_spec"]["identifier"] == "power-spectrum.pylians"
+def test_method_identity_is_never_guessed_from_legacy_fields():
+    with pytest.raises(ValueError, match="explicit registered method_id"):
+        with_result_specs({"parameters": {}, "backend": "pylians"})
 
 
 def test_unknown_explicit_producer_method_is_rejected():
@@ -76,3 +82,4 @@ def test_domain_cli_adapters_do_not_import_scientific_libraries():
             for alias in node.names
         }
         assert not (imported & forbidden), f"Scientific dependency leaked into {path}"
+

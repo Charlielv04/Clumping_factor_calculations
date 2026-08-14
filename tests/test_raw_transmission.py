@@ -3,13 +3,13 @@ import json
 import h5py
 import numpy as np
 
-from clumping_factor.cli import build_compute_parser, run_compute
-from clumping_factor.loaders import (
+from clumping_factor.methods.clumping.compute import build_compute_parser, run_compute
+from clumping_factor.infrastructure.loaders import (
     inspect_raw_transmission_fields,
     iter_raw_transmission_chunks,
     read_snapshot_metadata,
 )
-from clumping_factor.raw_transmission import (
+from clumping_factor.methods.clumping.transmission import (
     compute_raw_transmission_chunked,
     compute_voronoi_transmission_chunked,
     effective_sigma_bar_ion_from_photon_groups,
@@ -76,8 +76,8 @@ def test_uniform_density_with_unit_transmission_returns_one():
 
 
 def test_effective_sigma_uses_all_three_thesan_groups():
-    from clumping_factor.forest.constants import SPEED_OF_LIGHT_CM_S
-    from clumping_factor.forest.ionizing import THESAN_SIGMA_C_CM3_S
+    from clumping_factor.methods.forest.constants import SPEED_OF_LIGHT_CM_S
+    from clumping_factor.methods.forest.ionizing import THESAN_SIGMA_C_CM3_S
 
     group_sums = np.array([1.0, 2.0, 3.0])
     sigma, diagnostics = effective_sigma_bar_ion_from_photon_groups(group_sums)
@@ -259,3 +259,4 @@ def test_raw_transmission_cli_writes_scalar_result(tmp_path):
     assert document["clumping_factor"] is not None
     assert document["parameters"]["sigma_bar_ion_source"] == "synthetic test"
     assert "thresholds" not in document
+

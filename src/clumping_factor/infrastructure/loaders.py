@@ -8,8 +8,8 @@ from typing import Iterator, TypeAlias
 
 import numpy as np
 
-from .models import ParticleData
-from .preprocess import gas_radii_from_density, validate_gas_arrays
+from clumping_factor.infrastructure.models import ParticleData
+from clumping_factor.infrastructure.preprocess import gas_radii_from_density, validate_gas_arrays
 
 PARTICLE_GROUPS = {"gas": "PartType0", "dm": "PartType1"}
 PARTICLE_INDICES = {"gas": 0, "dm": 1}
@@ -571,3 +571,4 @@ def load_tng_gas_cells(base_path: str | Path, snapshot: int, verbose: bool = Fal
         "rho_mean": rho_mean,
         "metadata": metadata,
     }, {"load_data": perf_counter() - t0}
+

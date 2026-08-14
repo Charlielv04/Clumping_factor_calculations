@@ -3,9 +3,9 @@ import sys
 
 import numpy as np
 
-from clumping_factor.models import GridResult, ParticleData
-from clumping_factor.power_spectrum_cli import build_power_spectrum_parser, run_power_spectrum
-from clumping_factor.power_spectrum_plotting import load_arepo_power_spectra, plot_arepo_local_comparison
+from clumping_factor.infrastructure.models import GridResult, ParticleData
+from clumping_factor.methods.power_spectrum.compute import build_power_spectrum_parser, run_power_spectrum
+from clumping_factor.visualization.power_spectrum import load_arepo_power_spectra, plot_arepo_local_comparison
 
 
 class Metadata:
@@ -32,10 +32,10 @@ def test_run_power_spectrum_defaults_to_mas_only(monkeypatch, tmp_path):
         metadata={"valid_count": 1},
     )
 
-    monkeypatch.setattr("clumping_factor.power_spectrum_cli.read_snapshot_metadata", lambda *_args: Metadata())
-    monkeypatch.setattr("clumping_factor.power_spectrum_cli.estimate_full_load_bytes", lambda *_args: 1)
+    monkeypatch.setattr("clumping_factor.methods.power_spectrum.compute.read_snapshot_metadata", lambda *_args: Metadata())
+    monkeypatch.setattr("clumping_factor.methods.power_spectrum.compute.estimate_full_load_bytes", lambda *_args: 1)
     monkeypatch.setattr(
-        "clumping_factor.power_spectrum_cli.load_tng_particles",
+        "clumping_factor.methods.power_spectrum.compute.load_tng_particles",
         lambda *_args, **_kwargs: (particles, {"load_data": 0.0}),
     )
 
@@ -77,13 +77,13 @@ def test_run_power_spectrum_can_request_smoothed_grid(monkeypatch, tmp_path):
             backend_metadata={"backend": "sphere", "smoothing": "periodic scipy tophat", "mas": "CIC"},
         )
 
-    monkeypatch.setattr("clumping_factor.power_spectrum_cli.read_snapshot_metadata", lambda *_args: Metadata())
-    monkeypatch.setattr("clumping_factor.power_spectrum_cli.estimate_full_load_bytes", lambda *_args: 1)
+    monkeypatch.setattr("clumping_factor.methods.power_spectrum.compute.read_snapshot_metadata", lambda *_args: Metadata())
+    monkeypatch.setattr("clumping_factor.methods.power_spectrum.compute.estimate_full_load_bytes", lambda *_args: 1)
     monkeypatch.setattr(
-        "clumping_factor.power_spectrum_cli.load_tng_particles",
+        "clumping_factor.methods.power_spectrum.compute.load_tng_particles",
         lambda *_args, **_kwargs: (particles, {"load_data": 0.0}),
     )
-    monkeypatch.setattr("clumping_factor.grid.build_density_grid_scipy", fake_smoothed_grid)
+    monkeypatch.setattr("clumping_factor.methods.clumping.fields.build_density_grid_scipy", fake_smoothed_grid)
 
     output = tmp_path / "pk-smoothed.json"
     args = build_power_spectrum_parser().parse_args(
@@ -121,10 +121,10 @@ def test_run_power_spectrum_can_write_both_engines(monkeypatch, tmp_path):
             return FakePk()
 
     monkeypatch.setitem(sys.modules, "Pk_library", FakePkLibrary)
-    monkeypatch.setattr("clumping_factor.power_spectrum_cli.read_snapshot_metadata", lambda *_args: Metadata())
-    monkeypatch.setattr("clumping_factor.power_spectrum_cli.estimate_full_load_bytes", lambda *_args: 1)
+    monkeypatch.setattr("clumping_factor.methods.power_spectrum.compute.read_snapshot_metadata", lambda *_args: Metadata())
+    monkeypatch.setattr("clumping_factor.methods.power_spectrum.compute.estimate_full_load_bytes", lambda *_args: 1)
     monkeypatch.setattr(
-        "clumping_factor.power_spectrum_cli.load_tng_particles",
+        "clumping_factor.methods.power_spectrum.compute.load_tng_particles",
         lambda *_args, **_kwargs: (particles, {"load_data": 0.0}),
     )
 
@@ -193,3 +193,4 @@ def test_plot_arepo_local_comparison(tmp_path):
 
     assert output.exists()
     assert output.stat().st_size > 0
+

@@ -12,7 +12,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from .results import read_json_result
+from clumping_factor.infrastructure.results import read_json_result
 
 
 SERIES = {
@@ -29,7 +29,7 @@ SERIES = {
     "electron-hii": (
         r"$\langle n_e n_{\rm HII}\rangle/(\langle n_e\rangle\langle n_{\rm HII}\rangle)$",
         ":",
-        "electron–HII product",
+        "electronâ€“HII product",
     ),
 }
 
@@ -193,3 +193,4 @@ def main(argv: list[str] | None = None) -> None:
 
 if __name__ == "__main__":
     main()
+

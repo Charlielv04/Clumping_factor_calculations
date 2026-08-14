@@ -11,8 +11,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from .results import read_json_result
-from .plot_styles import dark_matter_model, simulation_style
+from clumping_factor.infrastructure.results import read_json_result
+from clumping_factor.visualization.styles import dark_matter_model, simulation_style
 
 
 _RUN_FILENAME_RE = re.compile(r"threads(?P<threads>\d+)_batch(?P<batch>\d+)_run(?P<run>\d+)\.json$")
@@ -1237,3 +1237,4 @@ def plot_campaign_files(
     if not written:
         raise ValueError("Campaign inputs were readable, but no finite values were available to plot.")
     return written
+

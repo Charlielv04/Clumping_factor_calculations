@@ -9,15 +9,15 @@ from typing import Sequence
 
 import numpy as np
 
-from .alternative_clumping import (
+from clumping_factor.methods.clumping.alternative import (
     _cosmic_mean_hydrogen_density_cm3,
     _read_header_cosmology,
     _snapshot_units,
 )
-from .equation_tests import _build_thresholds, _format_mask_value
-from .forest.constants import PROTON_MASS_G
-from .loaders import read_snapshot_metadata, snapshot_file_paths
-from .results import write_json_result
+from clumping_factor.diagnostics.equations import _build_thresholds, _format_mask_value
+from clumping_factor.methods.forest.constants import PROTON_MASS_G
+from clumping_factor.infrastructure.loaders import read_snapshot_metadata, snapshot_file_paths
+from clumping_factor.infrastructure.results import write_json_result
 
 
 def compute_density_ratio(
@@ -213,3 +213,4 @@ def write_density_ratio_result(document: dict, output: str | Path) -> tuple[Path
         writer.writeheader()
         writer.writerows(rows)
     return output_path, csv_path
+

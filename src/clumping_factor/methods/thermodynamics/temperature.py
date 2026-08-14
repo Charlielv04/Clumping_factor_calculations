@@ -9,9 +9,9 @@ from typing import Callable, Iterable
 import h5py
 import numpy as np
 
-from .forest.ionizing import atomic_write_json, cache_metadata_path
-from .loaders import read_snapshot_metadata, snapshot_file_paths
-from .results import write_json_result
+from clumping_factor.methods.forest.ionizing import atomic_write_json, cache_metadata_path
+from clumping_factor.infrastructure.loaders import read_snapshot_metadata, snapshot_file_paths
+from clumping_factor.infrastructure.results import write_json_result
 
 TEMPERATURE_ALGORITHM_VERSION = "1"
 DEFAULT_MEAN_MOLECULAR_WEIGHT = 1.6
@@ -269,7 +269,7 @@ def compute_and_cache_snapshot_temperature(
             "mean_molecular_weight": float(mean_molecular_weight),
             "weighting": weighting,
             "chunk_size": int(chunk_size),
-            "source": "clumping_factor.temperature.compute_particles_temperature",
+            "source": "clumping_factor.methods.thermodynamics.temperature.compute_particles_temperature",
             "formula_reference": "same equation as simloader.gadget.computeParticlesTemperature",
         },
     }
@@ -303,3 +303,4 @@ def write_temperature_result(result: SnapshotTemperatureResult, output_path: str
         output_path,
         method_id="thermodynamics.snapshot-temperature",
     )
+

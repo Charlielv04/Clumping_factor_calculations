@@ -12,15 +12,15 @@ from typing import Callable, Sequence
 
 import numpy as np
 
-from .forest.constants import (
+from clumping_factor.methods.forest.constants import (
     KM_CM,
     MPC_CM,
     PRIMORDIAL_HYDROGEN_FRACTION,
     PROTON_MASS_G,
     SPEED_OF_LIGHT_CM_S,
 )
-from .loaders import read_snapshot_metadata, snapshot_file_paths
-from .results import resolve_simulation_name, write_json_result
+from clumping_factor.infrastructure.loaders import read_snapshot_metadata, snapshot_file_paths
+from clumping_factor.infrastructure.results import resolve_simulation_name, write_json_result
 
 G_CGS = 6.67430e-8
 ALPHA_B_HII_10000K_CM3_S = 2.59e-13
@@ -505,8 +505,8 @@ def _compute_eq13_grid_worker(
 ) -> tuple[dict[str, str], dict]:
     import h5py
 
-    from .grid import _add_deposited_mass
-    from .loaders import snapshot_file_paths
+    from clumping_factor.methods.clumping.fields import _add_deposited_mass
+    from clumping_factor.infrastructure.loaders import snapshot_file_paths
 
     shape = (int(grid_size), int(grid_size), int(grid_size))
     grids = {name: np.zeros(shape, dtype=np.float64) for name in _EQ13_GRID_NAMES}
@@ -647,8 +647,8 @@ def _gridded_eq13_sweep(
     progress_interval: int,
     start_time: float,
 ) -> tuple[dict[str, np.ndarray | float | int | bool], dict[str, list | float | int | str], dict[str, float]]:
-    from .grid import _plan_particle_work
-    from .loaders import read_snapshot_metadata, snapshot_file_particle_counts
+    from clumping_factor.methods.clumping.fields import _plan_particle_work
+    from clumping_factor.infrastructure.loaders import read_snapshot_metadata, snapshot_file_particle_counts
 
     metadata = read_snapshot_metadata(base_path, snapshot)
     shape = (int(grid_size), int(grid_size), int(grid_size))
@@ -1067,3 +1067,4 @@ def write_alternative_clumping_result(result: AlternativeClumpingResult, output_
     except KeyError:
         raise ValueError(f"Unknown alternative-clumping backend in result document: {backend!r}") from None
     return write_json_result(result.document, output_path, method_id=method_id)
+

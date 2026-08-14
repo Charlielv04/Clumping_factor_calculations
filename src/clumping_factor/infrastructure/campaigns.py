@@ -18,7 +18,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10
     import tomli as tomllib  # type: ignore[no-redef]
 
 from ..methods.registry import METHOD_REGISTRY, MethodSpec
-from ..results import canonical_result_path
+from clumping_factor.infrastructure.results import canonical_result_path
 
 
 @dataclass(frozen=True)
@@ -257,7 +257,6 @@ def _plan_matrix(source: Path, document: dict[str, Any]) -> CampaignManifest:
     resources = _resources(document)
     output_root = Path(str(document.get("output_root", "results")))
     threads = int(execution.get("threads", 1))
-    batch = int(execution.get("radius_bin_batch_size", 1))
     if threads < 1 or threads > resources.cpus:
         raise ValueError("execution.threads must be between 1 and resources.cpus")
 
@@ -287,16 +286,26 @@ def _plan_matrix(source: Path, document: dict[str, Any]) -> CampaignManifest:
         if key in seen:
             continue
         seen.add(key)
+        options = _method_options(document, spec)
+        method_spec = spec.to_dict()
+        method_spec["configuration"] = {**options, "grid_size": grid}
+        selection_spec = {"particle_type": particle}
+        execution_spec = {
+            **execution,
+            "cpus": resources.cpus,
+            "queue": resources.queue,
+            "walltime": resources.walltime,
+            "campaign": str(document.get("name") or source.stem),
+        }
         output = canonical_result_path(
             output_root,
             family=family,
             simulation_name=name,
             particle_type=particle,
-            method=spec.identifier,
             snapshot=snapshot,
-            grid_size=grid,
-            threads=threads,
-            batch_size=batch,
+            method_spec=method_spec,
+            selection_spec=selection_spec,
+            execution_spec=execution_spec,
         )
         task_id = "-".join(filter(None, (_task_component(family), _task_component(name), f"s{snapshot:03d}", _task_component(particle), _task_component(spec.identifier), f"g{grid}" if grid else "nogrid")))
         command = _task_command(
@@ -307,7 +316,7 @@ def _plan_matrix(source: Path, document: dict[str, Any]) -> CampaignManifest:
             particle=particle,
             grid=grid,
             execution=execution,
-            method_options=_method_options(document, spec),
+            method_options=options,
             output=output,
         )
         tasks.append(CampaignTask(task_id, command, method_id=spec.identifier, simulation=name,
@@ -395,3 +404,4 @@ def main(argv: list[str] | None = None) -> None:
     else:
         for index, script in enumerate(submit_campaign(manifest, execute=args.execute), start=1):
             print(f"# worker {index}\n{script}", end="")
+

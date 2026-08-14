@@ -4,3 +4,4 @@ from .configuration import DiagnosticConfig
 from .result import DiagnosticResult
 
 __all__ = ["DiagnosticConfig", "DiagnosticResult"]
+

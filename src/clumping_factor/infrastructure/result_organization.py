@@ -9,7 +9,7 @@ import json
 import re
 import shutil
 from pathlib import Path
-from ..results import canonical_result_path
+from clumping_factor.infrastructure.results import canonical_result_path
 
 MANIFEST_COLUMNS = ["source_path", "canonical_path", "family", "simulation", "particle", "method", "snapshot", "grid", "sha256"]
 MOVE_COLUMNS = ["source_path", "destination_path", "action", "reason"]
@@ -107,3 +107,4 @@ def main(argv: list[str] | None = None) -> None:
             destination.parent.mkdir(parents=True, exist_ok=True)
             (shutil.move if args.move else shutil.copy2)(source, destination)
     print(f"Audited {len(rows)} {args.family} JSON files; wrote {len(moves)} move-plan rows.")
+

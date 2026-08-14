@@ -3,7 +3,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 import time
 
-from clumping_factor.summary_cache import load_or_build_summary, summary_cache_identity
+from clumping_factor.infrastructure.summary_cache import load_or_build_summary, summary_cache_identity
 
 
 def identity():
@@ -72,3 +72,4 @@ def test_concurrent_callers_share_one_build(tmp_path):
     statuses = {result[1]["status"] for result in results}
     assert "built" in statuses
     assert statuses & {"wait_hit", "lock_hit"}
+

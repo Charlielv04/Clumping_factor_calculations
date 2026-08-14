@@ -75,7 +75,7 @@ def run_ionizing(args: argparse.Namespace) -> Path:
         if args.base_path:
             if args.snapshot is None:
                 raise ValueError("--base-path requires --snapshot.")
-            from ..loaders import snapshot_file_paths
+            from clumping_factor.infrastructure.loaders import snapshot_file_paths
             snapshot_files = [str(path) for path in snapshot_file_paths(args.base_path, args.snapshot)]
         else:
             snapshot_files = []
@@ -110,3 +110,4 @@ def run_ionizing(args: argparse.Namespace) -> Path:
 def ionizing_main(argv: list[str] | None = None) -> None:
     args = build_ionizing_parser().parse_args(argv)
     print(f"Wrote ionizing measurement: {run_ionizing(args)}")
+

@@ -11,10 +11,10 @@ from typing import Any, Callable, Iterable
 import numpy as np
 from scipy.ndimage import convolve, uniform_filter
 
-from .deposition import add_deposited_mass as _add_deposited_mass
-from .deposition import assignment_indices_and_weights as _assignment_indices_and_weights
-from .models import GridResult, ParticleData
-from .preprocess import make_radius_groups
+from clumping_factor.infrastructure.deposition import add_deposited_mass as _add_deposited_mass
+from clumping_factor.infrastructure.deposition import assignment_indices_and_weights as _assignment_indices_and_weights
+from clumping_factor.infrastructure.models import GridResult, ParticleData
+from clumping_factor.infrastructure.preprocess import make_radius_groups
 
 __all__ = ["_add_deposited_mass", "_assignment_indices_and_weights"]
 
@@ -315,7 +315,7 @@ def _summarize_chunk_stream(
 
 
 def _summarize_file_partition(args: tuple) -> dict[str, Any]:
-    from .loaders import iter_particle_chunks, read_snapshot_metadata
+    from clumping_factor.infrastructure.loaders import iter_particle_chunks, read_snapshot_metadata
 
     base_path, snapshot, particle_type, radius_mode, chunk_size, work_units = args
     t0 = perf_counter()
@@ -380,7 +380,7 @@ def _cached_parallel_stream_summary(
     cache_dir: str,
     file_signature: list[dict[str, Any]],
 ) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any]]:
-    from .summary_cache import load_or_build_summary, summary_cache_identity
+    from clumping_factor.infrastructure.summary_cache import load_or_build_summary, summary_cache_identity
 
     summary_workers: list[dict[str, Any]] = []
 
@@ -813,7 +813,7 @@ def _compute_scipy_chunked_worker(
     mas: str,
     output_path: str,
 ) -> tuple[str, list[dict[str, Any]], dict[str, Any]]:
-    from .loaders import iter_particle_chunks
+    from clumping_factor.infrastructure.loaders import iter_particle_chunks
 
     cell_size = float(lbox) / int(grid_size)
     edges = None if edges_values is None else np.asarray(edges_values, dtype=np.float32)
@@ -969,7 +969,7 @@ def build_density_grid_scipy_chunked_parallel(
     if backend not in {"sphere", "cube"}:
         raise ValueError("SciPy backend must be 'sphere' or 'cube'.")
 
-    from .loaders import snapshot_file_particle_counts, snapshot_file_signature
+    from clumping_factor.infrastructure.loaders import snapshot_file_particle_counts, snapshot_file_signature
 
     total_t0 = perf_counter()
     allocation_metadata = _validate_grid_request(grid_size, np.float64)
@@ -1443,7 +1443,7 @@ def _compute_pylians_chunked_worker(
     import MAS_library as MASL
     import smoothing_library as SL
 
-    from .loaders import iter_particle_chunks
+    from clumping_factor.infrastructure.loaders import iter_particle_chunks
 
     cell_size = float(lbox) / int(grid_size)
     edges = None if edges_values is None else np.asarray(edges_values, dtype=np.float32)
@@ -1619,7 +1619,7 @@ def build_density_grid_pylians_chunked_parallel(
             "Install Pylians or choose --backend sphere or --backend cube."
         ) from exc
 
-    from .loaders import snapshot_file_particle_counts, snapshot_file_signature
+    from clumping_factor.infrastructure.loaders import snapshot_file_particle_counts, snapshot_file_signature
 
     total_t0 = perf_counter()
     allocation_metadata = _validate_grid_request(grid_size, np.float32)
@@ -1828,3 +1828,4 @@ def build_density_grid_pylians_chunked_parallel(
             "effective_workers": int(effective_workers),
         },
     )
+

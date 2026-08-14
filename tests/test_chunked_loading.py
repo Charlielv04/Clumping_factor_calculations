@@ -4,8 +4,8 @@ import os
 import h5py
 import numpy as np
 
-from clumping_factor.cli import _select_load_mode
-from clumping_factor.grid import (
+from clumping_factor.methods.clumping.compute import _select_load_mode
+from clumping_factor.methods.clumping.fields import (
     _balance_file_indices,
     _fit_parallel_memory_policy,
     _plan_particle_work,
@@ -13,9 +13,9 @@ from clumping_factor.grid import (
     build_density_grid_scipy_chunked,
     build_density_grid_scipy_chunked_parallel,
 )
-from clumping_factor.loaders import SnapshotMetadata, iter_particle_chunks, load_tng_particles, read_snapshot_metadata, snapshot_file_particle_counts
-from clumping_factor.models import ParticleData
-from clumping_factor.raw_gas import raw_gas_clumping_sweep, raw_gas_clumping_sweep_chunked
+from clumping_factor.infrastructure.loaders import SnapshotMetadata, iter_particle_chunks, load_tng_particles, read_snapshot_metadata, snapshot_file_particle_counts
+from clumping_factor.infrastructure.models import ParticleData
+from clumping_factor.methods.clumping.raw import raw_gas_clumping_sweep, raw_gas_clumping_sweep_chunked
 
 
 def write_snapshot_file(path, lbox, counts_this_file, counts_total, gas=None, dm=None, file_count=1, scale_factor=0.5, dm_mass_table=2.0):
@@ -376,7 +376,7 @@ def test_temporary_directory_is_cleaned_after_worker_failure(monkeypatch, tmp_pa
     def fail_write(*_args, **_kwargs):
         raise RuntimeError("simulated worker write failure")
 
-    monkeypatch.setattr("clumping_factor.grid._write_worker_grid", fail_write)
+    monkeypatch.setattr("clumping_factor.methods.clumping.fields._write_worker_grid", fail_write)
     try:
         build_density_grid_scipy_chunked_parallel(
             str(base_path), 0, "gas", "cube", 4, 3, "cube", 1, 1, temp_dir=str(temp_parent)
@@ -415,10 +415,11 @@ def test_auto_load_mode_uses_estimated_memory(monkeypatch):
         file_count=1,
         header_path="snap_000.0.hdf5",
     )
-    monkeypatch.setattr("clumping_factor.cli._read_snapshot_metadata", lambda *_args: metadata)
-    monkeypatch.setattr("clumping_factor.cli._estimate_full_load_bytes", lambda *_args: 32 * 1024**3)
+    monkeypatch.setattr("clumping_factor.methods.clumping.compute._read_snapshot_metadata", lambda *_args: metadata)
+    monkeypatch.setattr("clumping_factor.methods.clumping.compute._estimate_full_load_bytes", lambda *_args: 32 * 1024**3)
     args = Namespace(base_path=".", snapshot=0, load_mode="auto", max_full_load_gb=16.0)
     assert _select_load_mode(args, "gas") == ("chunked", 32.0)
 
     args.max_full_load_gb = 64.0
     assert _select_load_mode(args, "gas") == ("full", 32.0)
+

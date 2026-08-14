@@ -2,8 +2,8 @@ import json
 
 import numpy as np
 
-from clumping_factor.models import GridResult, ParticleData
-from clumping_factor.results import build_result_document, read_json_result, write_json_result
+from clumping_factor.infrastructure.models import GridResult, ParticleData
+from clumping_factor.infrastructure.results import build_result_document, read_json_result, write_json_result
 
 
 def _document():
@@ -29,15 +29,16 @@ def test_schema_two_records_reproducibility_metadata():
 def test_atomic_write_replaces_existing_result_and_cleans_temporary_file(tmp_path):
     output = tmp_path / "result.json"
     output.write_text("old", encoding="utf-8")
-    write_json_result(_document(), output)
+    write_json_result(_document(), output, method_id="clumping.cube")
     assert read_json_result(output)["schema_version"] == 2
     assert list(tmp_path.glob(".result.json.*.tmp")) == []
 
 
-def test_reader_accepts_legacy_schema_and_rejects_unknown_schema(tmp_path):
+def test_reader_rejects_legacy_and_unknown_schemas(tmp_path):
     legacy = tmp_path / "legacy.json"
     legacy.write_text(json.dumps({"schema_version": 1, "thresholds": []}), encoding="utf-8")
-    assert read_json_result(legacy)["schema_version"] == 1
+    with np.testing.assert_raises_regex(ValueError, "only schema version 2"):
+        read_json_result(legacy)
 
     future = tmp_path / "future.json"
     future.write_text(json.dumps({"schema_version": 999}), encoding="utf-8")
@@ -47,3 +48,4 @@ def test_reader_accepts_legacy_schema_and_rejects_unknown_schema(tmp_path):
         assert "Unsupported" in str(exc)
     else:
         raise AssertionError("unknown schemas must be rejected")
+

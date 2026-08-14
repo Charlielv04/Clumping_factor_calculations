@@ -28,38 +28,12 @@ dev = [
 
 [project.scripts]
 clumping = "clumping_factor.command:main"
-clumping-compute = "clumping_factor.cli:compute_main"
-clumping-eq5 = "clumping_factor.cli:eq5_main"
-clumping-equation-tests = "clumping_factor.equation_tests_cli:equation_tests_main"
-clumping-density-ratio = "clumping_factor.density_ratio_cli:density_ratio_main"
-clumping-equation-tests-plot = "clumping_factor.equation_tests_cli:equation_tests_plot_main"
-clumping-equation-story-plots = "clumping_factor.equation_story_plots:equation_story_plots_main"
-clumping-equation-diagnostic-plots = "clumping_factor.equation_story_plots:equation_diagnostic_plots_main"
-clumping-equation-igm-check-plots = "clumping_factor.equation_story_plots:equation_igm_check_plots_main"
-clumping-thesan-clumping-plots = "clumping_factor.thesan_clumping_plots:main"
-clumping-thesan-igm-plots = "clumping_factor.thesan_igm_plots:main"
-clumping-plot = "clumping_factor.cli:plot_main"
-clumping-evolution-plot = "clumping_factor.cli:evolution_plot_main"
-clumping-model-evolution-plot = "clumping_factor.cli:model_evolution_plot_main"
-clumping-campaign-plot = "clumping_factor.cli:campaign_plot_main"
-clumping-forest = "clumping_factor.forest.cli:forest_main"
-clumping-ionizing = "clumping_factor.forest.ionizing_cli:ionizing_main"
-clumping-ionized-sweep = "clumping_factor.ionized_sweep_cli:ionized_sweep_main"
-clumping-snapshot = "clumping_factor.forest.workflow_cli:snapshot_main"
-clumping-temperature = "clumping_factor.temperature_cli:temperature_main"
-clumping-factor-alternative = "clumping_factor.alternative_clumping_cli:alternative_clumping_main"
-clumping-factor-alternative-plot = "clumping_factor.alternative_clumping_cli:alternative_quantity_plot_main"
-clumping-power-spectrum = "clumping_factor.power_spectrum_cli:power_spectrum_main"
-clumping-power-spectrum-plot = "clumping_factor.power_spectrum_plotting:power_spectrum_plot_main"
-clumping-power-spectrum-compare = "clumping_factor.power_spectrum_plotting:power_spectrum_compare_main"
-clumping-aida-tng-plots = "clumping_factor.aida_tng_plotting:aida_tng_plot_main"
-clumping-organize-results = "clumping_factor.result_organization:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-"clumping_factor.forest" = ["data/line_list.txt"]
+"clumping_factor.methods.forest" = ["data/line_list.txt"]
 
 [tool.pytest.ini_options]
 addopts = "--strict-markers"
@@ -77,8 +51,4 @@ python_version = "3.10"
 ignore_missing_imports = true
 check_untyped_defs = true
 warn_unused_ignores = true
-files = [
-    "src/clumping_factor/configuration.py",
-    "src/clumping_factor/deposition.py",
-    "src/clumping_factor/results.py",
-]
+files = ["src/clumping_factor"]

@@ -4,13 +4,13 @@ import argparse
 from pathlib import Path
 from time import perf_counter
 
-from .loaders import snapshot_file_paths
-from .temperature import (
+from clumping_factor.infrastructure.loaders import snapshot_file_paths
+from clumping_factor.methods.thermodynamics.temperature import (
     compute_and_cache_snapshot_temperature,
     compute_snapshot_temperature_result,
     temperature_result_document,
 )
-from .forest.ionizing import atomic_write_json
+from clumping_factor.methods.forest.ionizing import atomic_write_json
 
 
 def build_temperature_parser() -> argparse.ArgumentParser:
@@ -67,3 +67,4 @@ def run_temperature(args: argparse.Namespace) -> Path:
 def temperature_main(argv: list[str] | None = None) -> None:
     args = build_temperature_parser().parse_args(argv)
     print(f"Wrote temperature measurement: {run_temperature(args)}")
+

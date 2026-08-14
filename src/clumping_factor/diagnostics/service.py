@@ -1,16 +1,24 @@
 """Routing facade for the established diagnostic implementations."""
 
-from argparse import Namespace
+from types import SimpleNamespace
 from typing import Any
 
-
-def equations(args: Namespace) -> Any:
-    from ..equation_tests_cli import run_equation_tests
-
-    return run_equation_tests(args)
+from .configuration import DiagnosticConfig
 
 
-def density_ratio(args: Namespace) -> Any:
-    from ..density_ratio_cli import run_density_ratio
+def _arguments(config: DiagnosticConfig) -> SimpleNamespace:
+    if not config.options:
+        raise ValueError("DiagnosticConfig.options must contain parsed command settings")
+    return SimpleNamespace(**config.options)
 
-    return run_density_ratio(args)
+
+def equations(config: DiagnosticConfig) -> Any:
+    from .equations_cli import run_equation_tests
+
+    return run_equation_tests(_arguments(config))
+
+
+def density_ratio(config: DiagnosticConfig) -> Any:
+    from .density_ratio_cli import run_density_ratio
+
+    return run_density_ratio(_arguments(config))

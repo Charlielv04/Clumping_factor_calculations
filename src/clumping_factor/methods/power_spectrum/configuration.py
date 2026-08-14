@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from argparse import Namespace
+from typing import Any
 
 from ..registry import METHOD_REGISTRY, MethodSpec
 
@@ -12,6 +13,7 @@ class PowerSpectrumMethodConfig:
     engine: str = "numpy"
     grid_size: int = 256
     smoothing: str = "none"
+    options: dict[str, Any] = field(default_factory=dict, compare=False, repr=False)
 
     @classmethod
     def from_namespace(cls, args: Namespace) -> "PowerSpectrumMethodConfig":
@@ -20,6 +22,7 @@ class PowerSpectrumMethodConfig:
             engine=str(getattr(args, "spectrum_engine", "numpy")),
             grid_size=int(getattr(args, "grid_size", 256)),
             smoothing=str(getattr(args, "smoothing", "none")),
+            options=dict(vars(args)),
         )
 
     def validate(self) -> MethodSpec:

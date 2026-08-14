@@ -6,7 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
-from ..results import read_json_result
+from clumping_factor.infrastructure.results import read_json_result
 
 
 def validate_paths(paths: list[Path]) -> list[dict[str, object]]:
@@ -29,4 +29,5 @@ def main(argv: list[str] | None = None) -> None:
         print(json.dumps(row, sort_keys=True))
     if any(not bool(row["valid"]) for row in report):
         raise SystemExit(1)
+
 

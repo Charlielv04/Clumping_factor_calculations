@@ -6,9 +6,9 @@ from time import perf_counter
 
 import numpy as np
 
-from .loaders import iter_particle_chunks, read_snapshot_metadata
-from .raw_gas import _raw_hii_fraction
-from .results import resolve_simulation_name, sanitize_simulation_name, write_json_result
+from clumping_factor.infrastructure.loaders import iter_particle_chunks, read_snapshot_metadata
+from clumping_factor.methods.clumping.raw import _raw_hii_fraction
+from clumping_factor.infrastructure.results import resolve_simulation_name, sanitize_simulation_name, write_json_result
 
 
 def _build_ionized_cuts(cut_min: float, cut_max: float, cut_count: int) -> np.ndarray:
@@ -198,3 +198,4 @@ def ionized_sweep_main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     output = compute_ionized_sweep(args)
     print(f"Wrote ionized sweep result: {output}")
+

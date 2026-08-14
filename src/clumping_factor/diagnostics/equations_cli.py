@@ -117,7 +117,7 @@ def build_equation_tests_parser() -> argparse.ArgumentParser:
 
 
 def run_equation_tests(args: argparse.Namespace) -> tuple[Path, Path]:
-    from .equation_tests import compute_equation_tests, write_equation_tests_result
+    from clumping_factor.diagnostics.equations import compute_equation_tests, write_equation_tests_result
 
     start = perf_counter()
 
@@ -125,7 +125,7 @@ def run_equation_tests(args: argparse.Namespace) -> tuple[Path, Path]:
         elapsed = perf_counter() - start
         print(f"[equation-tests {elapsed:8.1f}s] {message}", flush=True)
 
-    from .forest.ionizing import compute_and_cache_snapshot_ionizing_inputs, require_ionizing_table_provenance
+    from clumping_factor.methods.forest.ionizing import compute_and_cache_snapshot_ionizing_inputs, require_ionizing_table_provenance
 
     mfp_file = args.mfp_file
     gamma_hi_file = args.gamma_hi_file
@@ -168,7 +168,7 @@ def run_equation_tests(args: argparse.Namespace) -> tuple[Path, Path]:
     if temperature_file is None:
         temperature_file = str(Path(mfp_file).parent / "Tigm_Thesan1.dat")
         if not Path(temperature_file).exists() and args.compute_missing_temperature:
-            from .temperature import compute_and_cache_snapshot_temperature
+            from clumping_factor.methods.thermodynamics.temperature import compute_and_cache_snapshot_temperature
 
             temperature_file = str(compute_and_cache_snapshot_temperature(
                 args.base_path,
@@ -348,7 +348,7 @@ def plot_equation_tests_overdensity(
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from .results import read_json_result
+    from clumping_factor.infrastructure.results import read_json_result
 
     selected_quantities = quantities or DEFAULT_PLOT_QUANTITIES
     documents = [(path, read_json_result(path)) for path in result_paths]
@@ -439,3 +439,4 @@ def equation_tests_plot_main(argv: list[str] | None = None) -> None:
         log_y=not args.linear_y,
     )
     print(f"Wrote equation-test overdensity plot: {output}")
+

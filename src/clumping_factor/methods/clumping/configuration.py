@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from argparse import Namespace
+from typing import Any
 
 from ..registry import METHOD_REGISTRY, MethodSpec
 
@@ -17,6 +18,7 @@ class ClumpingMethodConfig:
     mask_particle_type: str | None = None
     target_particle_type: str | None = None
     method_id: str | None = None
+    options: dict[str, Any] = field(default_factory=dict, compare=False, repr=False)
 
     @classmethod
     def from_namespace(cls, args: Namespace, *, method_id: str | None = None) -> "ClumpingMethodConfig":
@@ -28,6 +30,7 @@ class ClumpingMethodConfig:
             mask_particle_type=getattr(args, "mask_particle_type", None),
             target_particle_type=getattr(args, "target_particle_type", None),
             method_id=method_id,
+            options=dict(vars(args)),
         )
 
     def validate(self) -> MethodSpec:

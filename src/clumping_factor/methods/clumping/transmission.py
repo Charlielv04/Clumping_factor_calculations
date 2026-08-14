@@ -5,7 +5,7 @@ from typing import Callable, Iterable
 
 import numpy as np
 
-from .grid import _add_deposited_mass, _assignment_indices_and_weights, _parse_memory_bytes, _validate_grid_request
+from clumping_factor.methods.clumping.fields import _add_deposited_mass, _assignment_indices_and_weights, _parse_memory_bytes, _validate_grid_request
 
 MSUN_G = 1.98847e33
 KPC_CM = 3.0856775814913673e21
@@ -16,8 +16,8 @@ def effective_sigma_bar_ion_from_photon_groups(
     photon_volume_sums: np.ndarray,
 ) -> tuple[float, dict]:
     """Derive the gray HI cross-section from the first three THESAN groups."""
-    from .forest.constants import SPEED_OF_LIGHT_CM_S
-    from .forest.ionizing import THESAN_SIGMA_C_CM3_S
+    from clumping_factor.methods.forest.constants import SPEED_OF_LIGHT_CM_S
+    from clumping_factor.methods.forest.ionizing import THESAN_SIGMA_C_CM3_S
 
     sums = np.asarray(photon_volume_sums, dtype=np.float64).reshape(-1)
     if sums.shape != (3,) or not np.all(np.isfinite(sums)) or np.any(sums < 0):

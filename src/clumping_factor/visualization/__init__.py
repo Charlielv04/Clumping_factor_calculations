@@ -4,3 +4,4 @@ from .configuration import PlotConfig
 from .result import PlotResult
 
 __all__ = ["PlotConfig", "PlotResult"]
+

@@ -523,7 +523,7 @@ def atomic_write_json(
     output.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=f".{output.name}.", suffix=".tmp", dir=output.parent)
     try:
-        from ..results import with_result_specs
+        from clumping_factor.infrastructure.results import with_result_specs
 
         payload = with_result_specs(document, method_id=method_id) if normalize_result else document
         with os.fdopen(fd, "w", encoding="utf-8") as stream:
@@ -624,9 +624,9 @@ def compute_and_cache_snapshot_ionizing_inputs(
     allow_mfp_los_redshift_mismatch: bool = False,
 ) -> tuple[Path | None, Path | None]:
     """Calculate missing Eq. 5--13 inputs and cache them beside a snapshot."""
-    from ..loaders import snapshot_file_paths
+    from clumping_factor.infrastructure.loaders import snapshot_file_paths
 
-    from ..loaders import read_snapshot_metadata
+    from clumping_factor.infrastructure.loaders import read_snapshot_metadata
 
     pieces = snapshot_file_paths(base_path, snapshot)
     snapshot_metadata = read_snapshot_metadata(base_path, snapshot)
@@ -715,3 +715,4 @@ def compute_and_cache_snapshot_ionizing_inputs(
             if progress:
                 progress(f"Gamma_HI cache saved atomically: {gamma_path}")
     return (mfp_path if need_mfp else None, gamma_path if need_gamma else None)
+

@@ -19,16 +19,16 @@ from typing import Callable, Sequence
 
 import numpy as np
 
-from .alternative_clumping import (
+from clumping_factor.methods.clumping.alternative import (
     ALPHA_B_HII_10000K_CM3_S,
     _cosmic_mean_hydrogen_density_cm3,
     _read_header_cosmology,
     _snapshot_units,
     interpolate_mfp,
 )
-from .forest.constants import MPC_CM, PROTON_MASS_G, SPEED_OF_LIGHT_CM_S
-from .loaders import read_snapshot_metadata, snapshot_file_paths
-from .results import resolve_simulation_name, write_json_result
+from clumping_factor.methods.forest.constants import MPC_CM, PROTON_MASS_G, SPEED_OF_LIGHT_CM_S
+from clumping_factor.infrastructure.loaders import read_snapshot_metadata, snapshot_file_paths
+from clumping_factor.infrastructure.results import resolve_simulation_name, write_json_result
 
 
 @dataclass(frozen=True)
@@ -855,7 +855,7 @@ def compute_equation_tests(
                 n_hii = x_hii * n_h
                 n_e = electron_abundance * n_h
                 if internal_energy is not None:
-                    from .temperature import compute_particles_temperature
+                    from clumping_factor.methods.thermodynamics.temperature import compute_particles_temperature
 
                     temperature_cell = compute_particles_temperature(
                         internal_energy,
@@ -1444,3 +1444,4 @@ def write_equation_tests_result(
     else:
         csv_output.write_text("", encoding="utf-8")
     return output, csv_output
+

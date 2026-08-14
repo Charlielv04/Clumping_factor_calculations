@@ -448,12 +448,12 @@ def write_analysis_outputs(rows: list[dict[str, Any]], output_dir: Path | None, 
     return analysis_root
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("inputs", nargs="+", help="Result JSON files or directories containing them.")
     parser.add_argument("--output-dir", type=Path, help="Legacy output directory. Omit for canonical analysis layout.")
     parser.add_argument("--analysis-root", type=Path, default=Path("results/analysis"))
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     rows = collect(args.inputs)
     output_root = write_analysis_outputs(rows, args.output_dir, args.analysis_root)

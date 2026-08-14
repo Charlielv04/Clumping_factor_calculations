@@ -13,13 +13,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="clumping", description="Clumping Factor Suite command tree.")
     groups = parser.add_subparsers(dest="group")
     for group, actions in {
-        "clumping": ("compute", "alternative"),
+        "clumping": ("compute", "alternative", "ionized-sweep"),
         "power": ("compute", "plot", "compare"),
         "forest": ("spectra", "ionizing", "snapshot"),
         "temperature": ("compute",),
         "diagnostics": ("equations", "density-ratio"),
-        "plot": ("campaign", "evolution", "igm"),
-        "results": ("validate", "organize"),
+        "plot": ("result", "campaign", "evolution", "model", "equations", "benchmark", "igm"),
+        "results": ("validate",),
         "campaign": ("plan", "submit"),
         "methods": ("catalog",),
     }.items():
@@ -41,6 +41,10 @@ def _route(group: str, action: str) -> Callable[[list[str] | None], object]:
         from .methods.clumping.cli_adapter import alternative_clumping_main
 
         return alternative_clumping_main
+    if (group, action) == ("clumping", "ionized-sweep"):
+        from .methods.clumping.cli_adapter import ionized_sweep_main
+
+        return ionized_sweep_main
     if (group, action) == ("power", "compute"):
         from .methods.power_spectrum.cli_adapter import power_spectrum_main
 
@@ -81,20 +85,32 @@ def _route(group: str, action: str) -> Callable[[list[str] | None], object]:
         from .visualization.cli_adapter import campaign_plot_main
 
         return campaign_plot_main
+    if (group, action) == ("plot", "result"):
+        from .visualization.cli_adapter import result_main
+
+        return result_main
     if (group, action) == ("plot", "evolution"):
         from .visualization.cli_adapter import evolution_plot_main
 
         return evolution_plot_main
+    if (group, action) == ("plot", "model"):
+        from .visualization.cli_adapter import model_main
+
+        return model_main
+    if (group, action) == ("plot", "equations"):
+        from .visualization.equations import equation_story_plots_main
+
+        return equation_story_plots_main
+    if (group, action) == ("plot", "benchmark"):
+        from .visualization.benchmark import main
+
+        return main
     if (group, action) == ("plot", "igm"):
         from .visualization.cli_adapter import igm_main
 
         return igm_main
     if (group, action) == ("results", "validate"):
         from .infrastructure.validation import main
-
-        return main
-    if (group, action) == ("results", "organize"):
-        from .infrastructure.result_organization import main
 
         return main
     if group == "campaign":

@@ -47,7 +47,7 @@ def test_typed_campaign_expands_matrix_and_derives_outputs(tmp_path: Path):
     assert len(manifest.tasks) == 4
     assert [task.task_id for task in manifest.tasks] == sorted(task.task_id for task in manifest.tasks)
     raw_tasks = [task for task in manifest.tasks if task.method_id == "clumping.raw-volume-weighted"]
-    assert all(task.grid_size is None and "_nogrid" in task.output for task in raw_tasks)
+    assert all(task.grid_size is None and "/science-" in task.output.replace("\\", "/") for task in raw_tasks)
     assert all(task.output in task.command for task in manifest.tasks)
     assert all(task.resources.memory == "32gb" for task in manifest.tasks)
 

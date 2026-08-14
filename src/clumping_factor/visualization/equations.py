@@ -10,7 +10,7 @@ from typing import Sequence
 
 import numpy as np
 
-from .results import read_json_result
+from clumping_factor.infrastructure.results import read_json_result
 
 
 MASK_PATTERN = re.compile(
@@ -1454,3 +1454,4 @@ def equation_igm_check_plots_main(argv: list[str] | None = None) -> None:
     )
     for output in outputs:
         print(f"Wrote IGM check plot: {output}")
+

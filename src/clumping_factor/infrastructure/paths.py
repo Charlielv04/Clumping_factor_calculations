@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
-from ..results import canonical_result_path
+from clumping_factor.infrastructure.results import canonical_result_path
 
 __all__ = ["canonical_result_path"]
+

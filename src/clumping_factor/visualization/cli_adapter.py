@@ -14,9 +14,18 @@ def evolution_plot_main(argv: list[str] | None = None) -> None:
 
 
 def plot_main(argv: list[str] | None = None) -> None:
-    from ..cli import plot_main as legacy_main
+    from clumping_factor.methods.clumping.compute import plot_main as established_main
 
-    return legacy_main(argv)
+    return established_main(argv)
+
+
+result_main = plot_main
+
+
+def model_main(argv: list[str] | None = None) -> None:
+    from clumping_factor.methods.clumping.compute import model_evolution_plot_main
+
+    return model_evolution_plot_main(argv)
 
 
 def igm_main(argv: list[str] | None = None) -> None:

@@ -9,7 +9,7 @@ from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
 
-from .plot_styles import dark_matter_model, simulation_style
+from clumping_factor.visualization.styles import dark_matter_model, simulation_style
 
 
 @dataclass(frozen=True)

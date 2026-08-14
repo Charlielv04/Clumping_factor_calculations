@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import platform
 import re
@@ -13,12 +14,32 @@ from typing import Any
 
 import numpy as np
 
-from .methods.registry import METHOD_REGISTRY
+from ..methods.registry import METHOD_REGISTRY
 
-from .models import GridResult, ParticleData
+from clumping_factor.infrastructure.models import GridResult, ParticleData
 
 CURRENT_SCHEMA_VERSION = 2
-SUPPORTED_SCHEMA_VERSIONS = {1, CURRENT_SCHEMA_VERSION}
+SUPPORTED_SCHEMA_VERSIONS = {CURRENT_SCHEMA_VERSION}
+
+REQUIRED_RESULT_KEYS = {
+    "schema_version",
+    "method_spec",
+    "selection_spec",
+    "execution_spec",
+    "provenance",
+    "simulation",
+}
+
+SCHEDULER_EXECUTION_KEYS = {
+    "campaign",
+    "cpus",
+    "ncpus",
+    "queue",
+    "resource_size",
+    "source_campaign",
+    "task_id",
+    "walltime",
+}
 
 
 def _package_version(name: str) -> str | None:
@@ -29,7 +50,7 @@ def _package_version(name: str) -> str | None:
 
 
 def _code_revision() -> dict[str, Any]:
-    root = Path(__file__).resolve().parents[2]
+    root = Path(__file__).resolve().parents[3]
     try:
         revision = subprocess.run(
             ["git", "rev-parse", "HEAD"], cwd=root, check=True,
@@ -66,7 +87,7 @@ def build_provenance(parameters: dict[str, Any]) -> dict[str, Any]:
     snapshot = parameters.get("snapshot")
     if base_path is not None and snapshot is not None:
         try:
-            from .loaders import snapshot_file_signature
+            from clumping_factor.infrastructure.loaders import snapshot_file_signature
             provenance["inputs"] = snapshot_file_signature(base_path, int(snapshot))
         except (FileNotFoundError, OSError, ValueError):
             provenance["inputs"] = []
@@ -112,98 +133,33 @@ def build_result_document(
         "timings": timings,
         "provenance": build_provenance(parameters),
     }
-    return _clean_json(with_result_specs(document))
+    return _clean_json(document)
 
 
-def _method_candidate(parameters: dict[str, Any], document: dict[str, Any]) -> str | None:
-    # Identify the result domain before interpreting historical backend names.
-    # Names such as ``pylians`` occur in more than one domain.
-    statistic = str(document.get("statistic", "")).lower()
-    backend = parameters.get("backend")
-    if not backend:
-        backend_value = document.get("backend")
-        backend = backend_value.get("backend") if isinstance(backend_value, dict) else backend_value
-    if "power_spectrum" in statistic or "power spectrum" in statistic or parameters.get("spectrum_engine"):
-        engine = parameters.get("spectrum_engine") or parameters.get("primary_spectrum_engine")
-        if engine is None:
-            engine = backend
-        return {
-            "numpy": "power-spectrum.numpy",
-            "pylians": "power-spectrum.pylians",
-            "both": "power-spectrum.combined",
-        }.get(str(engine))
-    calculation = str(document.get("calculation", "")).lower()
-    quantity = str(document.get("quantity", "")).lower()
-    if "alternative_clumping" in calculation or "alternative_clumping" in statistic:
-        return {
-            "raw-volume": "alternative.raw-volume",
-            "grid": "alternative.grid-masked",
-        }.get(str(parameters.get("backend")))
-    if "ionized_igm" in calculation or "ionized_sweep" in calculation:
-        return "alternative.ionized-sweep"
-    if "temperature" in calculation or quantity == "tigm":
-        return "thermodynamics.snapshot-temperature"
-    if quantity == "electron_density_nhii_over_ne":
-        return "diagnostics.density-ratio"
-    if "gamma" in calculation:
-        return "forest.gamma-hi"
-    if "mfp" in calculation or "mean_free_path" in calculation:
-        return "forest.mfp"
-    if "lya" in calculation or "spectrum" in calculation:
-        return "forest.lyman-alpha"
-    if document.get("equations") or parameters.get("ionized_density_thresholds"):
-        return "diagnostics.equations"
-    if backend in {"sphere", "cube", "pylians", "raw", "raw-volume", "raw-transmission", "voronoi-transmission"}:
-        return str(backend)
-    return None
-
-
-def _method_spec(
-    parameters: dict[str, Any],
-    document: dict[str, Any],
-    method_id: str | None = None,
-) -> dict[str, Any]:
-    candidate = method_id or _method_candidate(parameters, document)
-    if candidate is None:
-        candidate = "legacy.unknown"
+def _method_spec(parameters: dict[str, Any], method_id: str) -> dict[str, Any]:
     try:
-        return METHOD_REGISTRY.get(candidate).to_dict()
+        contract = METHOD_REGISTRY.get(method_id).to_dict()
     except KeyError:
-        if method_id is not None:
-            raise ValueError(f"Producer supplied an unregistered method identifier: {method_id!r}") from None
-        return {
-            "identifier": "legacy.unknown",
-            "domain": "legacy",
-            "description": "Legacy-compatible method metadata",
-            "supported_particle_types": (parameters.get("particle_type", document.get("particle_type", "unknown")),),
-            "field_representation": "legacy",
-            "weighting": "legacy",
-            "mask_semantics": "legacy",
-            "field_builder": "legacy.unknown",
-            "estimator": "legacy.unknown",
-            "selection": "legacy.unknown",
-            "producer": "legacy.unknown",
-            "grid_requirements": (),
-            "optional_dependencies": (),
-            "execution_modes": ("local",),
-            "presets": (),
-            "legacy_backends": (candidate,),
-        }
+        raise ValueError(f"Producer supplied an unregistered method identifier: {method_id!r}") from None
+    contract["configuration"] = {
+        key: value
+        for key, value in parameters.items()
+        if key not in SCHEDULER_EXECUTION_KEYS
+        and key not in {"base_path", "simulation_name", "snapshot", "particle_type"}
+    }
+    return contract
 
 
 def with_result_specs(document: dict[str, Any], *, method_id: str | None = None) -> dict[str, Any]:
-    """Add normalized contracts while retaining all historical result keys."""
+    """Normalize a producer-owned document into the strict schema-2 contract."""
 
     normalized = dict(document)
     parameters = dict(normalized.get("parameters", {}))
     normalized["parameters"] = parameters
     if method_id is not None:
-        # The writer is authoritative for new output. Existing metadata is
-        # retained only when reading/normalizing a legacy document without an
-        # explicit producer contract.
-        normalized["method_spec"] = _method_spec(parameters, normalized, method_id)
-    else:
-        normalized.setdefault("method_spec", _method_spec(parameters, normalized))
+        normalized["method_spec"] = _method_spec(parameters, method_id)
+    elif "method_spec" not in normalized:
+        raise ValueError("Strict schema-2 writers require an explicit registered method_id")
     normalized.setdefault(
         "selection_spec",
         {
@@ -247,6 +203,21 @@ def with_result_specs(document: dict[str, Any], *, method_id: str | None = None)
             "task_id": parameters.get("task_id"),
         },
     )
+    normalized["schema_version"] = CURRENT_SCHEMA_VERSION
+    normalized.setdefault("provenance", build_provenance(parameters))
+    simulation_name = parameters.get("simulation_name") or normalized.get("simulation_name")
+    base_path = parameters.get("base_path")
+    if simulation_name is None and base_path is not None:
+        simulation_name = resolve_simulation_name(base_path)
+    normalized.setdefault(
+        "simulation",
+        {
+            "family": parameters.get("results_family") or parameters.get("family") or "unknown",
+            "name": simulation_name or "unknown",
+            "snapshot": parameters.get("snapshot", normalized.get("snapshot")),
+            "particle_type": parameters.get("particle_type", normalized.get("particle_type")),
+        },
+    )
     return normalized
 
 
@@ -283,56 +254,48 @@ def default_output_path(
     return output_dir / f"{particle_type}_{backend}_snapshot{snapshot:03d}_grid{grid_size}.json"
 
 
-def canonical_thesan_result_path(
-    output_dir: str | Path,
-    simulation_name: str,
-    particle_type: str,
-    backend: str,
-    snapshot: int,
-    grid_size: int,
-    threads: int,
-    batch_size: int,
-    run: int | str = 1,
-) -> Path:
-    return canonical_result_path(
-        output_dir,
-        family="thesan",
-        simulation_name=simulation_name,
-        particle_type=particle_type,
-        method=backend,
-        snapshot=snapshot,
-        grid_size=grid_size,
-        threads=threads,
-        batch_size=batch_size,
-        run=run,
-    )
-
-
 def canonical_result_path(
     output_root: str | Path,
     *,
     family: str,
     simulation_name: str,
     particle_type: str,
-    method: str,
     snapshot: int,
-    grid_size: int | None = None,
-    threads: int = 1,
-    batch_size: int = 1,
+    method_spec: dict[str, Any],
+    selection_spec: dict[str, Any],
+    execution_spec: dict[str, Any],
     run: int | str = 1,
 ) -> Path:
-    """Derive canonical result paths for all campaign families."""
+    """Derive a canonical path from normalized scientific specifications."""
 
-    grid = f"grid{int(grid_size)}" if grid_size is not None else "nogrid"
+    method = str(method_spec.get("identifier") or "")
+    domain = str(method_spec.get("domain") or "")
+    if not method or not domain:
+        raise ValueError("method_spec requires identifier and domain")
+    science_hash = specification_hash({"method_spec": method_spec, "selection_spec": selection_spec})
+    algorithmic_execution = {
+        key: value for key, value in execution_spec.items() if key not in SCHEDULER_EXECUTION_KEYS
+    }
+    execution_hash = specification_hash(algorithmic_execution)
     return (
         Path(output_root)
         / sanitize_simulation_name(family)
         / sanitize_simulation_name(simulation_name)
-        / sanitize_simulation_name(particle_type)
+        / sanitize_simulation_name(domain)
         / sanitize_simulation_name(method)
-        / f"snapshot{int(snapshot):03d}_{grid}"
-        / f"threads{int(threads)}_batch{int(batch_size)}_run{int(run):03d}.json"
+        / sanitize_simulation_name(particle_type)
+        / f"snapshot{int(snapshot):03d}"
+        / f"science-{science_hash}"
+        / f"execution-{execution_hash}_run{int(run):03d}.json"
     )
+
+
+def canonical_json(value: Any) -> str:
+    return json.dumps(_clean_json(value), sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+
+def specification_hash(value: Any) -> str:
+    return hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()[:12]
 
 
 def write_json_result(
@@ -365,10 +328,25 @@ def read_json_result(path: str | Path) -> dict[str, Any]:
     document = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(document, dict):
         raise ValueError("Result document must be a JSON object.")
-    schema_version = document.get("schema_version", 1)
+    schema_version = document.get("schema_version")
     if schema_version not in SUPPORTED_SCHEMA_VERSIONS:
         raise ValueError(
             f"Unsupported result schema_version={schema_version!r}; "
-            f"supported versions are {sorted(SUPPORTED_SCHEMA_VERSIONS)}."
+            f"only schema version {CURRENT_SCHEMA_VERSION} is supported."
         )
+    missing = sorted(REQUIRED_RESULT_KEYS - document.keys())
+    if missing:
+        raise ValueError(f"Schema-2 result is missing required fields: {', '.join(missing)}")
+    method_spec = document["method_spec"]
+    if not isinstance(method_spec, dict) or not isinstance(method_spec.get("configuration"), dict):
+        raise ValueError("method_spec.configuration must be an object")
+    identifier = method_spec.get("identifier")
+    try:
+        METHOD_REGISTRY.get(str(identifier))
+    except KeyError:
+        raise ValueError(f"Result uses an unregistered method identifier: {identifier!r}") from None
+    for key in ("selection_spec", "execution_spec", "provenance", "simulation"):
+        if not isinstance(document[key], dict):
+            raise ValueError(f"{key} must be an object")
     return document
+

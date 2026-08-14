@@ -11,13 +11,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
-from .plotting import (
+from clumping_factor.visualization.plotting import (
     plot_campaign_files,
     plot_evolution_files,
     plot_model_evolution_files,
     plot_result_files,
 )
-from .power_spectrum_plotting import (
+from clumping_factor.visualization.power_spectrum import (
     plot_power_spectrum_files,
     plot_relative_power_spectrum_evolution_files,
 )
