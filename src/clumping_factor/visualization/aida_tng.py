@@ -195,6 +195,16 @@ def generate_aida_tng_plots(
     outputs: list[Path] = []
 
     def render(category: str, output: Path, inputs: list[Path], function, **kwargs) -> None:
+        # The final directory identity is owned here, where both the exact
+        # rendering options and the canonical input checksums are available.
+        provisional = output.parent.parent
+        root = next(parent for parent in provisional.parents if parent.name == "analysis").parent
+        directory = analysis_directory(
+            root, domain=category.split("/", 1)[0], family="aida-tng", analysis_kind=category.split("/", 1)[-1],
+            subject=provisional.parent.parent.name, method_label=provisional.parent.name,
+            options={"filename": output.name, "render": kwargs}, inputs=inputs,
+        )
+        output = directory / "artifacts" / output.name
         if dry_run:
             _record(rows, category, output, inputs, status="planned")
             outputs.append(output)
@@ -206,9 +216,9 @@ def generate_aida_tng_plots(
             return
         _record(rows, category, Path(written), inputs)
         write_analysis_manifest(
-            Path(written).parent.parent, domain=category.split("/", 1)[0], family="aida-tng",
-            analysis_kind=category.split("/", 1)[-1], subject=Path(written).parent.parent.parent.name,
-            method_label=Path(written).parent.parent.name, options=kwargs, inputs=inputs, artifacts=[Path(written)],
+            directory, domain=category.split("/", 1)[0], family="aida-tng",
+            analysis_kind=category.split("/", 1)[-1], subject=provisional.parent.parent.name,
+            method_label=provisional.parent.name, options={"filename": output.name, "render": kwargs}, inputs=inputs, artifacts=[Path(written)],
             generator="clumping.plot.campaign",
         )
         outputs.append(Path(written))

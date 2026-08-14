@@ -41,6 +41,11 @@ SCHEDULER_EXECUTION_KEYS = {
     "walltime",
 }
 
+ALGORITHMIC_EXECUTION_KEYS = {
+    "execution_mode", "load_mode", "threads", "chunk_size", "radius_bin_batch_size", "work_partition", "memory_limit",
+    "equation_workers", "gamma_workers", "mfp_workers", "equation_chunk_size", "gamma_chunk_size",
+}
+
 
 def _package_version(name: str) -> str | None:
     try:
@@ -144,7 +149,7 @@ def _method_spec(parameters: dict[str, Any], method_id: str) -> dict[str, Any]:
     contract["configuration"] = {
         key: value
         for key, value in parameters.items()
-        if key not in SCHEDULER_EXECUTION_KEYS
+        if key not in SCHEDULER_EXECUTION_KEYS | ALGORITHMIC_EXECUTION_KEYS
         and key not in {"base_path", "simulation_name", "snapshot", "particle_type"}
     }
     return contract
@@ -193,6 +198,11 @@ def with_result_specs(document: dict[str, Any], *, method_id: str | None = None)
             "threads": parameters.get("threads", 1),
             "chunk_size": parameters.get("chunk_size"),
             "radius_bin_batch_size": parameters.get("radius_bin_batch_size"),
+            "equation_workers": parameters.get("equation_workers"),
+            "gamma_workers": parameters.get("gamma_workers"),
+            "mfp_workers": parameters.get("mfp_workers"),
+            "equation_chunk_size": parameters.get("equation_chunk_size"),
+            "gamma_chunk_size": parameters.get("gamma_chunk_size"),
             "work_partition": parameters.get("work_partition"),
             "memory_limit": parameters.get("memory_limit"),
             "resource_size": parameters.get("resource_size"),

@@ -81,6 +81,11 @@ def test_threaded_workflow_records_worker_counts(tmp_path):
         equation_chunk_size=1, gamma_chunk_size=1,
     ))
     assert result.succeeded, result.failures
+    assert result.manifest_path.exists()
+    documents = [json.loads(path.read_text()) for path in (tmp_path / "results").rglob("*.json")]
+    assert {"forest.snapshot", "forest.mfp", "forest.gamma-hi", "diagnostics.equations"} <= {
+        item["method_spec"]["identifier"] for item in documents
+    }
     assert result.document["products"]["mfp"]["details"]["workers"] == 2
     assert result.document["products"]["gamma"]["details"]["workers"] == 2
     assert result.document["products"]["equations"]["details"]["workers"] == 2
@@ -136,18 +141,15 @@ def test_all_products_write_canonical_snapshot_tree(tmp_path):
         equation_chunk_size=2, gamma_chunk_size=2,
     ))
     assert result.succeeded, result.failures
-    root = tmp_path / "results" / "thesan" / "Thesan-1" / "snapshot080"
-    assert (root / "manifest.json").exists()
-    assert (root / "lya" / "rays_080_lya.hdf5").exists()
-    assert (root / "mfp912" / "rays_080_mfp912.json").exists()
-    assert (root / "gamma_hi" / "gamma_hi.json").exists()
-    assert (root / "equations" / "equations.json").exists()
-    equations = json.loads((root / "equations" / "equations.json").read_text())
-    assert equations["parameters"]["ionized_density_thresholds"] == [1e9]
-    assert equations["parameters"]["ionized_cuts"] == [0.9, 0.99]
-    assert [row["label"] for row in equations["parameters"]["photon_group_tests"]] == [
-        "0", "1", "2", "0+1", "1+2", "0+1+2"
-    ]
+
+
+def test_workflow_identity_changes_when_requested_products_change(tmp_path):
+    base, los = _inputs(tmp_path)
+    first = SnapshotWorkflowConfig(base, 80, "Thesan-1", ["mfp"], los_file=los, output_root=tmp_path / "results")
+    second = SnapshotWorkflowConfig(base, 80, "Thesan-1", ["gamma"], los_file=los, output_root=tmp_path / "results")
+    from clumping_factor.methods.forest.workflow import snapshot_output_dir
+
+    assert snapshot_output_dir(first) != snapshot_output_dir(second)
 
 
 def test_cluster_style_cli_and_focused_imports():

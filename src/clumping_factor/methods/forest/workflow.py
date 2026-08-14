@@ -91,7 +91,14 @@ def _family(simulation: str) -> str:
 def snapshot_output_dir(config: SnapshotWorkflowConfig) -> Path:
     from clumping_factor.infrastructure.results import canonical_output_path
 
-    document = {"parameters": {"simulation_name": config.simulation_name, "snapshot": config.snapshot, "particle_type": "gas", "base_path": str(config.base_path)},
+    workflow = json.loads(json.dumps(asdict(config), default=str))
+    workflow.pop("output_root", None)
+    workflow.pop("refresh_products", None)
+    parameters = {"simulation_name": config.simulation_name, "snapshot": config.snapshot, "particle_type": "gas", "base_path": str(config.base_path),
+                  "workflow_configuration": workflow, "threads": config.threads, "equation_workers": config.equation_workers,
+                  "gamma_workers": config.gamma_workers, "mfp_workers": config.mfp_workers, "equation_chunk_size": config.equation_chunk_size,
+                  "gamma_chunk_size": config.gamma_chunk_size}
+    document = {"parameters": parameters,
                 "particle_type": "gas", "simulation": {"name": config.simulation_name, "snapshot": config.snapshot, "particle_type": "gas"}}
     return canonical_output_path(document, config.output_root, method_id="forest.snapshot")
 
@@ -152,7 +159,10 @@ def run_snapshot_workflow(
     document = {
         "workflow_version": WORKFLOW_VERSION, "status": "running", "started_at": _now(),
         "updated_at": _now(), "simulation": {"name": config.simulation_name, "snapshot": config.snapshot, "particle_type": "gas"},
-        "particle_type": "gas", "parameters": {"simulation_name": config.simulation_name, "snapshot": config.snapshot, "particle_type": "gas", "base_path": str(config.base_path)},
+        "particle_type": "gas", "parameters": {"simulation_name": config.simulation_name, "snapshot": config.snapshot, "particle_type": "gas", "base_path": str(config.base_path),
+        "workflow_configuration": {key: value for key, value in configuration.items() if key not in {"output_root", "refresh_products"}},
+        "threads": config.threads, "equation_workers": config.equation_workers, "gamma_workers": config.gamma_workers, "mfp_workers": config.mfp_workers,
+        "equation_chunk_size": config.equation_chunk_size, "gamma_chunk_size": config.gamma_chunk_size},
         "requested_products": requested, "configuration": configuration, "products": preserved_products,
         "warnings": [], "failures": [],
     }
