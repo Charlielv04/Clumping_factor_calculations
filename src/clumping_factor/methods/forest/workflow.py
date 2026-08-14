@@ -92,12 +92,12 @@ def snapshot_output_dir(config: SnapshotWorkflowConfig) -> Path:
     from clumping_factor.infrastructure.results import canonical_output_path
 
     workflow = json.loads(json.dumps(asdict(config), default=str))
-    workflow.pop("output_root", None)
-    workflow.pop("refresh_products", None)
+    for key in ("output_root", "refresh_products", "products", "threads", "equation_workers", "gamma_workers", "mfp_workers", "equation_chunk_size", "gamma_chunk_size"):
+        workflow.pop(key, None)
     parameters = {"simulation_name": config.simulation_name, "snapshot": config.snapshot, "particle_type": "gas", "base_path": str(config.base_path),
                   "workflow_configuration": workflow, "threads": config.threads, "equation_workers": config.equation_workers,
                   "gamma_workers": config.gamma_workers, "mfp_workers": config.mfp_workers, "equation_chunk_size": config.equation_chunk_size,
-                  "gamma_chunk_size": config.gamma_chunk_size}
+                  "gamma_chunk_size": config.gamma_chunk_size, "requested_products": sorted(config.products)}
     document = {"parameters": parameters,
                 "particle_type": "gas", "simulation": {"name": config.simulation_name, "snapshot": config.snapshot, "particle_type": "gas"}}
     return canonical_output_path(document, config.output_root, method_id="forest.snapshot")
@@ -127,6 +127,25 @@ def _existing_manifest(path: Path) -> dict:
         return {}
 
 
+def _sibling_products(config: SnapshotWorkflowConfig, current: Path) -> dict:
+    """Reuse product records from another execution of the same science workflow."""
+
+    products: dict = {}
+    for candidate in sorted(Path(config.output_root).rglob("execution-*_run*.json")):
+        if candidate == current:
+            continue
+        document = _existing_manifest(candidate)
+        method = document.get("method_spec", {}) if isinstance(document, dict) else {}
+        simulation = document.get("simulation", {}) if isinstance(document, dict) else {}
+        if method.get("identifier") != "forest.snapshot" or not isinstance(simulation, dict):
+            continue
+        if simulation.get("name") != config.simulation_name or simulation.get("snapshot") != config.snapshot:
+            continue
+        for name, row in document.get("products", {}).items():
+            products.setdefault(name, row)
+    return products
+
+
 def _outputs_exist(paths: Sequence[str]) -> bool:
     return bool(paths) and all(Path(path).exists() for path in paths)
 
@@ -152,17 +171,17 @@ def run_snapshot_workflow(
 
     manifest_path = snapshot_output_dir(config)
     previous = _existing_manifest(manifest_path)
+    sibling_products = _sibling_products(config, manifest_path)
+    previous = {**previous, "products": {**sibling_products, **previous.get("products", {})}}
     configuration = json.loads(json.dumps(asdict(config), default=str))
-    preserved_products = {
-        name: row for name, row in previous.get("products", {}).items() if name not in requested
-    }
+    preserved_products = {name: row for name, row in {**sibling_products, **previous.get("products", {})}.items() if name not in requested}
     document = {
         "workflow_version": WORKFLOW_VERSION, "status": "running", "started_at": _now(),
         "updated_at": _now(), "simulation": {"name": config.simulation_name, "snapshot": config.snapshot, "particle_type": "gas"},
         "particle_type": "gas", "parameters": {"simulation_name": config.simulation_name, "snapshot": config.snapshot, "particle_type": "gas", "base_path": str(config.base_path),
-        "workflow_configuration": {key: value for key, value in configuration.items() if key not in {"output_root", "refresh_products"}},
+        "workflow_configuration": {key: value for key, value in configuration.items() if key not in {"output_root", "refresh_products", "products", "threads", "equation_workers", "gamma_workers", "mfp_workers", "equation_chunk_size", "gamma_chunk_size"}},
         "threads": config.threads, "equation_workers": config.equation_workers, "gamma_workers": config.gamma_workers, "mfp_workers": config.mfp_workers,
-        "equation_chunk_size": config.equation_chunk_size, "gamma_chunk_size": config.gamma_chunk_size},
+        "equation_chunk_size": config.equation_chunk_size, "gamma_chunk_size": config.gamma_chunk_size, "requested_products": sorted(requested)},
         "requested_products": requested, "configuration": configuration, "products": preserved_products,
         "warnings": [], "failures": [],
     }

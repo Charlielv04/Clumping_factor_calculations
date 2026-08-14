@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import os
 from pathlib import Path
 from typing import Sequence
 
 import h5py
 import numpy as np
 
-from clumping_factor.infrastructure.artifacts import attach_artifacts, companion_artifact_path, native_path
+from clumping_factor.infrastructure.artifacts import attach_artifacts, companion_artifact_path
 from clumping_factor.infrastructure.results import canonical_output_path, write_json_result
 
 from .constants import (
@@ -184,11 +183,8 @@ def write_spectra_hdf5(result: SpectrumResult, output_path: str | Path, overwrit
     output_path = Path(output_path)
     if output_path.exists() and not overwrite:
         raise FileExistsError(f"{output_path} already exists. Use --overwrite to replace it.")
-    os.makedirs(native_path(output_path.parent), exist_ok=True)
-    hdf5_path = str(output_path.resolve())
-    if os.name == "nt" and not hdf5_path.startswith("\\\\?\\"):
-        hdf5_path = "\\\\?\\" + hdf5_path
-    with h5py.File(hdf5_path, "w") as handle:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with h5py.File(output_path, "w") as handle:
         metadata = handle.create_group("metadata")
         metadata.attrs["schema_version"] = 1
         for key, value in result.metadata.items():

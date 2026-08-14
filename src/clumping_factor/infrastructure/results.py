@@ -44,6 +44,7 @@ SCHEDULER_EXECUTION_KEYS = {
 ALGORITHMIC_EXECUTION_KEYS = {
     "execution_mode", "load_mode", "threads", "chunk_size", "radius_bin_batch_size", "work_partition", "memory_limit",
     "equation_workers", "gamma_workers", "mfp_workers", "equation_chunk_size", "gamma_chunk_size",
+    "requested_products",
 }
 
 
@@ -203,6 +204,7 @@ def with_result_specs(document: dict[str, Any], *, method_id: str | None = None)
             "mfp_workers": parameters.get("mfp_workers"),
             "equation_chunk_size": parameters.get("equation_chunk_size"),
             "gamma_chunk_size": parameters.get("gamma_chunk_size"),
+            "requested_products": parameters.get("requested_products"),
             "work_partition": parameters.get("work_partition"),
             "memory_limit": parameters.get("memory_limit"),
             "resource_size": parameters.get("resource_size"),

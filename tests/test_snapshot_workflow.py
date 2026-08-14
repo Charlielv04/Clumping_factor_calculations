@@ -48,7 +48,7 @@ def test_combined_lya_mfp_loads_los_once(tmp_path, monkeypatch):
     monkeypatch.setattr(workflow, "read_thesan_random_los", counted)
     result = run_snapshot_workflow(SnapshotWorkflowConfig(
         base, 80, "Thesan-1", ["lya", "mfp"], los_file=los,
-        output_root=tmp_path / "results", resolution_kms=25,
+        output_root=tmp_path / "r", resolution_kms=25,
         mfp_starts_per_ray=2, mfp_cross_check=True,
     ))
     assert result.succeeded
@@ -58,13 +58,13 @@ def test_combined_lya_mfp_loads_los_once(tmp_path, monkeypatch):
 
 def test_workflow_resume_and_refresh(tmp_path):
     base, _ = _inputs(tmp_path)
-    config = SnapshotWorkflowConfig(base, 80, "Thesan-1", ["gamma"], output_root=tmp_path / "results", gamma_chunk_size=1)
+    config = SnapshotWorkflowConfig(base, 80, "Thesan-1", ["gamma"], output_root=tmp_path / "r", gamma_chunk_size=1)
     first = run_snapshot_workflow(config)
     second = run_snapshot_workflow(config)
     assert first.document["products"]["gamma"]["status"] == "success"
     assert second.document["products"]["gamma"]["status"] == "reused"
     refreshed = run_snapshot_workflow(SnapshotWorkflowConfig(
-        base, 80, "Thesan-1", ["gamma"], output_root=tmp_path / "results",
+        base, 80, "Thesan-1", ["gamma"], output_root=tmp_path / "r",
         gamma_chunk_size=1, refresh_products=True,
     ))
     assert refreshed.document["products"]["gamma"]["status"] == "success"
@@ -74,7 +74,7 @@ def test_threaded_workflow_records_worker_counts(tmp_path):
     base, los = _inputs(tmp_path)
     result = run_snapshot_workflow(SnapshotWorkflowConfig(
         base, 80, "Thesan-1", ["mfp", "gamma", "equations"], los_file=los,
-        output_root=tmp_path / "results", mfp_starts_per_ray=2, threads=2,
+        output_root=tmp_path / "r", mfp_starts_per_ray=2, threads=2,
         thresholds=[1e9], ionized_density_thresholds=[1e9], ionized_sweep=True,
         photon_group_tests=["0", "1"], ionized_cut_min=0.9,
         ionized_cut_max=0.99, ionized_cut_count=2,
@@ -82,7 +82,7 @@ def test_threaded_workflow_records_worker_counts(tmp_path):
     ))
     assert result.succeeded, result.failures
     assert result.manifest_path.exists()
-    documents = [json.loads(path.read_text()) for path in (tmp_path / "results").rglob("*.json")]
+    documents = [json.loads(path.read_text()) for path in (tmp_path / "r").rglob("*.json")]
     assert {"forest.snapshot", "forest.mfp", "forest.gamma-hi", "diagnostics.equations"} <= {
         item["method_spec"]["identifier"] for item in documents
     }
@@ -96,22 +96,22 @@ def test_workflow_computes_missing_temperature_table(tmp_path):
     (base / "snapdir_080" / "Tigm_Thesan1.dat").unlink()
     result = run_snapshot_workflow(SnapshotWorkflowConfig(
         base, 80, "Thesan-1", ["equations"], los_file=los,
-        output_root=tmp_path / "results", mfp_starts_per_ray=2,
+        output_root=tmp_path / "r", mfp_starts_per_ray=2,
         thresholds=[1e9], ionized_density_thresholds=[1e9],
         ionized_cuts=[0.7], photon_group_tests=["0"],
         equation_chunk_size=1, gamma_chunk_size=1,
     ))
     assert result.succeeded, result.failures
     assert (base / "snapdir_080" / "Tigm_from_sim.dat").exists()
-    root = tmp_path / "results" / "thesan" / "Thesan-1" / "snapshot080"
-    equations = json.loads((root / "equations" / "equations.json").read_text())
+    equations_path = next(path for path in (tmp_path / "r").rglob("*.json") if "equations" in path.read_text())
+    equations = json.loads(equations_path.read_text())
     assert equations["parameters"]["Tigm_table"].endswith("Tigm_from_sim.dat")
 
 
 def test_product_only_rerun_preserves_other_manifest_products(tmp_path):
     base, los = _inputs(tmp_path)
     common = dict(base_path=base, snapshot=80, simulation_name="Thesan-1", los_file=los,
-                  output_root=tmp_path / "results", mfp_starts_per_ray=2)
+                  output_root=tmp_path / "r", mfp_starts_per_ray=2)
     first = run_snapshot_workflow(SnapshotWorkflowConfig(products=["mfp", "gamma"], **common))
     assert first.succeeded
     second = run_snapshot_workflow(SnapshotWorkflowConfig(products=["gamma"], refresh_products=True, **common))
@@ -122,7 +122,7 @@ def test_partial_failure_continues_independent_product(tmp_path):
     base, _ = _inputs(tmp_path)
     result = run_snapshot_workflow(SnapshotWorkflowConfig(
         base, 80, "Thesan-1", ["lya", "gamma"], los_file=tmp_path / "missing.hdf5",
-        output_root=tmp_path / "results",
+        output_root=tmp_path / "r",
     ))
     assert not result.succeeded
     assert result.document["products"]["lya"]["status"] == "failed"
@@ -134,7 +134,7 @@ def test_all_products_write_canonical_snapshot_tree(tmp_path):
     base, los = _inputs(tmp_path)
     result = run_snapshot_workflow(SnapshotWorkflowConfig(
         base, 80, "Thesan-1", ["lya", "mfp", "gamma", "equations"], los_file=los,
-        output_root=tmp_path / "results", resolution_kms=25, mfp_starts_per_ray=2,
+        output_root=tmp_path / "r", resolution_kms=25, mfp_starts_per_ray=2,
         thresholds=[1e9], ionized_density_thresholds=[1e9], ionized_sweep=True,
         photon_group_tests=["0", "1", "2", "0+1", "1+2", "0+1+2"],
         ionized_cut_min=0.9, ionized_cut_max=0.99, ionized_cut_count=2,
@@ -145,8 +145,8 @@ def test_all_products_write_canonical_snapshot_tree(tmp_path):
 
 def test_workflow_identity_changes_when_requested_products_change(tmp_path):
     base, los = _inputs(tmp_path)
-    first = SnapshotWorkflowConfig(base, 80, "Thesan-1", ["mfp"], los_file=los, output_root=tmp_path / "results")
-    second = SnapshotWorkflowConfig(base, 80, "Thesan-1", ["gamma"], los_file=los, output_root=tmp_path / "results")
+    first = SnapshotWorkflowConfig(base, 80, "Thesan-1", ["mfp"], los_file=los, output_root=tmp_path / "r")
+    second = SnapshotWorkflowConfig(base, 80, "Thesan-1", ["gamma"], los_file=los, output_root=tmp_path / "r")
     from clumping_factor.methods.forest.workflow import snapshot_output_dir
 
     assert snapshot_output_dir(first) != snapshot_output_dir(second)

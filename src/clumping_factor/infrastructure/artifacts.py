@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import mimetypes
-import os
 import re
 from pathlib import Path
 from typing import Any, Iterable
@@ -41,11 +40,6 @@ def sha256_file(path: str | Path) -> str:
     return digest.hexdigest()
 
 
-def native_path(path: str | Path) -> str:
-    """Return a Windows long-path form for APIs that do not opt in themselves."""
-
-    resolved = str(Path(path).resolve())
-    return "\\\\?\\" + resolved if os.name == "nt" and not resolved.startswith("\\\\?\\") else resolved
 
 
 def artifact_directory(result_path: str | Path) -> Path:

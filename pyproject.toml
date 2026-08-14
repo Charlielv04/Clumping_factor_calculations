@@ -36,7 +36,7 @@ where = ["src"]
 "clumping_factor.methods.forest" = ["data/line_list.txt"]
 
 [tool.pytest.ini_options]
-addopts = "--strict-markers"
+addopts = "--strict-markers --basetemp=.t"
 testpaths = ["tests"]
 
 [tool.ruff]
