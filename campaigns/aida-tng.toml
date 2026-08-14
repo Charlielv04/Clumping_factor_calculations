@@ -1,0 +1,29 @@
+name = "aida-tng"
+output_root = "results"
+
+[[simulations]]
+family = "aida-tng"
+name = "L35n1080_CDM"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L35n1080_CDM/output"
+
+[matrix]
+snapshots = [17, 99]
+particle_types = ["gas"]
+methods = ["sphere", "cube", "raw-volume", "voronoi-transmission"]
+grids = [256, 512]
+
+[method_options."transmission.voronoi"]
+sigma_bar_ion_mode = "thesan-photon-groups"
+sigma_bar_ion_source = "THESAN photon groups 0-2"
+
+[execution]
+threads = 1
+load_mode = "chunked"
+chunk_size = 1000000
+mas = "CIC"
+
+[resources]
+cpus = 8
+memory = "32gb"
+walltime = "08:00:00"
+queue = "mini"

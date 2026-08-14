@@ -3,9 +3,9 @@ import json
 import h5py
 import numpy as np
 
-from clumping_factor.forest.ionizing import compute_gamma_hi_result
-from clumping_factor.forest.workflow import SnapshotWorkflowConfig, run_snapshot_workflow
-from clumping_factor.forest.workflow_cli import build_snapshot_parser
+from clumping_factor.methods.forest.ionizing import compute_gamma_hi_result
+from clumping_factor.methods.forest.workflow import SnapshotWorkflowConfig, run_snapshot_workflow
+from clumping_factor.methods.forest.workflow_cli import build_snapshot_parser
 from test_equation_tests import _write_snapshot, _write_tigm
 from test_forest import _write_los
 
@@ -39,7 +39,7 @@ def test_threaded_gamma_matches_serial(tmp_path):
 
 def test_combined_lya_mfp_loads_los_once(tmp_path, monkeypatch):
     base, los = _inputs(tmp_path)
-    import clumping_factor.forest.workflow as workflow
+    import clumping_factor.methods.forest.workflow as workflow
     original = workflow.read_thesan_random_los
     calls = []
     def counted(*args, **kwargs):
@@ -163,7 +163,7 @@ def test_cluster_style_cli_and_focused_imports():
     assert args.ionized_sweep is True
     assert args.photon_group_tests == ["0", "1", "2", "0+1", "1+2", "0+1+2"]
     assert args.ionized_density_thresholds == [1.0, 5.0, 10.0]
-    from clumping_factor.forest.gamma import GammaHIResult
-    from clumping_factor.forest.mfp import MeanFreePathResult
-    from clumping_factor.forest.ionizing_cache import validate_ionizing_cache
+    from clumping_factor.methods.forest.gamma import GammaHIResult
+    from clumping_factor.methods.forest.mfp import MeanFreePathResult
+    from clumping_factor.methods.forest.ionizing_cache import validate_ionizing_cache
     assert GammaHIResult is not None and MeanFreePathResult is not None and callable(validate_ionizing_cache)

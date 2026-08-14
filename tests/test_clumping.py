@@ -1,6 +1,6 @@
 import numpy as np
 
-from clumping_factor.clumping import clumping_factor_sweep, clumping_factor_sweep_with_mask
+from clumping_factor.methods.clumping.estimators import clumping_factor_sweep, clumping_factor_sweep_with_mask
 
 
 def test_uniform_density_has_unit_clumping():

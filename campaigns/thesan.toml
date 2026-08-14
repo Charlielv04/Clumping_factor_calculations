@@ -1,0 +1,33 @@
+name = "thesan"
+output_root = "results"
+
+[[simulations]]
+family = "thesan"
+name = "Thesan-1"
+base_path = "/lustre/work/carlos.lopez/Thesan-1/output"
+
+[[simulations]]
+family = "thesan"
+name = "Thesan-2"
+base_path = "/lustre/work/carlos.lopez/Thesan-2/output"
+
+[matrix]
+snapshots = [54, 58, 61, 64, 70, 75, 80]
+particle_types = ["gas"]
+methods = ["raw-volume", "voronoi-transmission"]
+grids = [256]
+
+[method_options."transmission.voronoi"]
+sigma_bar_ion_mode = "thesan-photon-groups"
+sigma_bar_ion_source = "THESAN photon groups 0-2"
+
+[execution]
+threads = 1
+load_mode = "chunked"
+chunk_size = 1000000
+
+[resources]
+cpus = 8
+memory = "32gb"
+walltime = "08:00:00"
+queue = "mini"

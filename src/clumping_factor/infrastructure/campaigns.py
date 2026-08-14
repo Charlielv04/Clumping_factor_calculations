@@ -197,6 +197,35 @@ def _task_command(
             if grid is not None:
                 options.setdefault("grid_size", grid)
         command += _option_tokens(options)
+    elif spec.command_kind == "ionized-sweep":
+        command = ["clumping", "clumping", "ionized-sweep", *common]
+        command += _option_tokens(method_options)
+    elif spec.command_kind == "temperature":
+        command = ["clumping", "temperature", "compute", "--base-path", base_path, "--snapshot", str(snapshot)]
+        command += _option_tokens(method_options)
+    elif spec.command_kind == "diagnostics":
+        command = ["clumping", "diagnostics", str(spec.command_variant), *common]
+        command += _option_tokens(method_options)
+    elif spec.command_kind == "forest-spectra":
+        options = dict(method_options)
+        if "los_file" not in options and "los_dir" not in options:
+            raise ValueError("forest.lyman-alpha requires method_options.los_file or los_dir")
+        command = ["clumping", "forest", "spectra", "--simulation-name", simulation]
+        command += _option_tokens(options)
+    elif spec.command_kind == "forest-ionizing":
+        options = dict(method_options)
+        command = ["clumping", "forest", "ionizing", str(spec.command_variant)]
+        if spec.command_variant == "gamma":
+            command += ["--base-path", base_path, "--snapshot", str(snapshot)]
+        elif "los_file" not in options:
+            raise ValueError("forest.mfp requires method_options.los_file")
+        command += _option_tokens(options)
+    elif spec.command_kind == "forest-snapshot":
+        command = [
+            "clumping", "forest", "snapshot", "--base-path", base_path,
+            "--simulation-name", simulation, "--snapshot", str(snapshot),
+        ]
+        command += _option_tokens(method_options)
     else:
         raise ValueError(
             f"Typed campaign matrices currently execute compute methods only; {spec.identifier} "
@@ -212,7 +241,10 @@ def _task_command(
     for key, option in option_names.items():
         if key in execution:
             command += [option, str(execution[key])]
-    command += ["--output", str(output)]
+    if spec.command_kind == "forest-snapshot":
+        command += ["--output-dir", str(output.parent)]
+    else:
+        command += ["--output", str(output)]
     return tuple(command)
 
 
@@ -325,36 +357,12 @@ def _plan_matrix(source: Path, document: dict[str, Any]) -> CampaignManifest:
     return CampaignManifest(str(document.get("name") or source.stem), str(source), tuple(sorted(tasks, key=lambda task: task.task_id)))
 
 
-def _as_command(value: Any) -> tuple[str, ...]:
-    if isinstance(value, str):
-        return tuple(shlex.split(value))
-    if isinstance(value, list) and all(isinstance(item, (str, int, float)) for item in value):
-        return tuple(str(item) for item in value)
-    raise ValueError("Campaign task command must be a string or a list of scalar values")
-
-
-def _plan_legacy(source: Path, document: dict[str, Any]) -> CampaignManifest:
-    """Read the original explicit-command format during the migration window."""
-
-    if not isinstance(document.get("tasks"), list):
-        raise ValueError("Campaign must define typed [simulation]/[matrix] tables or [[tasks]]")
-    defaults = {str(key): str(value) for key, value in document.get("defaults", {}).items()}
-    resources = _resources(document)
-    tasks = []
-    for index, item in enumerate(document["tasks"], start=1):
-        if not isinstance(item, dict):
-            raise ValueError(f"Campaign task {index} is not a table")
-        task_id = str(item.get("id") or f"task-{index:04d}")
-        command = tuple(token.format(**defaults) for token in _as_command(item["command"]))
-        environment = tuple(sorted((str(key), str(value)) for key, value in item.get("environment", {}).items()))
-        tasks.append(CampaignTask(task_id, command, environment, resources=resources))
-    return CampaignManifest(str(document.get("name") or source.stem), str(source), tuple(sorted(tasks, key=lambda task: task.task_id)))
-
-
 def plan_campaign(path: str | Path) -> CampaignManifest:
     source = Path(path)
     document = load_campaign(source)
-    return _plan_matrix(source, document) if "matrix" in document or "simulation" in document or "simulations" in document else _plan_legacy(source, document)
+    if "tasks" in document:
+        raise ValueError("Explicit command tasks are not supported; use typed simulation and matrix tables")
+    return _plan_matrix(source, document)
 
 
 def write_manifest(manifest: CampaignManifest, path: str | Path) -> Path:

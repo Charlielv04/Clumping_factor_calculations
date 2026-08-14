@@ -1,6 +1,6 @@
 import numpy as np
 
-from clumping_factor.clumping import clumping_factor_sweep_with_mask
+from clumping_factor.methods.clumping.estimators import clumping_factor_sweep_with_mask
 
 
 def test_mask_field_can_differ_from_target_field():

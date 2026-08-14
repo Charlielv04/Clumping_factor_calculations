@@ -3,19 +3,19 @@ import json
 import h5py
 import numpy as np
 
-from clumping_factor.alternative_clumping import (
+from clumping_factor.methods.clumping.alternative import (
     SPEED_OF_LIGHT_CM_S,
     ALPHA_B_HII_10000K_CM3_S,
     compute_alternative_clumping,
     interpolate_mfp,
 )
-from clumping_factor.alternative_clumping_cli import (
+from clumping_factor.methods.clumping.alternative_cli import (
     build_alternative_clumping_parser,
     canonical_alternative_clumping_output_path,
     plot_alternative_quantities,
     run_alternative_clumping,
 )
-from clumping_factor.cli import plot_main
+from clumping_factor.methods.clumping.compute import plot_main
 
 
 def _write_snapshot(base_path, photon_scale=1.0):

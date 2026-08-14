@@ -1,0 +1,25 @@
+name = "forest-snapshot"
+output_root = "results"
+
+[simulation]
+family = "thesan"
+name = "Thesan-2"
+base_path = "/lustre/work/carlos.lopez/Thesan-2/output"
+
+[matrix]
+snapshots = [80]
+particle_types = ["gas"]
+methods = ["forest.snapshot"]
+
+[method_options."forest.snapshot"]
+los_file = "/lustre/work/carlos.lopez/Thesan-2/rays_080.hdf5"
+products = ["lya", "mfp", "gamma", "temperature", "equations"]
+
+[execution]
+threads = 4
+
+[resources]
+cpus = 4
+memory = "16gb"
+walltime = "08:00:00"
+queue = "mini"

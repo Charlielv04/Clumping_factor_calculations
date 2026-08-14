@@ -2,14 +2,14 @@ import json
 
 import numpy as np
 
-from clumping_factor.equation_tests_cli import build_equation_tests_parser, run_equation_tests
-from clumping_factor.equation_tests import compute_equation_tests
-from clumping_factor.temperature import (
+from clumping_factor.diagnostics.equations_cli import build_equation_tests_parser, run_equation_tests
+from clumping_factor.diagnostics.equations import compute_equation_tests
+from clumping_factor.methods.thermodynamics.temperature import (
     compute_and_cache_snapshot_temperature,
     compute_particles_temperature,
     compute_snapshot_temperature_result,
 )
-from clumping_factor.temperature_cli import build_temperature_parser, run_temperature
+from clumping_factor.methods.thermodynamics.cli import build_temperature_parser, run_temperature
 from test_equation_tests import _write_mfp, _write_snapshot, _write_tigm
 
 

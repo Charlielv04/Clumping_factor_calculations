@@ -3,7 +3,7 @@ import json
 import matplotlib.pyplot as plt
 import pytest
 
-from clumping_factor.thesan_igm_plots import (
+from clumping_factor.visualization.thesan_igm import (
     _load_combined_value,
     _parameter_value,
     plot_parameter_redshift,

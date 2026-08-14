@@ -4,11 +4,11 @@ from pathlib import Path
 import h5py
 import numpy as np
 
-from clumping_factor.forest.cli import build_forest_parser, canonical_forest_output_path, canonical_mfp_output_path, run_forest
-from clumping_factor.forest.cosmology import length_kms_from_cmpc_h
-from clumping_factor.forest.lines import read_line_parameters
-from clumping_factor.forest.los_loader import read_thesan_random_los
-from clumping_factor.forest.spectra import calculate_tau_line, compute_los_spectra, doppler_shift_to_wavelength, voigt
+from clumping_factor.methods.forest.cli import build_forest_parser, canonical_forest_output_path, canonical_mfp_output_path, run_forest
+from clumping_factor.methods.forest.cosmology import length_kms_from_cmpc_h
+from clumping_factor.methods.forest.lines import read_line_parameters
+from clumping_factor.methods.forest.los_loader import read_thesan_random_los
+from clumping_factor.methods.forest.spectra import calculate_tau_line, compute_los_spectra, doppler_shift_to_wavelength, voigt
 
 GOLDEN_FIXTURE = Path(__file__).parent / "fixtures" / "forest_optical_depth_golden.json"
 

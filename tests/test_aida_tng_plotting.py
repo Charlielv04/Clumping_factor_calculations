@@ -2,7 +2,7 @@ import csv
 import json
 from pathlib import Path
 
-from clumping_factor.aida_tng_plotting import (
+from clumping_factor.visualization.aida_tng import (
     archive_aida_plots,
     canonical_plot_path,
     discover_aida_tng_results,

@@ -81,14 +81,14 @@ def test_pbs_worker_uses_manifest_resources(tmp_path: Path):
     assert "#PBS -l walltime=04:00:00" in worker
 
 
-def test_legacy_explicit_tasks_remain_readable(tmp_path: Path):
+def test_explicit_command_tasks_are_rejected(tmp_path: Path):
     campaign = tmp_path / "legacy.toml"
     campaign.write_text(
         'name = "legacy"\n[defaults]\nvalue = "x"\n[[tasks]]\nid = "b"\ncommand = ["echo", "{value}"]\n',
         encoding="utf-8",
     )
-    manifest = plan_campaign(campaign)
-    assert manifest.tasks[0].command == ("echo", "x")
+    with pytest.raises(ValueError, match="Explicit command tasks"):
+        plan_campaign(campaign)
 
 
 def test_campaign_rejects_unsupported_execution_mode(tmp_path: Path):
@@ -159,7 +159,7 @@ load_mode = "chunked"
     assert all("--mfp-file" in task.command for task in manifest.tasks)
 
 
-def test_typed_campaign_rejects_empty_grid_axis_and_non_compute_method(tmp_path: Path):
+def test_typed_campaign_rejects_empty_grid_axis_and_plans_diagnostics(tmp_path: Path):
     empty = tmp_path / "empty.toml"
     _write_matrix(empty)
     empty.write_text(empty.read_text(encoding="utf-8").replace("grids = [256]", "grids = []"), encoding="utf-8")
@@ -168,8 +168,9 @@ def test_typed_campaign_rejects_empty_grid_axis_and_non_compute_method(tmp_path:
 
     workflow = tmp_path / "workflow.toml"
     _write_matrix(workflow, methods='["diagnostics.equations"]')
-    with pytest.raises(ValueError, match="diagnostic/workflow method"):
-        plan_campaign(workflow)
+    manifest = plan_campaign(workflow)
+    assert manifest.tasks
+    assert manifest.tasks[0].command[:3] == ("clumping", "diagnostics", "equations")
 
 
 def test_omitted_execution_uses_legacy_safe_defaults_for_raw_methods(tmp_path: Path):

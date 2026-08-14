@@ -1,4 +1,4 @@
-from clumping_factor.equation_story_plots import (
+from clumping_factor.visualization.equations import (
     _combined_rows_for_density,
     _nearest_combined_row,
     _parse_mask_rows,

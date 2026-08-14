@@ -1,0 +1,26 @@
+name = "thesan-diagnostics"
+output_root = "results"
+
+[simulation]
+family = "thesan"
+name = "Thesan-2"
+base_path = "/lustre/work/carlos.lopez/Thesan-2/output"
+
+[matrix]
+snapshots = [54, 58, 61, 64, 70, 75, 80]
+particle_types = ["gas"]
+methods = ["diagnostics.density-ratio", "diagnostics.equations", "thermodynamics.snapshot-temperature"]
+
+[method_options."diagnostics.equations"]
+mfp_file = "/lustre/work/carlos.lopez/Thesan-2/mfp.dat"
+sigma_hi_cm2 = 6.3e-18
+
+[execution]
+threads = 1
+chunk_size = 1000000
+
+[resources]
+cpus = 1
+memory = "16gb"
+walltime = "08:00:00"
+queue = "tiny"

@@ -1,0 +1,24 @@
+name = "aida-analysis"
+output_root = "results"
+
+[[simulations]]
+family = "aida-tng"
+name = "L35n1080_CDM"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L35n1080_CDM/output"
+
+[matrix]
+snapshots = [17, 99]
+particle_types = ["gas"]
+methods = ["alternative.ionized-sweep", "power-spectrum.combined"]
+grids = [256]
+
+[execution]
+threads = 1
+load_mode = "chunked"
+chunk_size = 1000000
+
+[resources]
+cpus = 2
+memory = "16gb"
+walltime = "02:00:00"
+queue = "mini"

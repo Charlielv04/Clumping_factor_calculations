@@ -4,7 +4,7 @@ import json
 import h5py
 import numpy as np
 
-from clumping_factor.forest.ionizing import (
+from clumping_factor.methods.forest.ionizing import (
     SIGMA_HI_912_CM2,
     THESAN_SIGMA_C_CM3_S,
     calculate_mean_free_paths,
@@ -17,9 +17,9 @@ from clumping_factor.forest.ionizing import (
     compute_gamma_hi_result,
     validate_ionizing_cache,
 )
-from clumping_factor.forest.constants import HYDROGEN_MASS_G, MPC_CM, PRIMORDIAL_HYDROGEN_FRACTION
-from clumping_factor.forest.los_loader import read_thesan_random_los
-from clumping_factor.forest.ionizing_cli import build_ionizing_parser, run_ionizing
+from clumping_factor.methods.forest.constants import HYDROGEN_MASS_G, MPC_CM, PRIMORDIAL_HYDROGEN_FRACTION
+from clumping_factor.methods.forest.los_loader import read_thesan_random_los
+from clumping_factor.methods.forest.ionizing_cli import build_ionizing_parser, run_ionizing
 from reference_ionizing import supplied_gamma_from_arrays, supplied_mfp_from_starts
 from test_forest import _write_los
 
@@ -195,8 +195,8 @@ def test_provenance_cache_is_created_and_reused_without_recalculation(tmp_path: 
     assert validate_ionizing_cache(mfp)[0]
     assert validate_ionizing_cache(gamma)[0]
 
-    monkeypatch.setattr("clumping_factor.forest.ionizing.calculate_mean_free_paths", lambda *a, **k: (_ for _ in ()).throw(AssertionError("recomputed MFP")))
-    monkeypatch.setattr("clumping_factor.forest.ionizing.compute_gamma_hi_result", lambda *a, **k: (_ for _ in ()).throw(AssertionError("recomputed Gamma")))
+    monkeypatch.setattr("clumping_factor.methods.forest.ionizing.calculate_mean_free_paths", lambda *a, **k: (_ for _ in ()).throw(AssertionError("recomputed MFP")))
+    monkeypatch.setattr("clumping_factor.methods.forest.ionizing.compute_gamma_hi_result", lambda *a, **k: (_ for _ in ()).throw(AssertionError("recomputed Gamma")))
     compute_and_cache_snapshot_ionizing_inputs(base, 80, starts_per_ray=2, seed=7, progress=messages.append)
     assert any("cache hit" in message for message in messages)
 

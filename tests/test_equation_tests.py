@@ -3,7 +3,7 @@ import json
 import h5py
 import numpy as np
 
-from clumping_factor.equation_tests import (
+from clumping_factor.diagnostics.equations import (
     ALPHA_B_HII_10000K_CM3_S,
     SPEED_OF_LIGHT_CM_S,
     _build_ionized_cuts,
@@ -11,7 +11,7 @@ from clumping_factor.equation_tests import (
     compute_equation_tests,
     write_equation_tests_result,
 )
-from clumping_factor.equation_tests_cli import build_equation_tests_parser, run_equation_tests
+from clumping_factor.diagnostics.equations_cli import build_equation_tests_parser, run_equation_tests
 from test_forest import _write_los
 
 

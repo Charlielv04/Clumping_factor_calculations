@@ -1,6 +1,6 @@
 import numpy as np
 
-from clumping_factor.raw_gas import raw_gas_clumping_sweep, raw_gas_clumping_sweep_chunked, raw_gas_volume_weighted_clumping_sweep
+from clumping_factor.methods.clumping.raw import raw_gas_clumping_sweep, raw_gas_clumping_sweep_chunked, raw_gas_volume_weighted_clumping_sweep
 
 
 def test_raw_gas_uniform_density_has_unit_clumping():

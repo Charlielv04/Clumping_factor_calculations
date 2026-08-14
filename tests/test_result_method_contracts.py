@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-from clumping_factor.alternative_clumping import AlternativeClumpingResult, write_alternative_clumping_result
-from clumping_factor.density_ratio import write_density_ratio_result
+from clumping_factor.methods.clumping.alternative import AlternativeClumpingResult, write_alternative_clumping_result
+from clumping_factor.diagnostics.density_ratio import write_density_ratio_result
 
 
 def test_alternative_writer_distinguishes_native_and_grid_variants(tmp_path):

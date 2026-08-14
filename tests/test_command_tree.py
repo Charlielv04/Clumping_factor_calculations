@@ -26,13 +26,14 @@ def test_command_tree_forwards_options_and_help(monkeypatch):
 @pytest.mark.parametrize(
     ("group", "action"),
     [
-        ("clumping", "compute"), ("clumping", "alternative"),
+        ("clumping", "compute"), ("clumping", "alternative"), ("clumping", "ionized-sweep"),
         ("power", "compute"), ("power", "plot"), ("power", "compare"),
         ("forest", "spectra"), ("forest", "ionizing"), ("forest", "snapshot"),
         ("temperature", "compute"),
         ("diagnostics", "equations"), ("diagnostics", "density-ratio"),
-        ("plot", "campaign"), ("plot", "evolution"), ("plot", "igm"),
-        ("results", "validate"), ("results", "organize"),
+        ("plot", "result"), ("plot", "campaign"), ("plot", "evolution"), ("plot", "model"),
+        ("plot", "equations"), ("plot", "benchmark"), ("plot", "igm"),
+        ("results", "validate"),
         ("campaign", "plan"), ("campaign", "submit"),
     ],
 )
@@ -45,13 +46,13 @@ def test_every_approved_route_delegates_real_nested_help(group, action, capsys):
 
 def test_every_declared_route_resolves():
     routes = {
-        "clumping": ("compute", "alternative"),
+        "clumping": ("compute", "alternative", "ionized-sweep"),
         "power": ("compute", "plot", "compare"),
         "forest": ("spectra", "ionizing", "snapshot"),
         "temperature": ("compute",),
         "diagnostics": ("equations", "density-ratio"),
-        "plot": ("campaign", "evolution", "igm"),
-        "results": ("validate", "organize"),
+        "plot": ("result", "campaign", "evolution", "model", "equations", "benchmark", "igm"),
+        "results": ("validate",),
         "campaign": ("plan", "submit"),
         "methods": ("catalog",),
     }

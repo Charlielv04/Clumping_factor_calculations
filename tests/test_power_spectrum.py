@@ -1,6 +1,6 @@
 import numpy as np
 
-from clumping_factor.power_spectrum import density_power_spectrum, density_power_spectrum_pylians
+from clumping_factor.methods.power_spectrum.estimator import density_power_spectrum, density_power_spectrum_pylians
 
 
 def test_uniform_density_has_zero_power():

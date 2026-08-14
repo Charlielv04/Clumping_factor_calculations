@@ -35,7 +35,13 @@ def test_registry_owns_campaign_command_capabilities():
     specs = [METHOD_REGISTRY.get(identifier) for identifier in METHOD_REGISTRY.identifiers]
     compute_methods = [spec for spec in specs if spec.command_kind]
     assert compute_methods
-    assert all(spec.command_variant for spec in compute_methods)
-    assert all(spec.command_kind in {"clumping-compute", "power-spectrum-compute", "alternative-compute"} for spec in compute_methods)
+    assert all(spec.command_kind for spec in compute_methods)
+    assert all(
+        spec.command_kind in {
+            "clumping-compute", "power-spectrum-compute", "alternative-compute", "ionized-sweep",
+            "forest-spectra", "forest-ionizing", "forest-snapshot", "temperature", "diagnostics",
+        }
+        for spec in compute_methods
+    )
     workflow_methods = [spec for spec in specs if spec.domain in {"forest", "thermodynamics", "diagnostics", "campaign", "operations"}]
     assert all(spec.command_kind is None for spec in workflow_methods)
