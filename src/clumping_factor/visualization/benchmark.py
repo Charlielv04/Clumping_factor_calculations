@@ -13,6 +13,8 @@ from typing import Any, Iterable
 
 import matplotlib.pyplot as plt
 
+from clumping_factor.infrastructure.artifacts import analysis_directory, write_analysis_manifest
+
 
 PALETTE = [
     "#2878b5",
@@ -434,18 +436,30 @@ def write_analysis_outputs(rows: list[dict[str, Any]], output_dir: Path | None, 
             plot_clumping(grid_rows, output_dir / f"clumping_consistency_grid{grid}.png")
         return output_dir
 
-    roots = _canonical_plot_roots(rows, analysis_root)
-    for root in roots.values():
-        root.mkdir(parents=True, exist_ok=True)
-    write_csv(rows, roots["performance"] / "benchmark_summary.csv")
-    plot_performance(rows, roots["performance"] / "performance_dashboard.png")
-    plot_grid_scaling(rows, roots["performance"] / "grid_scaling.png")
-    plot_clumping(rows, roots["clumping"] / "clumping_consistency.png")
+    simulations = sorted({row["simulation"] for row in rows})
+    root = analysis_root.parent if analysis_root.name == "analysis" else analysis_root
+    directory = analysis_directory(root, domain="visualization", family="benchmark", analysis_kind="performance",
+                                   subject=simulations[0] if len(simulations) == 1 else "combined", method_label="benchmark",
+                                   options={"grids": sorted({row["grid"] for row in rows})}, inputs=[row["path"] for row in rows])
+    artifacts = directory / "artifacts"
+    artifacts.mkdir(parents=True, exist_ok=True)
+    written = [artifacts / "benchmark_summary.csv", artifacts / "performance_dashboard.png", artifacts / "grid_scaling.png", artifacts / "clumping_consistency.png"]
+    write_csv(rows, written[0])
+    plot_performance(rows, written[1])
+    plot_grid_scaling(rows, written[2])
+    plot_clumping(rows, written[3])
     for grid in sorted({row["grid"] for row in rows}):
         grid_rows = [row for row in rows if row["grid"] == grid]
-        plot_performance(grid_rows, roots["performance"] / f"performance_grid{grid}.png")
-        plot_clumping(grid_rows, roots["clumping"] / f"clumping_grid{grid}.png")
-    return analysis_root
+        performance = artifacts / f"performance_grid{grid}.png"
+        clumping = artifacts / f"clumping_grid{grid}.png"
+        plot_performance(grid_rows, performance)
+        plot_clumping(grid_rows, clumping)
+        written.extend((performance, clumping))
+    write_analysis_manifest(directory, domain="visualization", family="benchmark", analysis_kind="performance",
+                            subject=simulations[0] if len(simulations) == 1 else "combined", method_label="benchmark",
+                            options={"grids": sorted({row["grid"] for row in rows})}, inputs=[row["path"] for row in rows],
+                            artifacts=written, generator="clumping.plot.benchmark")
+    return directory
 
 
 def main(argv: list[str] | None = None) -> None:
