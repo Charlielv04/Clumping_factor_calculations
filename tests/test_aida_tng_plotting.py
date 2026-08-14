@@ -29,7 +29,7 @@ def _write_clumping(path: Path, simulation: str, snapshot: int, backend: str, gr
 
 
 def test_canonical_plot_path_is_deterministic(tmp_path):
-    assert canonical_plot_path(
+    output = canonical_plot_path(
         tmp_path,
         "clumping/method-comparison",
         "L35n1080_CDM",
@@ -37,7 +37,9 @@ def test_canonical_plot_path_is_deterministic(tmp_path):
         "gas",
         "grid256",
         "backend_comparison.png",
-    ) == tmp_path / "clumping" / "aida-tng" / "method-comparison" / "L35n1080_CDM" / "snapshot017" / "gas" / "grid256" / "backend_comparison.png"
+    )
+    assert output.parts[-2:] == ("artifacts", "backend_comparison.png")
+    assert output.parent.parent.name.startswith("analysis-")
 
 
 def test_discover_groups_clumping_results_and_skips_malformed_json(tmp_path):

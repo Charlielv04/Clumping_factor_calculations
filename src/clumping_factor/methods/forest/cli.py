@@ -69,7 +69,7 @@ def build_forest_parser() -> argparse.ArgumentParser:
     parser.add_argument("--static", action="store_true", help="Ignore peculiar velocities, matching the legacy script's production loop.")
     parser.add_argument("--only-rays", nargs="*", type=int, help="Optional ray ids to process.")
     parser.add_argument("--simulation-name", help="Simulation name for canonical outputs, e.g. Thesan-2. Inferred from LOS paths when possible.")
-    parser.add_argument("--output", help="Explicit HDF5 artifact path for --los-file mode.")
+    parser.add_argument("--output", help=argparse.SUPPRESS)
     parser.add_argument("--output-dir", default="results", help="Canonical results root for forest spectra.")
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--compute-mfp", action="store_true", help="Also calculate the 912-Angstrom MFP from each input ray file.")
@@ -130,7 +130,7 @@ def _find_los_file(los_dir: Path, snapshot: int) -> Path:
 
 
 def run_forest(args: argparse.Namespace) -> list[Path]:
-    from .spectra import compute_los_spectra, write_canonical_spectrum_result, write_spectra_hdf5
+    from .spectra import compute_los_spectra, write_canonical_spectrum_result
 
     if args.resolution_kms <= 0:
         raise ValueError("--resolution-kms must be positive.")
@@ -142,10 +142,12 @@ def run_forest(args: argparse.Namespace) -> list[Path]:
                                      resolution_kms=args.resolution_kms, static=args.static, only_rays=args.only_rays,
                                      verbose=args.verbose)
         if args.output:
-            output = write_spectra_hdf5(result, args.output, overwrite=args.overwrite)
-        else:
-            _, output = write_canonical_spectrum_result(result, args.output_dir, simulation_name=simulation,
-                                                        snapshot=_infer_snapshot(los_file) or 0, overwrite=args.overwrite)
+            raise ValueError("--output is removed; use --output-dir to write a canonical forest result owner and companion.")
+        snapshot = _infer_snapshot(los_file)
+        if snapshot is None:
+            raise ValueError("Cannot infer a snapshot from the LOS filename; use --los-dir/--snapshots with an explicit snapshot.")
+        _, output = write_canonical_spectrum_result(result, args.output_dir, simulation_name=simulation,
+                                                    snapshot=snapshot, overwrite=args.overwrite)
         written = [output]
         if args.compute_mfp:
             _compute_and_write_mfp(args, los_file, simulation, _infer_snapshot(los_file))

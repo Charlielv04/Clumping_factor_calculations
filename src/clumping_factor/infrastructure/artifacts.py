@@ -101,7 +101,9 @@ def analysis_directory(
             identities.append(item)
     digest = specification_hash({"options": options, "inputs": sorted(identities, key=canonical_json)})
     return (
-        Path(output_root) / "analysis" / domain / family / analysis_kind / subject / method_label
+        Path(output_root) / "analysis" / _component(domain, label="Analysis domain") / _component(family, label="Analysis family")
+        / _component(analysis_kind, label="Analysis kind") / _component(subject, label="Analysis subject")
+        / _component(method_label, label="Analysis method label")
         / f"analysis-{digest}"
     )
 
@@ -145,7 +147,7 @@ def write_analysis_manifest(
         "method_label": method_label,
         "options": options,
         "inputs": [
-            {"path": str(Path(item)).replace("\\", "/"), "sha256": sha256_file(item) if Path(item).is_file() else None}
+            {"path": str(Path(item).resolve()).replace("\\", "/"), "sha256": sha256_file(item) if Path(item).is_file() else None}
             for item in inputs
         ],
         "generator": generator,

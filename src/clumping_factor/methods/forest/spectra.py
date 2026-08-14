@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from pathlib import Path
 from typing import Sequence
 
@@ -184,7 +185,10 @@ def write_spectra_hdf5(result: SpectrumResult, output_path: str | Path, overwrit
     if output_path.exists() and not overwrite:
         raise FileExistsError(f"{output_path} already exists. Use --overwrite to replace it.")
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with h5py.File(output_path, "w") as handle:
+    hdf5_path = str(output_path.resolve())
+    if os.name == "nt" and not hdf5_path.startswith("\\\\?\\"):
+        hdf5_path = "\\\\?\\" + hdf5_path
+    with h5py.File(hdf5_path, "w") as handle:
         metadata = handle.create_group("metadata")
         metadata.attrs["schema_version"] = 1
         for key, value in result.metadata.items():

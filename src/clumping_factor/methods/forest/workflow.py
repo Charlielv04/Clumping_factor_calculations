@@ -14,7 +14,7 @@ from .ionizing import (
     gamma_result_document, mfp_result_document,
 )
 from .los_loader import LosData, read_thesan_random_los
-from .spectra import compute_los_spectra, write_spectra_hdf5
+from .spectra import compute_los_spectra
 
 WORKFLOW_VERSION = 1
 PRODUCTS = ("lya", "mfp", "gamma", "equations")
@@ -27,7 +27,7 @@ class SnapshotWorkflowConfig:
     simulation_name: str
     products: Sequence[str]
     los_file: str | Path | None = None
-    output_root: str | Path = "results/forest"
+    output_root: str | Path = "results"
     refresh_products: bool = False
     verbose: bool = False
     threads: int = 1
@@ -89,7 +89,11 @@ def _family(simulation: str) -> str:
 
 
 def snapshot_output_dir(config: SnapshotWorkflowConfig) -> Path:
-    return Path(config.output_root) / _family(config.simulation_name) / config.simulation_name / f"snapshot{config.snapshot:03d}"
+    from clumping_factor.infrastructure.results import canonical_output_path
+
+    document = {"parameters": {"simulation_name": config.simulation_name, "snapshot": config.snapshot, "particle_type": "gas", "base_path": str(config.base_path)},
+                "particle_type": "gas", "simulation": {"name": config.simulation_name, "snapshot": config.snapshot, "particle_type": "gas"}}
+    return canonical_output_path(document, config.output_root, method_id="forest.snapshot")
 
 
 def _signature(path: str | Path) -> dict[str, int | str]:
@@ -139,8 +143,7 @@ def run_snapshot_workflow(
     if min(equation_workers, gamma_workers, mfp_workers) < 1:
         raise ValueError("worker counts must be at least 1.")
 
-    output_dir = snapshot_output_dir(config)
-    manifest_path = output_dir / "manifest.json"
+    manifest_path = snapshot_output_dir(config)
     previous = _existing_manifest(manifest_path)
     configuration = json.loads(json.dumps(asdict(config), default=str))
     preserved_products = {
@@ -148,11 +151,12 @@ def run_snapshot_workflow(
     }
     document = {
         "workflow_version": WORKFLOW_VERSION, "status": "running", "started_at": _now(),
-        "updated_at": _now(), "simulation": config.simulation_name, "snapshot": config.snapshot,
+        "updated_at": _now(), "simulation": {"name": config.simulation_name, "snapshot": config.snapshot, "particle_type": "gas"},
+        "particle_type": "gas", "parameters": {"simulation_name": config.simulation_name, "snapshot": config.snapshot, "particle_type": "gas", "base_path": str(config.base_path)},
         "requested_products": requested, "configuration": configuration, "products": preserved_products,
         "warnings": [], "failures": [],
     }
-    atomic_write_json(manifest_path, document)
+    atomic_write_json(manifest_path, document, normalize_result=True, method_id="forest.snapshot")
 
     from clumping_factor.infrastructure.loaders import snapshot_file_paths
     snapshot_error: Exception | None = None
@@ -186,7 +190,7 @@ def run_snapshot_workflow(
             if product_row.get("status") == "failed"
         ]
         document["updated_at"] = _now()
-        atomic_write_json(manifest_path, document)
+        atomic_write_json(manifest_path, document, normalize_result=True, method_id="forest.snapshot")
 
     def reusable(name: str, fingerprint: str) -> dict | None:
         row = previous.get("products", {}).get(name, {})
@@ -210,21 +214,23 @@ def run_snapshot_workflow(
             if product in ("gamma", "equations") and snapshot_error is not None:
                 raise snapshot_error
             if product == "lya":
-                output = output_dir / "lya" / f"{Path(config.los_file).stem}_lya.hdf5"
+                from .spectra import write_canonical_spectrum_result
                 result = compute_los_spectra(los_data, line_name=config.line, resolution_kms=config.resolution_kms,
                                              static=config.static, only_rays=config.only_rays, verbose=config.verbose)
-                write_spectra_hdf5(result, output, overwrite=True)
+                _, output = write_canonical_spectrum_result(result, config.output_root, simulation_name=config.simulation_name,
+                                                            snapshot=config.snapshot, overwrite=True)
                 outputs = [str(output)]
                 details = {"line": config.line, "ray_count": len(result.ray_ids)}
             elif product == "mfp":
-                output = output_dir / "mfp912" / f"{Path(config.los_file).stem}_mfp912.json"
                 result = calculate_mean_free_paths(los_data, only_rays=config.only_rays,
                                                    starts_per_ray=config.mfp_starts_per_ray, seed=config.mfp_seed,
                                                    workers=mfp_workers)
                 reference = calculate_mean_free_paths_reference(los_data, result.starting_indices) if config.mfp_cross_check else None
-                atomic_write_json(output, mfp_result_document(result, source_los_file=config.los_file,
-                                                              simulation=config.simulation_name, snapshot=config.snapshot,
-                                                              reference=reference), normalize_result=True,
+                product_document = mfp_result_document(result, source_los_file=config.los_file, simulation=config.simulation_name,
+                                                       snapshot=config.snapshot, reference=reference)
+                from clumping_factor.infrastructure.results import canonical_output_path
+                output = canonical_output_path(product_document, config.output_root, method_id="forest.mfp")
+                atomic_write_json(output, product_document, normalize_result=True,
                                   method_id="forest.mfp")
                 compute_and_cache_snapshot_ionizing_inputs(
                     config.base_path, config.snapshot, mfp_los_file=config.los_file, need_mfp=True,
@@ -236,15 +242,18 @@ def run_snapshot_workflow(
                 outputs = [str(output)]
                 details = {**result.summary(), "workers": mfp_workers}
             elif product == "gamma":
-                output = output_dir / "gamma_hi" / "gamma_hi.json"
                 result = compute_gamma_hi_result(snapshot_files, hi_threshold=config.gamma_hi_threshold,
                                                  cross_check=config.gamma_cross_check,
                                                  chunk_size=config.gamma_chunk_size,
                                                  progress_interval=config.progress_interval,
                                                  workers=gamma_workers)
+                product_document = gamma_result_document(result, source_files=snapshot_files)
+                product_document["parameters"].update({"simulation_name": config.simulation_name, "snapshot": config.snapshot})
+                product_document["simulation"] = {"name": config.simulation_name, "snapshot": config.snapshot, "particle_type": "gas"}
+                from clumping_factor.infrastructure.results import canonical_output_path
+                output = canonical_output_path(product_document, config.output_root, method_id="forest.gamma-hi")
                 atomic_write_json(
-                    output,
-                    gamma_result_document(result, source_files=snapshot_files),
+                    output, product_document,
                     normalize_result=True,
                     method_id="forest.gamma-hi",
                 )
@@ -300,7 +309,8 @@ def run_snapshot_workflow(
                     simulation_name=config.simulation_name, progress=progress,
                     progress_interval=config.progress_interval, workers=equation_workers,
                 )
-                output = output_dir / "equations" / "equations.json"
+                from clumping_factor.infrastructure.results import canonical_output_path
+                output = canonical_output_path(result.document, config.output_root, method_id="diagnostics.equations")
                 json_output, csv_output = write_equation_tests_result(result, output)
                 outputs = [str(json_output), str(csv_output)]
                 details = {"row_count": len(result.document.get("rows", [])), "workers": equation_workers}
@@ -318,6 +328,6 @@ def run_snapshot_workflow(
     document["status"] = "failed" if document["failures"] else "success"
     document["finished_at"] = _now()
     document["updated_at"] = _now()
-    atomic_write_json(manifest_path, document)
+    atomic_write_json(manifest_path, document, normalize_result=True, method_id="forest.snapshot")
     return SnapshotWorkflowResult(manifest_path, document)
 

@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
+from clumping_factor.infrastructure.artifacts import analysis_directory, write_analysis_manifest
 from clumping_factor.visualization.plotting import (
     plot_campaign_files,
     plot_evolution_files,
@@ -101,10 +102,15 @@ def canonical_plot_path(
     method: str,
     filename: str,
 ) -> Path:
-    if family.startswith("clumping/"):
-        category = family.split("/", 1)[1]
-        return Path(analysis_root) / "clumping" / "aida-tng" / category / subject / period / particle / method / filename
-    return Path(analysis_root) / family / "aida-tng" / subject / period / particle / method / filename
+    root = Path(analysis_root)
+    output_root = root.parent if root.name == "analysis" else root
+    domain, analysis_kind = family.split("/", 1) if "/" in family else (family, period)
+    directory = analysis_directory(
+        output_root, domain=domain, family="aida-tng", analysis_kind=analysis_kind,
+        subject=subject, method_label=f"{particle}-{method}",
+        options={"period": period, "filename": filename}, inputs=[],
+    )
+    return directory / "artifacts" / filename
 
 
 def _group(results: Iterable[AidaResult], *keys: str) -> dict[tuple, list[AidaResult]]:
@@ -199,6 +205,12 @@ def generate_aida_tng_plots(
             _record(rows, category, output, inputs, status="skipped", message=str(exc))
             return
         _record(rows, category, Path(written), inputs)
+        write_analysis_manifest(
+            Path(written).parent.parent, domain=category.split("/", 1)[0], family="aida-tng",
+            analysis_kind=category.split("/", 1)[-1], subject=Path(written).parent.parent.parent.name,
+            method_label=Path(written).parent.parent.name, options=kwargs, inputs=inputs, artifacts=[Path(written)],
+            generator="clumping.plot.campaign",
+        )
         outputs.append(Path(written))
 
     clumping = [result for result in results if result.kind == "clumping" and result.snapshot is not None]

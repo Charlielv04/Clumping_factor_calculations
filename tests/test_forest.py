@@ -80,13 +80,13 @@ def test_spectra_physical_behavior(tmp_path):
     assert not np.allclose(static.tau, dynamic.tau)
 
 
-def test_cli_writes_spectra_hdf5(tmp_path):
+def test_cli_writes_owned_spectra_hdf5(tmp_path):
     los_file = _write_los(tmp_path / "rays_054.hdf5")
-    output = tmp_path / "forest.hdf5"
-    args = build_forest_parser().parse_args(["--los-file", str(los_file), "--output", str(output), "--resolution-kms", "25"])
+    output_root = tmp_path / "r"
+    args = build_forest_parser().parse_args(["--los-file", str(los_file), "--output-dir", str(output_root), "--resolution-kms", "25"])
     written = run_forest(args)
-    assert written == [output]
-    with h5py.File(output, "r") as handle:
+    assert len(written) == 1
+    with h5py.File(written[0], "r") as handle:
         assert "0" in handle["flux"]
         assert "0" in handle["tau"]
         assert "0" in handle["velocity_kms"]

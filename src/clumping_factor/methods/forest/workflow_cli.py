@@ -12,7 +12,7 @@ def build_snapshot_parser() -> argparse.ArgumentParser:
     parser.add_argument("--simulation-name", required=True)
     parser.add_argument("--los-file")
     parser.add_argument("--products", nargs="+", required=True, choices=PRODUCTS)
-    parser.add_argument("--output-dir", default="results/forest")
+    parser.add_argument("--output-dir", default="results")
     parser.add_argument("--refresh-products", action="store_true")
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--threads", type=int, default=1, help="Default worker threads for thread-safe snapshot products.")
