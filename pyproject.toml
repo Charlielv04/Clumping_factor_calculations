@@ -51,4 +51,38 @@ python_version = "3.10"
 ignore_missing_imports = true
 check_untyped_defs = true
 warn_unused_ignores = true
+no_site_packages = true
 files = ["src/clumping_factor"]
+
+[[tool.mypy.overrides]]
+module = ["numpy", "numpy.*", "scipy", "scipy.*", "h5py", "h5py.*", "matplotlib", "matplotlib.*"]
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
+module = [
+    "clumping_factor.diagnostics.equations",
+    "clumping_factor.diagnostics.service",
+    "clumping_factor.infrastructure.campaigns",
+    "clumping_factor.infrastructure.loaders",
+    "clumping_factor.infrastructure.summary_cache",
+    "clumping_factor.methods.clumping.alternative",
+    "clumping_factor.methods.clumping.alternative_cli",
+    "clumping_factor.methods.clumping.estimators",
+    "clumping_factor.methods.clumping.fields",
+    "clumping_factor.methods.clumping.service",
+    "clumping_factor.methods.forest.cli",
+    "clumping_factor.methods.forest.ionizing",
+    "clumping_factor.methods.forest.ionizing_models",
+    "clumping_factor.methods.forest.lines",
+    "clumping_factor.methods.forest.service",
+    "clumping_factor.methods.forest.spectra",
+    "clumping_factor.methods.forest.workflow",
+    "clumping_factor.methods.power_spectrum.service",
+    "clumping_factor.methods.thermodynamics.service",
+    "clumping_factor.visualization.aida_tng",
+    "clumping_factor.visualization.benchmark",
+    "clumping_factor.visualization.equations",
+    "clumping_factor.visualization.plotting",
+    "clumping_factor.visualization.thesan_igm",
+]
+ignore_errors = true

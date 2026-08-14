@@ -407,10 +407,10 @@ def _build_result_document(*args, **kwargs):
     return build_result_document(*args, **kwargs)
 
 
-def _default_output_path(*args, **kwargs):
-    from clumping_factor.infrastructure.results import default_output_path
+def _canonical_output_path(document, output_root, *, method_id):
+    from clumping_factor.infrastructure.results import canonical_output_path
 
-    return default_output_path(*args, **kwargs)
+    return canonical_output_path(document, output_root, method_id=method_id)
 
 
 def _resolve_simulation_name(*args, **kwargs):
@@ -706,15 +706,10 @@ def _run_raw_clumping(args: argparse.Namespace, simulation_name: str, cosmology:
         "diagnostics": {"clumping": clumping_diagnostics},
         "timings": timings,
     }
-    output_path = Path(args.output) if args.output else _default_output_path(
-        args.output_dir,
-        args.particle_type,
-        args.backend,
-        args.snapshot,
-        None,
-        simulation_name,
-    )
     method_id = "clumping.raw-cell-weighted" if args.backend == "raw" else "clumping.raw-volume-weighted"
+    output_path = Path(args.output) if args.output else _canonical_output_path(
+        document, args.output_dir, method_id=method_id
+    )
     return _write_json_result(document, output_path, method_id=method_id)
 
 
@@ -953,15 +948,10 @@ def run_compute(args: argparse.Namespace) -> Path:
             "diagnostics": {"clumping": transmission_diagnostics},
             "timings": timings,
         }
-        output_path = Path(args.output) if args.output else _default_output_path(
-            args.output_dir,
-            args.particle_type,
-            args.backend,
-            args.snapshot,
-            effective_grid_size,
-            simulation_name,
-        )
         method_id = "transmission.raw" if args.backend == "raw-transmission" else "transmission.voronoi"
+        output_path = Path(args.output) if args.output else _canonical_output_path(
+            document, args.output_dir, method_id=method_id
+        )
         return _write_json_result(document, output_path, method_id=method_id)
 
     if args.backend in {"raw", "raw-volume"}:
@@ -1061,16 +1051,11 @@ def run_compute(args: argparse.Namespace) -> Path:
         "timings": timings,
     }
 
-    output_path = Path(args.output) if args.output else _default_output_path(
-        args.output_dir,
-        target_particle_type,
-        target_backend,
-        args.snapshot,
-        args.grid_size,
-        simulation_name,
-    )
     uses_separate_fields = target_spec_key != mask_spec_key
     method_id = "clumping.mask-target" if uses_separate_fields else f"clumping.{target_backend}"
+    output_path = Path(args.output) if args.output else _canonical_output_path(
+        document, args.output_dir, method_id=method_id
+    )
     return _write_json_result(document, output_path, method_id=method_id)
 
 

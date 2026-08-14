@@ -91,10 +91,14 @@ def load_or_build_summary(
         try:
             lock_path.mkdir()
             acquired = True
-        except FileExistsError:
+        except (FileExistsError, PermissionError):
+            # Windows may report a concurrent directory creation as access
+            # denied instead of already-exists while filesystem metadata is
+            # still settling. Treat both outcomes as a held lock.
             try:
                 age = time.time() - lock_path.stat().st_mtime
-            except FileNotFoundError:
+            except (FileNotFoundError, PermissionError):
+                time.sleep(poll_seconds)
                 continue
             if age > stale_lock_seconds:
                 shutil.rmtree(lock_path, ignore_errors=True)

@@ -8,20 +8,21 @@ from clumping_factor.visualization.aida_tng import (
     discover_aida_tng_results,
     generate_aida_tng_plots,
 )
+from clumping_factor.infrastructure.results import with_result_specs
 
 
 def _write_clumping(path: Path, simulation: str, snapshot: int, backend: str, grid: int = 256) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(
-            {
+            with_result_specs({
                 "simulation": {"name": simulation, "snapshot": snapshot, "redshift": 10.0 - snapshot / 100},
                 "particle_type": "gas",
                 "backend": {"backend": backend},
                 "parameters": {"simulation_name": simulation, "snapshot": snapshot, "grid_size": grid},
                 "thresholds": [0.0, 20.0],
                 "clumping_factors": [1.0, 2.0],
-            }
+            }, method_id=f"clumping.{backend}")
         ),
         encoding="utf-8",
     )
@@ -62,7 +63,7 @@ def test_dry_run_writes_manifest_and_plans_method_and_evolution_outputs(tmp_path
 
     analysis = tmp_path / "results" / "analysis"
     outputs = generate_aida_tng_plots(root, analysis, dry_run=True)
-    manifest = analysis / "manifests" / "aida-tng-plots.csv"
+    manifest = analysis / "clumping" / "aida-tng" / "aida-tng-plots.csv"
     rows = list(csv.DictReader(manifest.open(encoding="utf-8")))
 
     assert any("backend_comparison.png" in str(path) for path in outputs)

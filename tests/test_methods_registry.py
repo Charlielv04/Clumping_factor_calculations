@@ -43,5 +43,6 @@ def test_registry_owns_campaign_command_capabilities():
         }
         for spec in compute_methods
     )
-    workflow_methods = [spec for spec in specs if spec.domain in {"forest", "thermodynamics", "diagnostics", "campaign", "operations"}]
-    assert all(spec.command_kind is None for spec in workflow_methods)
+    non_executable = [spec for spec in specs if spec.command_kind is None]
+    assert non_executable
+    assert all(spec.domain in {"forest", "thermodynamics", "diagnostics", "campaign", "operations", "power-spectrum", "alternative"} for spec in non_executable)

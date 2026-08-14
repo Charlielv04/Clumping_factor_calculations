@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 from time import perf_counter
 
-from clumping_factor.infrastructure.results import resolve_simulation_name, sanitize_simulation_name
+from clumping_factor.infrastructure.results import sanitize_simulation_name
 
 
 def _simulation_family(simulation_name: str) -> str:
@@ -180,19 +180,10 @@ def run_alternative_clumping(args: argparse.Namespace) -> Path:
     if args.output:
         output = Path(args.output)
     else:
-        simulation_name = resolve_simulation_name(args.base_path, args.simulation_name)
-        grid_size = int(args.grid_size) if args.backend == "grid" else None
-        batch_size = int(args.radius_bin_batch_size) if args.backend == "grid" else 1
-        output = canonical_alternative_clumping_output_path(
-            args.output_dir,
-            simulation_name,
-            _canonical_backend_label(args),
-            args.snapshot,
-            grid_size,
-            args.threads,
-            batch_size,
-            args.run,
-        )
+        from clumping_factor.infrastructure.results import canonical_output_path
+
+        method_id = "alternative.raw-volume" if args.backend == "raw-volume" else "alternative.grid-masked"
+        output = canonical_output_path(result.document, args.output_dir, method_id=method_id, run=args.run)
     return write_alternative_clumping_result(result, output)
 
 

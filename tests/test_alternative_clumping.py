@@ -9,6 +9,7 @@ from clumping_factor.methods.clumping.alternative import (
     compute_alternative_clumping,
     interpolate_mfp,
 )
+from clumping_factor.infrastructure.results import with_result_specs
 from clumping_factor.methods.clumping.alternative_cli import (
     build_alternative_clumping_parser,
     canonical_alternative_clumping_output_path,
@@ -234,7 +235,7 @@ def test_alternative_clumping_output_is_plot_compatible(tmp_path):
         _write_mfp(tmp_path / "mfp.dat"),
         thresholds=[0.0, 10.0, 20.0],
     )
-    output.write_text(json.dumps(result.document), encoding="utf-8")
+    output.write_text(json.dumps(with_result_specs(result.document, method_id="alternative.raw-volume")), encoding="utf-8")
     plot_output = tmp_path / "plot.png"
     plot_main([str(output), "--output", str(plot_output)])
     assert plot_output.exists()
@@ -244,7 +245,7 @@ def test_alternative_quantity_diagnostic_plot(tmp_path):
     result = tmp_path / "eq13.json"
     result.write_text(
         json.dumps(
-            {
+            with_result_specs({
                 "calculation": "alternative_clumping_eq13_davies_2024",
                 "simulation": {"name": "Thesan-2", "snapshot": 80, "redshift": 5.5},
                 "thresholds": [-1.0, 0.0, 20.0],
@@ -265,7 +266,7 @@ def test_alternative_quantity_diagnostic_plot(tmp_path):
                         "selected_volume_fractions": [0.0, 0.4, 1.0],
                     }
                 },
-            }
+            }, method_id="alternative.raw-volume")
         ),
         encoding="utf-8",
     )

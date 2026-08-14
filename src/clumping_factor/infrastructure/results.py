@@ -209,15 +209,27 @@ def with_result_specs(document: dict[str, Any], *, method_id: str | None = None)
     base_path = parameters.get("base_path")
     if simulation_name is None and base_path is not None:
         simulation_name = resolve_simulation_name(base_path)
-    normalized.setdefault(
-        "simulation",
-        {
-            "family": parameters.get("results_family") or parameters.get("family") or "unknown",
-            "name": simulation_name or "unknown",
-            "snapshot": parameters.get("snapshot", normalized.get("snapshot")),
-            "particle_type": parameters.get("particle_type", normalized.get("particle_type")),
-        },
+    simulation_value = normalized.get("simulation")
+    if isinstance(simulation_value, dict):
+        simulation = dict(simulation_value)
+    elif simulation_value is None:
+        simulation = {}
+    else:
+        simulation = {"name": str(simulation_value)}
+    simulation_name = str(simulation.get("name") or simulation_name or "unknown")
+    inferred_family = (
+        "thesan" if simulation_name.lower().startswith("thesan")
+        else "tng" if simulation_name.lower().startswith("tng")
+        else "aida-tng" if simulation_name.startswith(("L35", "L75"))
+        else "unknown"
     )
+    simulation.update(
+        family=simulation.get("family") or parameters.get("results_family") or parameters.get("family") or inferred_family,
+        name=simulation_name,
+        snapshot=simulation.get("snapshot", parameters.get("snapshot", normalized.get("snapshot"))),
+        particle_type=simulation.get("particle_type") or parameters.get("particle_type") or normalized.get("particle_type"),
+    )
+    normalized["simulation"] = simulation
     return normalized
 
 
@@ -236,22 +248,6 @@ def sanitize_simulation_name(name: str) -> str:
 
 def resolve_simulation_name(base_path: str | Path, simulation_name: str | None = None) -> str:
     return sanitize_simulation_name(simulation_name or infer_simulation_name(base_path))
-
-
-def default_output_path(
-    output_dir: str | Path,
-    particle_type: str,
-    backend: str,
-    snapshot: int,
-    grid_size: int | None,
-    simulation_name: str | None = None,
-) -> Path:
-    output_dir = Path(output_dir)
-    if simulation_name:
-        output_dir = output_dir / sanitize_simulation_name(simulation_name)
-    if grid_size is None:
-        return output_dir / f"{particle_type}_{backend}_snapshot{snapshot:03d}.json"
-    return output_dir / f"{particle_type}_{backend}_snapshot{snapshot:03d}_grid{grid_size}.json"
 
 
 def canonical_result_path(
@@ -296,6 +292,28 @@ def canonical_json(value: Any) -> str:
 
 def specification_hash(value: Any) -> str:
     return hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()[:12]
+
+
+def canonical_output_path(
+    document: dict[str, Any],
+    output_root: str | Path,
+    *,
+    method_id: str,
+    run: int = 1,
+) -> Path:
+    normalized = with_result_specs(document, method_id=method_id)
+    simulation = normalized["simulation"]
+    return canonical_result_path(
+        output_root,
+        family=str(simulation["family"]),
+        simulation_name=str(simulation["name"]),
+        particle_type=str(simulation["particle_type"]),
+        snapshot=int(simulation["snapshot"]),
+        method_spec=normalized["method_spec"],
+        selection_spec=normalized["selection_spec"],
+        execution_spec=normalized["execution_spec"],
+        run=run,
+    )
 
 
 def write_json_result(
@@ -348,5 +366,8 @@ def read_json_result(path: str | Path) -> dict[str, Any]:
     for key in ("selection_spec", "execution_spec", "provenance", "simulation"):
         if not isinstance(document[key], dict):
             raise ValueError(f"{key} must be an object")
+    missing_simulation = sorted({"family", "name", "snapshot", "particle_type"} - document["simulation"].keys())
+    if missing_simulation:
+        raise ValueError(f"simulation is missing required fields: {', '.join(missing_simulation)}")
     return document
 

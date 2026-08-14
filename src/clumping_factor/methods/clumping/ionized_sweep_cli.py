@@ -8,7 +8,7 @@ import numpy as np
 
 from clumping_factor.infrastructure.loaders import iter_particle_chunks, read_snapshot_metadata
 from clumping_factor.methods.clumping.raw import _raw_hii_fraction
-from clumping_factor.infrastructure.results import resolve_simulation_name, sanitize_simulation_name, write_json_result
+from clumping_factor.infrastructure.results import resolve_simulation_name, write_json_result
 
 
 def _build_ionized_cuts(cut_min: float, cut_max: float, cut_count: int) -> np.ndarray:
@@ -133,16 +133,6 @@ def compute_ionized_sweep(args: argparse.Namespace) -> Path:
                 }
             )
 
-    output = Path(args.output) if args.output else (
-        Path(args.output_dir)
-        / "aida-tng"
-        / sanitize_simulation_name(simulation_name)
-        / "gas"
-        / "ionized-sweep"
-        / f"snapshot{int(args.snapshot):03d}_nogrid"
-        / "threads1_batch1_run001.json"
-    )
-    output.parent.mkdir(parents=True, exist_ok=True)
     document = {
         "calculation": "ionized_igm_raw_volume_sweep",
         "schema_version": 1,
@@ -171,6 +161,15 @@ def compute_ionized_sweep(args: argparse.Namespace) -> Path:
         },
         "timings": {"total": perf_counter() - total_start},
     }
+    if args.output:
+        output = Path(args.output)
+    else:
+        from clumping_factor.infrastructure.results import canonical_output_path
+
+        output = canonical_output_path(
+            document, args.output_dir, method_id="alternative.ionized-sweep"
+        )
+    output.parent.mkdir(parents=True, exist_ok=True)
     return write_json_result(document, output, method_id="alternative.ionized-sweep")
 
 

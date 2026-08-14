@@ -13,7 +13,26 @@ from clumping_factor.methods.clumping.compute import (
 )
 from clumping_factor.infrastructure.models import GridResult, ParticleData
 from clumping_factor.visualization.plotting import _auto_plot_context, _campaign_simulation_name, _plot_label
-from clumping_factor.infrastructure.results import default_output_path, resolve_simulation_name
+from clumping_factor.infrastructure.results import resolve_simulation_name, with_result_specs
+
+
+def _result_json(document):
+    parameters = document.setdefault("parameters", {})
+    backend = parameters.get("backend")
+    backend_metadata = document.get("backend")
+    if backend is None and isinstance(backend_metadata, dict):
+        backend = backend_metadata.get("backend")
+    method_id = {
+        "cube": "clumping.cube",
+        "pylians": "clumping.pylians",
+        "raw": "clumping.raw-cell-weighted",
+        "raw-volume": "clumping.raw-volume-weighted",
+        "raw-transmission": "transmission.raw",
+        "voronoi-transmission": "transmission.voronoi",
+    }.get(backend, "clumping.sphere")
+    if "ionized" in str(document.get("calculation", "")):
+        method_id = "alternative.ionized-sweep"
+    return json.dumps(with_result_specs(document, method_id=method_id))
 
 
 def test_compute_help():
@@ -161,11 +180,6 @@ def test_simulation_name_inferred_from_base_path():
     assert resolve_simulation_name("./anything", "Thesan 1!") == "Thesan-1"
 
 
-def test_default_output_path_uses_simulation_subdirectory():
-    output = default_output_path("results", "gas", "sphere", 81, 256, "Thesan-1")
-    assert output.as_posix() == "results/Thesan-1/gas_sphere_snapshot081_grid256.json"
-
-
 def test_run_compute_writes_json_with_mock_loader_and_grid(monkeypatch, tmp_path):
     particles = ParticleData(
         coords=np.array([[0.1, 0.1, 0.1]], dtype=np.float32),
@@ -274,8 +288,9 @@ def test_raw_backend_default_output_path_has_no_grid(monkeypatch, tmp_path):
         verbose=False,
     )
     written = run_compute(args)
-    assert written.name == "gas_raw_snapshot098.json"
-    assert written.parent.name == "data"
+    assert written.name.startswith("execution-") and written.name.endswith("_run001.json")
+    assert "science-" in written.parent.name
+    assert "clumping.raw-cell-weighted" in written.parts
     assert json.loads(written.read_text())["parameters"]["grid_size"] is None
 
 
@@ -330,7 +345,7 @@ def test_gas_radius_mode_is_passed_independently_from_backend(monkeypatch, tmp_p
 def test_plot_command_reads_json_and_writes_plot(tmp_path):
     result_json = tmp_path / "result.json"
     result_json.write_text(
-        json.dumps(
+        _result_json(
             {
                 "particle_type": "gas",
                 "backend": {"backend": "sphere"},
@@ -348,7 +363,7 @@ def test_plot_command_reads_json_and_writes_plot(tmp_path):
 def test_plot_command_writes_selected_cell_count_plot(tmp_path):
     result_json = tmp_path / "result.json"
     result_json.write_text(
-        json.dumps(
+        _result_json(
             {
                 "particle_type": "gas",
                 "backend": {"backend": "sphere"},
@@ -368,7 +383,7 @@ def test_plot_command_writes_relative_to_baseline_plot(tmp_path):
     baseline = tmp_path / "baseline.json"
     comparison = tmp_path / "comparison.json"
     baseline.write_text(
-        json.dumps(
+        _result_json(
             {
                 "particle_type": "gas",
                 "backend": {"backend": "pylians"},
@@ -378,7 +393,7 @@ def test_plot_command_writes_relative_to_baseline_plot(tmp_path):
         )
     )
     comparison.write_text(
-        json.dumps(
+        _result_json(
             {
                 "particle_type": "gas",
                 "backend": {"backend": "pylians"},
@@ -405,7 +420,7 @@ def test_plot_command_writes_relative_to_baseline_plot(tmp_path):
 def test_plot_command_writes_ionized_sweep_plot(tmp_path):
     result_json = tmp_path / "equations.json"
     result_json.write_text(
-        json.dumps(
+        _result_json(
             {
                 "calculation": "thesan_clumping_equation_tests",
                 "simulation": {"name": "sim", "snapshot": 80},
@@ -442,7 +457,7 @@ def test_plot_command_writes_relative_ionized_sweep_plot(tmp_path):
     baseline_json = tmp_path / "baseline.json"
     comparison_json = tmp_path / "comparison.json"
     baseline_json.write_text(
-        json.dumps(
+        _result_json(
             {
                 "calculation": "ionized_igm_raw_volume_sweep",
                 "simulation": {"name": "CDM", "snapshot": 99},
@@ -460,7 +475,7 @@ def test_plot_command_writes_relative_ionized_sweep_plot(tmp_path):
         )
     )
     comparison_json.write_text(
-        json.dumps(
+        _result_json(
             {
                 "calculation": "ionized_igm_raw_volume_sweep",
                 "simulation": {"name": "SIDM1", "snapshot": 99},
@@ -499,7 +514,7 @@ def test_plot_command_writes_relative_ionized_sweep_plot(tmp_path):
 def test_relative_to_baseline_rejects_cell_count_quantity(tmp_path):
     result_json = tmp_path / "result.json"
     result_json.write_text(
-        json.dumps(
+        _result_json(
             {
                 "thresholds": [-1.0, 0.0],
                 "clumping_factors": [1.0, 2.0],
@@ -527,7 +542,7 @@ def test_relative_to_baseline_rejects_cell_count_quantity(tmp_path):
 
 def test_cell_count_plot_rejects_missing_diagnostics(tmp_path):
     result_json = tmp_path / "result.json"
-    result_json.write_text(json.dumps({"thresholds": [-1.0, 0.0], "clumping_factors": [None, 1.0]}))
+    result_json.write_text(_result_json({"thresholds": [-1.0, 0.0], "clumping_factors": [None, 1.0]}))
     output = tmp_path / "cell-counts.png"
     try:
         plot_main([str(result_json), "--quantity", "cell-count", "--output", str(output)])
@@ -539,7 +554,7 @@ def test_cell_count_plot_rejects_missing_diagnostics(tmp_path):
 
 def test_plot_command_rejects_malformed_result(tmp_path):
     result_json = tmp_path / "bad.json"
-    result_json.write_text(json.dumps({"thresholds": [0.0]}))
+    result_json.write_text(_result_json({"thresholds": [0.0]}))
     output = tmp_path / "plot.png"
     try:
         plot_main([str(result_json), "--output", str(output)])
@@ -552,7 +567,7 @@ def test_plot_command_rejects_malformed_result(tmp_path):
 def test_plot_command_rejects_all_nan_result(tmp_path):
     result_json = tmp_path / "nan.json"
     result_json.write_text(
-        json.dumps(
+        _result_json(
             {
                 "particle_type": "gas",
                 "backend": {"backend": "sphere"},
@@ -573,7 +588,7 @@ def test_plot_command_rejects_all_nan_result(tmp_path):
 def test_threshold_plot_rejects_scalar_transmission_result(tmp_path):
     result_json = tmp_path / "scalar.json"
     result_json.write_text(
-        json.dumps(
+        _result_json(
             {
                 "particle_type": "gas",
                 "backend": {"backend": "raw-transmission"},
@@ -591,7 +606,7 @@ def test_threshold_plot_rejects_scalar_transmission_result(tmp_path):
 
 def _write_evolution_result(path, redshift, factors, grid_size=256):
     path.write_text(
-        json.dumps(
+        _result_json(
             {
                 "simulation": {"name": "sim", "snapshot": int(redshift * 10), "redshift": redshift},
                 "particle_type": "gas",
@@ -636,7 +651,7 @@ def test_threshold_plot_labels_cross_method_by_method(tmp_path):
     _write_evolution_result(pylians, 6.0, [1.5, 2.5, 3.5])
     pylians_doc = json.loads(pylians.read_text())
     pylians_doc["backend"] = {"backend": "pylians"}
-    pylians.write_text(json.dumps(pylians_doc))
+    pylians.write_text(_result_json(pylians_doc))
     documents = [(sphere, json.loads(sphere.read_text())), (pylians, json.loads(pylians.read_text()))]
 
     label_mode, legend_title, _ = _auto_plot_context(documents, "clumping-factor")
@@ -682,7 +697,7 @@ def test_evolution_plot_accepts_scalar_transmission_results(monkeypatch, tmp_pat
     second = tmp_path / "second_scalar.json"
     for path, redshift, factor in [(first, 8.0, 2.0), (second, 6.0, 3.0)]:
         path.write_text(
-            json.dumps(
+            _result_json(
                 {
                     "simulation": {"name": "sim", "redshift": redshift},
                     "particle_type": "gas",

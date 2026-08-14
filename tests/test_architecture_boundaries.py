@@ -1,7 +1,13 @@
 import ast
+import subprocess
 from pathlib import Path
 
 import pytest
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python 3.10
+    import tomli as tomllib
 
 from clumping_factor.infrastructure.results import canonical_result_path, with_result_specs
 
@@ -82,4 +88,46 @@ def test_domain_cli_adapters_do_not_import_scientific_libraries():
             for alias in node.names
         }
         assert not (imported & forbidden), f"Scientific dependency leaked into {path}"
+
+
+def test_source_root_contains_only_router_and_package_marker():
+    package_root = Path(__file__).parents[1] / "src" / "clumping_factor"
+    assert {path.name for path in package_root.glob("*.py")} == {"__init__.py", "command.py"}
+
+
+def test_removed_source_trees_are_absent_from_git():
+    repository = Path(__file__).parents[1]
+    tracked = subprocess.run(
+        ["git", "ls-files"], cwd=repository, check=True, capture_output=True, text=True
+    ).stdout.splitlines()
+    forbidden_prefixes = ("scripts/", "Legacy files/", "comparative_implementations/")
+    assert not [path for path in tracked if path.startswith(forbidden_prefixes)]
+
+
+def test_only_unified_console_entry_point_is_published():
+    repository = Path(__file__).parents[1]
+    project = tomllib.loads((repository / "pyproject.toml").read_text(encoding="utf-8"))
+    assert project["project"]["scripts"] == {"clumping": "clumping_factor.command:main"}
+
+
+def test_typed_services_do_not_accept_argparse_namespaces():
+    package_root = Path(__file__).parents[1] / "src" / "clumping_factor"
+    for path in package_root.rglob("service.py"):
+        source = path.read_text(encoding="utf-8")
+        assert "argparse" not in source
+        tree = ast.parse(source, filename=str(path))
+        assert not any(isinstance(node, ast.Name) and node.id == "Namespace" for node in ast.walk(tree))
+
+
+def test_command_router_has_no_scientific_imports():
+    package_root = Path(__file__).parents[1] / "src" / "clumping_factor"
+    tree = ast.parse((package_root / "command.py").read_text(encoding="utf-8"))
+    forbidden = {"numpy", "scipy", "h5py", "matplotlib"}
+    imported = {
+        alias.name.split(".", 1)[0]
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+        for alias in node.names
+    }
+    assert not (imported & forbidden)
 

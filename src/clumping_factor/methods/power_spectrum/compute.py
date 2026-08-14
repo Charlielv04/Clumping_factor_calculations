@@ -10,7 +10,7 @@ import numpy as np
 from clumping_factor.methods.clumping.fields import build_density_grid_mass_assignment, build_density_grid_mass_assignment_chunked
 from clumping_factor.infrastructure.loaders import estimate_full_load_bytes, iter_particle_chunks, load_tng_particles, read_snapshot_metadata
 from clumping_factor.methods.power_spectrum.estimator import PowerSpectrumResult, density_power_spectrum, density_power_spectrum_pylians
-from clumping_factor.infrastructure.results import build_provenance, resolve_simulation_name, sanitize_simulation_name, write_json_result
+from clumping_factor.infrastructure.results import build_provenance, resolve_simulation_name, write_json_result
 
 
 def build_power_spectrum_parser() -> argparse.ArgumentParser:
@@ -194,19 +194,6 @@ def _build_density_field(args: argparse.Namespace, load_mode: str):
     return density_grid, spec, timings
 
 
-def _default_output_path(args: argparse.Namespace, simulation_name: str) -> Path:
-    smoothing = "mas-only" if args.smoothing == "none" else f"smoothed-{args.smoothing}"
-    return (
-        Path(args.output_dir)
-        / sanitize_simulation_name(simulation_name)
-        / "power-spectrum"
-        / (
-            f"{args.particle_type}_{smoothing}_{args.spectrum_engine}"
-            f"_snapshot{int(args.snapshot):03d}_grid{int(args.grid_size)}.json"
-        )
-    )
-
-
 def _spectrum_payload(result: PowerSpectrumResult) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "k": result.k,
@@ -314,13 +301,18 @@ def run_power_spectrum(args: argparse.Namespace) -> Path:
     }
     if primary_spectrum.k_edges.size:
         document["k_edges"] = primary_spectrum.k_edges
-    output_path = Path(args.output) if args.output else _default_output_path(args, simulation_name)
     engine = str(parameters.get("spectrum_engine") or "numpy")
     method_id = {
         "numpy": "power-spectrum.numpy",
         "pylians": "power-spectrum.pylians",
         "both": "power-spectrum.combined",
     }[engine]
+    if args.output:
+        output_path = Path(args.output)
+    else:
+        from clumping_factor.infrastructure.results import canonical_output_path
+
+        output_path = canonical_output_path(document, args.output_dir, method_id=method_id)
     return write_json_result(document, output_path, method_id=method_id)
 
 

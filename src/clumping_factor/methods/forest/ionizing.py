@@ -42,6 +42,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import time
 from typing import Callable, Iterable, Sequence
 
 import h5py
@@ -521,17 +522,24 @@ def atomic_write_json(
 ) -> Path:
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
+    from clumping_factor.infrastructure.results import with_result_specs
+
+    payload = with_result_specs(document, method_id=method_id) if normalize_result else document
     fd, temporary = tempfile.mkstemp(prefix=f".{output.name}.", suffix=".tmp", dir=output.parent)
     try:
-        from clumping_factor.infrastructure.results import with_result_specs
-
-        payload = with_result_specs(document, method_id=method_id) if normalize_result else document
         with os.fdopen(fd, "w", encoding="utf-8") as stream:
             json.dump(payload, stream, indent=2)
             stream.write("\n")
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary, output)
+        for attempt in range(5):
+            try:
+                os.replace(temporary, output)
+                break
+            except PermissionError:
+                if attempt == 4:
+                    raise
+                time.sleep(0.02 * (attempt + 1))
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)

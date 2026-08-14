@@ -1,52 +1,26 @@
 # Architecture
 
-The suite has four explicit boundaries:
+The suite is domain-first. Numerical ownership is under `methods`, diagnostics
+under `diagnostics`, plots under `visualization`, and shared mechanics under
+`infrastructure`. The package root is routing only.
 
-1. **Field construction** loads particles/cells and builds native or gridded
-   fields.
-2. **Estimator** consumes fields and produces a numerical result.
-3. **Selection** describes masks, target fields, thresholds, and cuts.
-4. **Execution** describes local, chunked, parallel, or PBS scheduling.
+Each executable domain exposes a configuration dataclass, a computation
+service, a result boundary, a thin CLI adapter, and parity tests. CLI adapters
+may parse arguments; services accept typed configuration objects only.
 
-`clumping_factor.methods.registry` is the single declarative catalog for these
-contracts. Each entry has a stable identifier, supported particle types,
-field representation, weighting, mask semantics, field-builder, estimator,
-selection and producer ownership, grid requirements, optional dependencies,
-method-specific execution modes, and documented legacy presets.
+`methods.registry` is the sole owner of stable method identifiers, presets,
+supported particle types, field and weighting semantics, selection behavior,
+requirements, dependencies, execution modes, and campaign command capability.
 
-The packages under `clumping_factor.methods`, `diagnostics`, `visualization`,
-and `infrastructure` expose typed configuration/service/result/CLI-adapter
-boundaries. The existing top-level modules remain compatibility facades and
-continue to own the established numerical implementations.
+Result identity is metadata-driven. Schema-2 readers require normalized method,
+selection, execution, provenance, and simulation objects. Paths use hashes of
+canonical scientific and algorithmic execution specifications. Scheduler-only
+metadata never changes artifact identity.
 
-New result documents retain historical keys and add `method_spec`,
-`selection_spec`, and `execution_spec`. Existing documents are read without
-requiring those fields. New producers supply an explicit method identifier;
-heuristic inference exists only for legacy reads, and an unrecognized legacy
-document is labeled `legacy.unknown`. Canonical result paths are derived by
-`clumping_factor.results.canonical_result_path`.
+Campaign TOML is the only source for cluster task matrices. The planner validates
+registry capabilities, derives result paths, and renders generic workers. Shell
+scripts do not own scientific or path defaults.
 
-Typed campaign files describe simulation identity, snapshots, particles,
-registered methods, grids, execution settings, and PBS resources. The planner
-owns matrix expansion, validation, commands, and output paths. The original
-explicit-command campaign format is compatibility-only.
-
-The public command tree is:
-
-```text
-clumping clumping compute|alternative
-clumping power compute|plot|compare
-clumping forest spectra|ionizing|snapshot
-clumping temperature compute
-clumping diagnostics equations|density-ratio
-clumping plot campaign|evolution|igm
-clumping results validate|organize
-clumping campaign plan|submit
-```
-
-## Decision records
-
-ADR-001 keeps scientific kernels in Python services and makes CLI adapters
-routing-only. ADR-002 makes campaign manifests and canonical paths
-deterministic and declarative. ADR-003 preserves old imports and console
-commands until a separately approved removal.
+The clean-break cutover intentionally removed old imports, console aliases,
+schema-1 reading, executable comparison copies, organizers, method-specific
+submission scripts, and legacy source. Git history is the archive.
