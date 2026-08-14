@@ -110,6 +110,19 @@ def analysis_directory(
     )
 
 
+def analysis_artifact_path(
+    output_root: str | Path, *, domain: str, family: str, analysis_kind: str, subject: str,
+    method_label: str, options: dict[str, Any], inputs: Iterable[str | Path], filename: str,
+) -> tuple[Path, Path]:
+    """Return one canonical analysis invocation directory and artifact target."""
+
+    directory = analysis_directory(
+        output_root, domain=domain, family=family, analysis_kind=analysis_kind, subject=subject,
+        method_label=method_label, options=options, inputs=inputs,
+    )
+    return directory, directory / "artifacts" / _component(filename, label="Analysis filename")
+
+
 def write_analysis_manifest(
     directory: str | Path,
     *,

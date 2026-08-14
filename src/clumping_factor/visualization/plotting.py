@@ -9,6 +9,8 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+
+from clumping_factor.infrastructure.artifacts import analysis_artifact_path, write_analysis_manifest
 import numpy as np
 
 from clumping_factor.infrastructure.results import read_json_result
@@ -1004,6 +1006,16 @@ def plot_campaign_files(
     particles: list[str] | None = None,
     baseline_batch_by_grid: dict[int, int] | None = None,
 ) -> list[Path]:
+    invocation: Path | None = None
+    if output_dir is None:
+        root = Path(analysis_root)
+        root = root.parent if root.name == "analysis" else root
+        invocation, _ = analysis_artifact_path(
+            root, domain="clumping", family="campaign", analysis_kind="campaign", subject="combined",
+            method_label=backend, options={"threshold": threshold, "batches": batches, "grids": grids, "particles": particles},
+            inputs=result_inputs, filename="campaign.png",
+        )
+        output_dir = invocation / "artifacts"
     rows = _campaign_rows(result_inputs)
     selected_batches = set(batches or [2, 4, 6, 8, 10])
     selected_grids = set(grids or [256, 512, 1024])
@@ -1236,5 +1248,11 @@ def plot_campaign_files(
 
     if not written:
         raise ValueError("Campaign inputs were readable, but no finite values were available to plot.")
+    if invocation is not None:
+        write_analysis_manifest(
+            invocation, domain="clumping", family="campaign", analysis_kind="campaign", subject="combined",
+            method_label=backend, options={"threshold": threshold, "batches": batches, "grids": grids, "particles": particles},
+            inputs=result_inputs, artifacts=written, generator="clumping.plot.campaign",
+        )
     return written
 

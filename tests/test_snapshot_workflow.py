@@ -103,7 +103,10 @@ def test_workflow_computes_missing_temperature_table(tmp_path):
     ))
     assert result.succeeded, result.failures
     assert (base / "snapdir_080" / "Tigm_from_sim.dat").exists()
-    equations_path = next(path for path in (tmp_path / "r").rglob("*.json") if "equations" in path.read_text())
+    equations_path = next(
+        path for path in (tmp_path / "r").rglob("*.json")
+        if json.loads(path.read_text()).get("method_spec", {}).get("identifier") == "diagnostics.equations"
+    )
     equations = json.loads(equations_path.read_text())
     assert equations["parameters"]["Tigm_table"].endswith("Tigm_from_sim.dat")
 
