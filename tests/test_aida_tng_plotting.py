@@ -59,7 +59,9 @@ def test_discover_groups_clumping_results_and_skips_malformed_json(tmp_path):
 
 def test_discovery_uses_strict_metadata_and_skips_manifests(tmp_path):
     root = tmp_path / "results"
-    misleading = root / "archive" / "aida-tng" / "L35n1080_CDM" / "snapshot999_grid1024" / "run.json"
+    archived = root / "archive" / "aida-tng" / "L35n1080_CDM" / "snapshot999_grid1024" / "run.json"
+    _write_clumping(archived, "L35n1080_CDM", 99, "sphere", grid=1024)
+    misleading = root / "aida-tng" / "L35n1080_CDM" / "snapshot999_grid1024" / "run.json"
     _write_clumping(misleading, "L35n1080_CDM", 17, "sphere", grid=256)
     manifest = root / "analysis" / "clumping" / "aida-tng" / "manifest.json"
     manifest.parent.mkdir(parents=True)

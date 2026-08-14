@@ -43,6 +43,9 @@ def discover_aida_tng_results(results_root: str | Path = "results") -> list[Aida
     root = Path(results_root)
     results: list[AidaResult] = []
     for path in sorted(root.rglob("*.json")) if root.exists() else []:
+        relative = path.relative_to(root)
+        if relative.parts and relative.parts[0] in {"analysis", "archive"}:
+            continue
         try:
             document = read_json_result(path)
         except (OSError, ValueError):
