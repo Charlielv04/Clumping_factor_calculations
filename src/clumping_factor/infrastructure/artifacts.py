@@ -180,7 +180,7 @@ def write_analysis_manifest(
         ],
         "generator": generator,
         "legacy_sources": sorted(set(legacy_sources)),
-        "artifacts": sorted(records, key=lambda row: row["path"]),
+        "artifacts": sorted(records, key=lambda row: str(row["path"])),
     }
     output = target / "manifest.json"
     output.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")

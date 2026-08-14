@@ -125,20 +125,26 @@ The execution hash uses algorithmic execution settings; queue, walltime,
 campaign, task, and scheduler CPU metadata remain recorded but do not affect
 identity.
 
-The one-time clean-break migration upgraded 1,549 historical JSON sources to
-1,494 canonical destinations and deduplicated 55 payload-identical copies.
-Source paths, destination paths, methods, payload checksums, and file checksums
-are recorded in
-[`reports/migrations/schema2-results.csv`](reports/migrations/schema2-results.csv).
+The one-time results consolidation accounted for all 4,428 tracked source
+artifacts. Science companions (HDF5, CSV, and similar run products) live beside
+their owning JSON in `execution-<12hex>_runNNN.artifacts/` and are indexed with
+checksums in the JSON result. Derived plots and tables live in the hashed
+`results/analysis/` hierarchy, where each analysis directory contains a
+`manifest.json` and its `artifacts/`. Unique historical material is preserved
+under `results/archive/` with an archive inventory and is excluded from normal
+result discovery.
+
+The complete source-to-destination and checksum record is
+[`reports/migrations/results-consolidation-final-manifest.csv`](reports/migrations/results-consolidation-final-manifest.csv).
+The reference input formerly stored in `results/` is now
+[`reference_data/Tigm_Davies_10000K.dat`](reference_data/Tigm_Davies_10000K.dat).
 There is intentionally no migration or organizer command.
 
 Validate one or more artifacts with:
 
 ```bash
-clumping results validate results/path/to/result.json
+clumping results validate results
 ```
-
-Non-JSON analysis products and human-authored reports were not moved.
 
 ## Ownership rules
 
