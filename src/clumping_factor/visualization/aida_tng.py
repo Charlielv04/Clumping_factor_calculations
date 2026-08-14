@@ -71,7 +71,7 @@ def _simulation(path: Path, document: dict) -> str:
     return path.parts[path.parts.index("aida-tng") + 1] if "aida-tng" in path.parts else "unknown"
 
 
-def discover_aida_tng_results(results_root: str | Path = "results/aida-tng") -> list[AidaResult]:
+def discover_aida_tng_results(results_root: str | Path = "results") -> list[AidaResult]:
     root = Path(results_root)
     results: list[AidaResult] = []
     for path in sorted(root.rglob("*.json")) if root.exists() else []:
@@ -181,7 +181,7 @@ def archive_aida_plots(analysis_root: str | Path = "results", *, dry_run: bool =
 
 
 def generate_aida_tng_plots(
-    results_root: str | Path = "results/aida-tng",
+    results_root: str | Path = "results",
     analysis_root: str | Path = "results",
     *,
     threshold: float = 20.0,
@@ -401,7 +401,7 @@ def generate_aida_tng_plots(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Generate the canonical AIDA-TNG plot catalog.")
-    parser.add_argument("--results-root", default="results/aida-tng")
+    parser.add_argument("--results-root", default="results")
     parser.add_argument("--analysis-root", default="results")
     parser.add_argument("--threshold", type=float, default=20.0)
     parser.add_argument("--dry-run", action="store_true")
