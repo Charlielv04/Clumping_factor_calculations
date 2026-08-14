@@ -10,6 +10,8 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+
+from clumping_factor.infrastructure.artifacts import write_explicit_analysis_sidecar
 import numpy as np
 
 from clumping_factor.infrastructure.results import read_json_result
@@ -185,6 +187,11 @@ def main(argv: list[str] | None = None) -> None:
         density_equation_test=args.density_equation_test,
         hii_density_result=args.hii_density_result,
         electron_hii_result=args.electron_hii_result,
+    )
+    write_explicit_analysis_sidecar(
+        output, domain="clumping", family="thesan", analysis_kind="definition-comparison", options={},
+        inputs=[value for value in (args.density_result, args.density_equation_test, args.hii_density_result, args.electron_hii_result) if value],
+        generator="clumping.plot.result",
     )
     print(f"Wrote Thesan clumping-definition plot: {output}")
     if missing:
