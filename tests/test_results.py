@@ -9,6 +9,7 @@ from clumping_factor.infrastructure.artifacts import (
 from clumping_factor.infrastructure.artifacts import validate_external_analysis_sidecar, write_explicit_analysis_sidecar
 from clumping_factor.infrastructure.models import GridResult, ParticleData
 from clumping_factor.infrastructure.results import build_result_document, normalize_simulation_identity, read_json_result, write_json_result
+from clumping_factor.infrastructure.validation import validate_paths
 
 
 def _document():
@@ -97,6 +98,18 @@ def test_archive_manifest_rejects_paths_outside_archive(tmp_path):
     document["files"][0]["path"] = "../../outside.png"
     manifest.write_text(json.dumps(document), encoding="utf-8")
     assert validate_archive_manifest(manifest)
+
+
+def test_result_validation_skips_historical_archive_payloads(tmp_path):
+    archive = tmp_path / "archive" / "import-1"
+    payload = archive / "legacy-manifest.json"
+    payload.parent.mkdir(parents=True)
+    payload.write_text(json.dumps({"workflow_version": 1, "status": "historical"}), encoding="utf-8")
+    write_archive_manifest(archive, import_id="import-1", files=[(payload, "old/manifest.json")])
+    report = validate_paths([tmp_path])
+    assert len(report) == 1
+    assert report[0]["kind"] == "archive"
+    assert report[0]["valid"]
 
 
 def test_explicit_analysis_sidecar_is_strictly_validated(tmp_path):

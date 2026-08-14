@@ -1,9 +1,3 @@
-# Generated results
+# Results
 
-This directory is the default local destination for scientific run outputs,
-plots, caches, and performance measurements. These artifacts are intentionally
-ignored by Git because they are large and depend on external simulation data.
-
-Small, curated regression inputs and expected values belong under `tests/`.
-Production results should be stored in the project artifact/data store together
-with the JSON provenance emitted by the compute commands.
+Science results use strict schema 2 paths. Companion run products live beside their owning JSON, derived analyses live under `analysis/` with a checksum manifest, and preserved historical material lives under `archive/` and is excluded from normal discovery.

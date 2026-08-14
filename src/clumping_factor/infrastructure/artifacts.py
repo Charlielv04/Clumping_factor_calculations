@@ -15,6 +15,19 @@ from .results import canonical_json, specification_hash
 _SAFE_COMPONENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 
 
+def _comparison_path(path: str | Path) -> Path:
+    """Resolve paths for containment checks with one Windows path spelling.
+
+    Windows may resolve a deep child to its extended ``\\\\?\\`` spelling while
+    leaving its shorter parent unprefixed.  Stripping that implementation
+    prefix only for the comparison keeps canonical companion validation
+    correct without changing the stored production path.
+    """
+
+    value = str(Path(path).resolve())
+    return Path(value[4:] if value.startswith("\\\\?\\") else value)
+
+
 def _component(value: str, *, label: str) -> str:
     if not _SAFE_COMPONENT.fullmatch(value) or value in {".", ".."}:
         raise ValueError(f"{label} must be a safe relative path component: {value!r}")
@@ -24,7 +37,7 @@ def _component(value: str, *, label: str) -> str:
 def _under(root: Path, relative: str) -> Path:
     candidate = (root / relative).resolve()
     try:
-        candidate.relative_to(root.resolve())
+        _comparison_path(candidate).relative_to(_comparison_path(root))
     except ValueError:
         raise ValueError(f"Artifact path escapes its manifest: {relative!r}") from None
     return candidate
@@ -60,7 +73,7 @@ def artifact_record(primary_result: str | Path, artifact: str | Path, role: str)
     primary = Path(primary_result)
     path = Path(artifact)
     try:
-        relative = path.resolve().relative_to(primary.parent.resolve())
+        relative = _comparison_path(path).relative_to(_comparison_path(primary.parent))
     except ValueError:
         raise ValueError(f"Artifact must be below primary result directory: {path}") from None
     return {
@@ -143,7 +156,7 @@ def write_analysis_manifest(
     for artifact in artifacts:
         path = Path(artifact)
         try:
-            relative = path.resolve().relative_to(target.resolve()).as_posix()
+            relative = _comparison_path(path).relative_to(_comparison_path(target)).as_posix()
         except ValueError:
             raise ValueError(f"Analysis artifact must be below analysis directory: {path}") from None
         records.append({
@@ -285,7 +298,7 @@ def write_archive_manifest(directory: str | Path, *, import_id: str, files: Iter
     for artifact, legacy_path in files:
         path = Path(artifact)
         try:
-            relative = path.resolve().relative_to(target.resolve()).as_posix()
+            relative = _comparison_path(path).relative_to(_comparison_path(target)).as_posix()
         except ValueError:
             raise ValueError(f"Archive file must be below archive directory: {path}") from None
         entries.append({"path": relative, "legacy_path": legacy_path, "size": path.stat().st_size, "sha256": sha256_file(path)})

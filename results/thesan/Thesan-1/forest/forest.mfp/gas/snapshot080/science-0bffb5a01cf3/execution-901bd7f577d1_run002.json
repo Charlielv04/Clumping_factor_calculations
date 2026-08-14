@@ -1,0 +1,117 @@
+{
+  "calculation": "migrated_forest_product",
+  "execution_spec": {
+    "chunk_size": null,
+    "cpus": null,
+    "equation_chunk_size": null,
+    "equation_workers": null,
+    "gamma_chunk_size": null,
+    "gamma_workers": null,
+    "load_mode": null,
+    "memory_limit": null,
+    "mfp_workers": null,
+    "mode": "local",
+    "queue": null,
+    "radius_bin_batch_size": null,
+    "requested_products": null,
+    "resource_size": null,
+    "source_campaign": null,
+    "task_id": null,
+    "threads": 1,
+    "walltime": null,
+    "work_partition": null
+  },
+  "legacy_payload": {
+    "algorithm_version": "2",
+    "calculation": "thesan_mfp_912",
+    "cross_check": {
+      "max_abs_difference_pMpc_h": 2.220446049250313e-14,
+      "passed": true,
+      "reference": "get_mfp_from_sim.py independent scalar equation"
+    },
+    "mfp_avg_pMpc_h": 4.686775546507418,
+    "mfp_med_pMpc_h": 4.467443555834972,
+    "p16_pMpc_h": 1.3811780248511483,
+    "p2_5_pMpc_h": 0.1803313360494196,
+    "p84_pMpc_h": 7.8003044267758685,
+    "p97_5_pMpc_h": 11.261291795893051,
+    "periodic_ray_policy": "repeat-ray-until-tau912-equals-one",
+    "quantity": "mfp_912",
+    "redshift": 5.511772431496886,
+    "sample_count": 15000,
+    "sigma_pMpc_h": 3.0520821498474326,
+    "simulation": "Thesan-1",
+    "snapshot": 80,
+    "source_los_file": "/lustre/work/carlos.lopez/Thesan-1/postprocessing/los/rays_080.hdf5",
+    "units": "proper Mpc / h"
+  },
+  "method_spec": {
+    "command_kind": "forest-ionizing",
+    "command_variant": "mfp",
+    "configuration": {},
+    "description": "Mean-free-path calculation",
+    "domain": "forest",
+    "estimator": "forest.mfp",
+    "execution_modes": [
+      "local"
+    ],
+    "field_builder": "line-of-sight",
+    "field_representation": "line-of-sight",
+    "grid_requirements": [],
+    "identifier": "forest.mfp",
+    "legacy_backends": [],
+    "mask_semantics": "ray-selection",
+    "optional_dependencies": [],
+    "presets": [
+      "mfp"
+    ],
+    "producer": "clumping_factor.methods.forest",
+    "selection": "ray-selection",
+    "supported_particle_types": [
+      "gas"
+    ],
+    "weighting": "optical-depth"
+  },
+  "parameters": {
+    "particle_type": "gas",
+    "simulation_name": "Thesan-1",
+    "snapshot": 80
+  },
+  "particle_type": "gas",
+  "provenance": {
+    "migration": {
+      "method": "forest.mfp",
+      "source": "rays_080_mfp912_from_results1-forest_85ba1030.json",
+      "strict_conversion": true
+    }
+  },
+  "schema_version": 2,
+  "selection_spec": {
+    "fully_ionized": null,
+    "hii_source": null,
+    "ionized_cut_range": {
+      "count": null,
+      "max": null,
+      "min": null
+    },
+    "ionized_cuts": null,
+    "ionized_density_thresholds": null,
+    "mask_backend": null,
+    "mask_particle_type": null,
+    "particle_type": "gas",
+    "photon_groups": null,
+    "target_backend": null,
+    "target_particle_type": null,
+    "thresholds": {
+      "count": null,
+      "max": null,
+      "min": null
+    }
+  },
+  "simulation": {
+    "family": "thesan",
+    "name": "Thesan-1",
+    "particle_type": "gas",
+    "snapshot": 80
+  }
+}

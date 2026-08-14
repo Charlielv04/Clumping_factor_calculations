@@ -1,0 +1,118 @@
+{
+  "artifacts": [
+    {
+      "media_type": "application/octet-stream",
+      "path": "execution-901bd7f577d1_run001.artifacts/lya-spectra.hdf5",
+      "role": "lya-spectra",
+      "sha256": "c29baad517f69a0acb4ac808a252ed3f85e510a57b6b857b214be990aa3c478d",
+      "size": 20848
+    }
+  ],
+  "calculation": "lyman_alpha_spectra",
+  "execution_spec": {
+    "chunk_size": null,
+    "cpus": null,
+    "equation_chunk_size": null,
+    "equation_workers": null,
+    "gamma_chunk_size": null,
+    "gamma_workers": null,
+    "load_mode": null,
+    "memory_limit": null,
+    "mfp_workers": null,
+    "mode": "local",
+    "queue": null,
+    "radius_bin_batch_size": null,
+    "requested_products": null,
+    "resource_size": null,
+    "source_campaign": null,
+    "task_id": null,
+    "threads": 1,
+    "walltime": null,
+    "work_partition": null
+  },
+  "metadata": {
+    "hubble_param": 0.678,
+    "input_file": "/lustre/work/carlos.lopez/Simulations/output_4_128_rsl_rays/rays_012.hdf5",
+    "line": "Ly a",
+    "omega0": 0.308,
+    "ray_length_ckpc_h": 67.799990803796,
+    "redshift": 5.506064190062856,
+    "resolution_kms": 1.0,
+    "schema_version": 1,
+    "spectrum_length_kms": 6.533685513151458,
+    "static": false
+  },
+  "method_spec": {
+    "command_kind": "forest-spectra",
+    "command_variant": null,
+    "configuration": {
+      "line": "Ly a"
+    },
+    "description": "Lyman-alpha forest spectra",
+    "domain": "forest",
+    "estimator": "forest.lyman-alpha",
+    "execution_modes": [
+      "local"
+    ],
+    "field_builder": "line-of-sight",
+    "field_representation": "line-of-sight",
+    "grid_requirements": [],
+    "identifier": "forest.lyman-alpha",
+    "legacy_backends": [],
+    "mask_semantics": "ray-selection",
+    "optional_dependencies": [
+      "h5py"
+    ],
+    "presets": [
+      "lyman-alpha"
+    ],
+    "producer": "clumping_factor.methods.forest",
+    "selection": "ray-selection",
+    "supported_particle_types": [
+      "gas"
+    ],
+    "weighting": "column-density"
+  },
+  "parameters": {
+    "line": "Ly a",
+    "particle_type": "gas",
+    "simulation_name": "thesan-mini-4-128-rsl",
+    "snapshot": 12
+  },
+  "particle_type": "gas",
+  "provenance": {
+    "migration": {
+      "embedded_metadata": true,
+      "source": "results consolidation"
+    }
+  },
+  "schema_version": 2,
+  "selection_spec": {
+    "fully_ionized": null,
+    "hii_source": null,
+    "ionized_cut_range": {
+      "count": null,
+      "max": null,
+      "min": null
+    },
+    "ionized_cuts": null,
+    "ionized_density_thresholds": null,
+    "mask_backend": null,
+    "mask_particle_type": null,
+    "particle_type": "gas",
+    "photon_groups": null,
+    "target_backend": null,
+    "target_particle_type": null,
+    "thresholds": {
+      "count": null,
+      "max": null,
+      "min": null
+    }
+  },
+  "simulation": {
+    "family": "thesan",
+    "name": "thesan-mini-4-128-rsl",
+    "particle_type": "gas",
+    "snapshot": 12
+  }
+}

@@ -1,0 +1,108 @@
+{
+  "calculation": "migrated_forest_product",
+  "execution_spec": {
+    "chunk_size": null,
+    "cpus": null,
+    "equation_chunk_size": null,
+    "equation_workers": null,
+    "gamma_chunk_size": null,
+    "gamma_workers": null,
+    "load_mode": null,
+    "memory_limit": null,
+    "mfp_workers": null,
+    "mode": "local",
+    "queue": null,
+    "radius_bin_batch_size": null,
+    "requested_products": null,
+    "resource_size": null,
+    "source_campaign": null,
+    "task_id": null,
+    "threads": 1,
+    "walltime": null,
+    "work_partition": null
+  },
+  "legacy_payload": {
+    "Gamma_HI_s_1": 4.122767456616751e-13,
+    "cross_check": {
+      "absolute_difference_s_1": 4.349102706224733e-21,
+      "passed": false,
+      "reference": "get_gamma_from_sim.py scalar band loop"
+    },
+    "hi_fraction_threshold": 0.5,
+    "quantity": "Gamma_HI",
+    "redshift": 5.458689675319775,
+    "reference": "get_gamma_from_sim.py volume-weighted equation",
+    "scale_factor": 0.15483016684037992,
+    "units": "s^-1"
+  },
+  "method_spec": {
+    "command_kind": "forest-ionizing",
+    "command_variant": "gamma",
+    "configuration": {},
+    "description": "Gamma_HI radiation model",
+    "domain": "forest",
+    "estimator": "forest.gamma-hi",
+    "execution_modes": [
+      "local"
+    ],
+    "field_builder": "radiation-field",
+    "field_representation": "radiation-field",
+    "grid_requirements": [],
+    "identifier": "forest.gamma-hi",
+    "legacy_backends": [],
+    "mask_semantics": "ionizing-selection",
+    "optional_dependencies": [],
+    "presets": [
+      "gamma-hi",
+      "gamma_hi"
+    ],
+    "producer": "clumping_factor.methods.forest",
+    "selection": "ionizing-selection",
+    "supported_particle_types": [
+      "gas"
+    ],
+    "weighting": "volume"
+  },
+  "parameters": {
+    "particle_type": "gas",
+    "simulation_name": "Thesan-1",
+    "snapshot": 80
+  },
+  "particle_type": "gas",
+  "provenance": {
+    "migration": {
+      "method": "forest.gamma-hi",
+      "source": "gamma_hi.json",
+      "strict_conversion": true
+    }
+  },
+  "schema_version": 2,
+  "selection_spec": {
+    "fully_ionized": null,
+    "hii_source": null,
+    "ionized_cut_range": {
+      "count": null,
+      "max": null,
+      "min": null
+    },
+    "ionized_cuts": null,
+    "ionized_density_thresholds": null,
+    "mask_backend": null,
+    "mask_particle_type": null,
+    "particle_type": "gas",
+    "photon_groups": null,
+    "target_backend": null,
+    "target_particle_type": null,
+    "thresholds": {
+      "count": null,
+      "max": null,
+      "min": null
+    }
+  },
+  "simulation": {
+    "family": "thesan",
+    "name": "Thesan-1",
+    "particle_type": "gas",
+    "snapshot": 80
+  }
+}

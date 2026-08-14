@@ -34,6 +34,12 @@ def validate_paths(paths: list[Path]) -> list[dict[str, object]]:
             for forbidden in sorted(FORBIDDEN_RESULT_ROOTS & {item.name for item in root.iterdir() if item.is_dir()}):
                 report.append({"path": str(root / forbidden), "valid": False, "error": f"forbidden legacy result root: {forbidden}"})
     for path in _json_paths(paths):
+        # Archive payloads intentionally retain historical JSON formats.  Only
+        # their generated archive inventory participates in strict validation;
+        # treating preserved payloads as active schema-2 results would make a
+        # valid archive fail result discovery and validation.
+        if "archive" in path.parts and path.name != "manifest.json":
+            continue
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
             if isinstance(raw, dict) and raw.get("kind") == "analysis":
