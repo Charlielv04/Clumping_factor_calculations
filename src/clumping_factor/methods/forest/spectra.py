@@ -7,6 +7,9 @@ from typing import Sequence
 import h5py
 import numpy as np
 
+from clumping_factor.infrastructure.artifacts import attach_artifacts, companion_artifact_path
+from clumping_factor.infrastructure.results import canonical_output_path, write_json_result
+
 from .constants import (
     ELECTRON_CHARGE_ESU,
     ELECTRON_MASS_G,
@@ -196,6 +199,25 @@ def write_spectra_hdf5(result: SpectrumResult, output_path: str | Path, overwrit
             handle["tau"].create_dataset(key, data=result.tau[output_index])
             handle["flux"].create_dataset(key, data=result.flux[output_index])
     return output_path
+
+
+def write_canonical_spectrum_result(
+    result: SpectrumResult, output_root: str | Path, *, simulation_name: str, snapshot: int, overwrite: bool = False
+) -> tuple[Path, Path]:
+    """Write a strict forest owner plus its HDF5 spectrum companion."""
+
+    parameters = {
+        "simulation_name": simulation_name, "snapshot": int(snapshot), "particle_type": "gas",
+        "line": result.metadata["line"], "resolution_kms": result.metadata["resolution_kms"],
+        "static": result.metadata["static"], "source_los_file": result.metadata["input_file"],
+    }
+    document = {"calculation": "lyman_alpha_spectra", "parameters": parameters, "particle_type": "gas", "metadata": result.metadata,
+                "ray_ids": result.ray_ids, "simulation": {"name": simulation_name, "snapshot": int(snapshot), "particle_type": "gas"}}
+    owner = canonical_output_path(document, output_root, method_id="forest.lyman-alpha")
+    spectrum = companion_artifact_path(owner, "lya-spectra", "hdf5")
+    write_spectra_hdf5(result, spectrum, overwrite=overwrite)
+    owner = write_json_result(attach_artifacts(document, owner, [(spectrum, "lya-spectra")]), owner, method_id="forest.lyman-alpha")
+    return owner, spectrum
 
 
 def compute_and_write_los_spectra(

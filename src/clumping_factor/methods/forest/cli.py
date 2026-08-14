@@ -69,8 +69,8 @@ def build_forest_parser() -> argparse.ArgumentParser:
     parser.add_argument("--static", action="store_true", help="Ignore peculiar velocities, matching the legacy script's production loop.")
     parser.add_argument("--only-rays", nargs="*", type=int, help="Optional ray ids to process.")
     parser.add_argument("--simulation-name", help="Simulation name for canonical outputs, e.g. Thesan-2. Inferred from LOS paths when possible.")
-    parser.add_argument("--output", help="Output HDF5 path for --los-file mode.")
-    parser.add_argument("--output-dir", default="results/forest", help="Canonical output root for forest spectra.")
+    parser.add_argument("--output", help="Explicit HDF5 artifact path for --los-file mode.")
+    parser.add_argument("--output-dir", default="results", help="Canonical results root for forest spectra.")
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--compute-mfp", action="store_true", help="Also calculate the 912-Angstrom MFP from each input ray file.")
     parser.add_argument("--mfp-starts-per-ray", type=int, default=100)
@@ -92,11 +92,6 @@ def _compute_and_write_mfp(args: argparse.Namespace, los_file: Path, simulation:
 
     if args.mfp_starts_per_ray <= 0:
         raise ValueError("--mfp-starts-per-ray must be positive.")
-    output = Path(args.mfp_output) if args.mfp_output else canonical_mfp_output_path(
-        args.output_dir, simulation, snapshot, los_file
-    )
-    if output.exists() and not args.overwrite:
-        raise FileExistsError(f"MFP output already exists: {output}. Use --overwrite to replace it.")
     data = read_thesan_random_los(los_file, only_rays=args.only_rays)
     result = calculate_mean_free_paths(
         data, only_rays=args.only_rays, starts_per_ray=args.mfp_starts_per_ray, seed=args.mfp_seed
@@ -106,6 +101,10 @@ def _compute_and_write_mfp(args: argparse.Namespace, los_file: Path, simulation:
         reference = calculate_mean_free_paths_reference(data, result.starting_indices)
     document = mfp_result_document(result, source_los_file=los_file, simulation=simulation,
                                    snapshot=snapshot, reference=reference)
+    from clumping_factor.infrastructure.results import canonical_output_path
+    output = Path(args.mfp_output) if args.mfp_output else canonical_output_path(document, args.output_dir, method_id="forest.mfp")
+    if output.exists() and not args.overwrite:
+        raise FileExistsError(f"MFP output already exists: {output}. Use --overwrite to replace it.")
     atomic_write_json(output, document, normalize_result=True, method_id="forest.mfp")
     return output
 
@@ -131,30 +130,23 @@ def _find_los_file(los_dir: Path, snapshot: int) -> Path:
 
 
 def run_forest(args: argparse.Namespace) -> list[Path]:
-    from .spectra import compute_and_write_los_spectra
+    from .spectra import compute_los_spectra, write_canonical_spectrum_result, write_spectra_hdf5
 
     if args.resolution_kms <= 0:
         raise ValueError("--resolution-kms must be positive.")
     if args.los_file:
         los_file = Path(args.los_file)
         simulation = args.simulation_name or _infer_simulation(los_file)
-        output = (
-            Path(args.output)
-            if args.output
-            else canonical_forest_output_path(args.output_dir, simulation, _infer_snapshot(los_file), args.line, los_file)
-        )
-        written = [
-            compute_and_write_los_spectra(
-                los_file,
-                output,
-                line_name=args.line,
-                resolution_kms=args.resolution_kms,
-                static=args.static,
-                only_rays=args.only_rays,
-                overwrite=args.overwrite,
-                verbose=args.verbose,
-            )
-        ]
+        from .los_loader import read_thesan_random_los
+        result = compute_los_spectra(read_thesan_random_los(los_file, only_rays=args.only_rays), line_name=args.line,
+                                     resolution_kms=args.resolution_kms, static=args.static, only_rays=args.only_rays,
+                                     verbose=args.verbose)
+        if args.output:
+            output = write_spectra_hdf5(result, args.output, overwrite=args.overwrite)
+        else:
+            _, output = write_canonical_spectrum_result(result, args.output_dir, simulation_name=simulation,
+                                                        snapshot=_infer_snapshot(los_file) or 0, overwrite=args.overwrite)
+        written = [output]
         if args.compute_mfp:
             _compute_and_write_mfp(args, los_file, simulation, _infer_snapshot(los_file))
         return written
@@ -166,19 +158,13 @@ def run_forest(args: argparse.Namespace) -> list[Path]:
     for snapshot in args.snapshots:
         los_file = _find_los_file(los_dir, snapshot)
         simulation = args.simulation_name or _infer_simulation(los_file, los_dir)
-        output = canonical_forest_output_path(output_dir, simulation, snapshot, args.line, los_file)
-        written.append(
-            compute_and_write_los_spectra(
-                los_file,
-                output,
-                line_name=args.line,
-                resolution_kms=args.resolution_kms,
-                static=args.static,
-                only_rays=args.only_rays,
-                overwrite=args.overwrite,
-                verbose=args.verbose,
-            )
-        )
+        from .los_loader import read_thesan_random_los
+        result = compute_los_spectra(read_thesan_random_los(los_file, only_rays=args.only_rays), line_name=args.line,
+                                     resolution_kms=args.resolution_kms, static=args.static, only_rays=args.only_rays,
+                                     verbose=args.verbose)
+        _, output = write_canonical_spectrum_result(result, output_dir, simulation_name=simulation,
+                                                    snapshot=snapshot, overwrite=args.overwrite)
+        written.append(output)
         if args.compute_mfp:
             if args.mfp_output:
                 raise ValueError("--mfp-output is only valid with --los-file; batch mode uses canonical paths.")

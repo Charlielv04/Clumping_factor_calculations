@@ -28,6 +28,7 @@ from clumping_factor.methods.clumping.alternative import (
 )
 from clumping_factor.methods.forest.constants import MPC_CM, PROTON_MASS_G, SPEED_OF_LIGHT_CM_S
 from clumping_factor.infrastructure.loaders import read_snapshot_metadata, snapshot_file_paths
+from clumping_factor.infrastructure.artifacts import attach_artifacts, companion_artifact_path
 from clumping_factor.infrastructure.results import resolve_simulation_name, write_json_result
 
 
@@ -1432,8 +1433,9 @@ def write_equation_tests_result(
 ) -> tuple[Path, Path]:
     """Write the diagnostic document as JSON plus a flat CSV row table."""
 
-    output = write_json_result(result.document, output_path, method_id="diagnostics.equations")
-    csv_output = output.with_suffix(".csv")
+    output_path = Path(output_path)
+    csv_output = companion_artifact_path(output_path, "equation-table", "csv")
+    csv_output.parent.mkdir(parents=True, exist_ok=True)
     rows = result.document["rows"]
     if rows:
         fieldnames = list(rows[0].keys())
@@ -1443,5 +1445,7 @@ def write_equation_tests_result(
             writer.writerows(rows)
     else:
         csv_output.write_text("", encoding="utf-8")
+    document = attach_artifacts(result.document, output_path, [(csv_output, "equation-table")])
+    output = write_json_result(document, output_path, method_id="diagnostics.equations")
     return output, csv_output
 

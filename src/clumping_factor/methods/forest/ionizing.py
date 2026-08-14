@@ -72,7 +72,9 @@ def mfp_result_document(
     document: dict[str, object] = {
         "calculation": "thesan_mfp_912", "quantity": "mfp_912",
         "algorithm_version": IONIZING_ALGORITHM_VERSION, "units": "proper Mpc / h",
-        "periodic_ray_policy": PERIODIC_RAY_POLICY, **result.summary(),
+        "periodic_ray_policy": PERIODIC_RAY_POLICY, "particle_type": "gas",
+        "parameters": {"simulation_name": simulation, "snapshot": snapshot, "particle_type": "gas", "source_los_file": str(source_los_file) if source_los_file else None},
+        **result.summary(),
     }
     if source_los_file is not None:
         document["source_los_file"] = str(source_los_file)
@@ -93,7 +95,8 @@ def mfp_result_document(
 def gamma_result_document(result: GammaHIResult, *, source_files: Sequence[str | Path] | None = None) -> dict:
     document: dict[str, object] = {
         "calculation": "thesan_gamma_hi", "quantity": "Gamma_HI",
-        "algorithm_version": IONIZING_ALGORITHM_VERSION, "units": "s^-1", **result.summary(),
+        "algorithm_version": IONIZING_ALGORITHM_VERSION, "units": "s^-1", "particle_type": "gas",
+        "parameters": {"particle_type": "gas"}, **result.summary(),
     }
     if source_files is not None:
         document["source_snapshot_files"] = [str(path) for path in source_files]

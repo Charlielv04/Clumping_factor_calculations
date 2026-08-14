@@ -216,7 +216,7 @@ def with_result_specs(document: dict[str, Any], *, method_id: str | None = None)
         simulation = {}
     else:
         simulation = {"name": str(simulation_value)}
-    simulation_name = str(simulation.get("name") or simulation_name or "unknown")
+    simulation_name = normalize_simulation_identity(str(simulation.get("name") or simulation_name or "unknown"), base_path=base_path)
     inferred_family = (
         "thesan" if simulation_name.lower().startswith("thesan")
         else "tng" if simulation_name.lower().startswith("tng")
@@ -247,7 +247,25 @@ def sanitize_simulation_name(name: str) -> str:
 
 
 def resolve_simulation_name(base_path: str | Path, simulation_name: str | None = None) -> str:
-    return sanitize_simulation_name(simulation_name or infer_simulation_name(base_path))
+    return normalize_simulation_identity(simulation_name or infer_simulation_name(base_path), base_path=base_path)
+
+
+def normalize_simulation_identity(name: str, *, base_path: str | Path | None = None) -> str:
+    """Resolve the historical mini-THESAN and parallel-run spellings once."""
+
+    evidence = " ".join(filter(None, (str(name), str(base_path) if base_path is not None else ""))).lower()
+    for legacy, canonical in (
+        ("output_4_128_sl", "thesan-mini-4-128-sl"),
+        ("output_4_128_rsl", "thesan-mini-4-128-rsl"),
+        ("output_50_128", "thesan-mini-50-128"),
+        ("output_100_128", "thesan-mini-100-128"),
+        ("output_100_256", "thesan-mini-100-256"),
+    ):
+        if legacy in evidence:
+            return canonical
+    if str(name).lower() == "thesan-1-parallelized":
+        return "Thesan-1"
+    return sanitize_simulation_name(name)
 
 
 def canonical_result_path(

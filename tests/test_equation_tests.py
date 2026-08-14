@@ -216,7 +216,7 @@ def test_equation_tests_writes_json_and_csv(tmp_path):
     )
     json_output, csv_output = run_equation_tests(args)
     assert json_output == output
-    assert csv_output == output.with_suffix(".csv")
+    assert csv_output == output.with_suffix("").with_name("equations.artifacts") / "equation-table.csv"
     document = json.loads(output.read_text())
     assert document["calculation"] == "thesan_clumping_equation_tests"
     assert document["parameters"]["reduced_speed_of_light_fraction"] == 0.2
@@ -356,4 +356,6 @@ def test_write_equation_tests_result_returns_json_and_csv(tmp_path):
     json_output, csv_output = write_equation_tests_result(result, tmp_path / "out.json")
     assert json_output.exists()
     assert csv_output.exists()
-    assert json.loads(json_output.read_text())["method_spec"]["identifier"] == "diagnostics.equations"
+    document = json.loads(json_output.read_text())
+    assert document["method_spec"]["identifier"] == "diagnostics.equations"
+    assert document["artifacts"][0]["role"] == "equation-table"

@@ -4,7 +4,7 @@ from pathlib import Path
 import h5py
 import numpy as np
 
-from clumping_factor.methods.forest.cli import build_forest_parser, canonical_forest_output_path, canonical_mfp_output_path, run_forest
+from clumping_factor.methods.forest.cli import build_forest_parser, canonical_forest_output_path, run_forest
 from clumping_factor.methods.forest.cosmology import length_kms_from_cmpc_h
 from clumping_factor.methods.forest.lines import read_line_parameters
 from clumping_factor.methods.forest.los_loader import read_thesan_random_los
@@ -108,7 +108,7 @@ def test_canonical_forest_output_path_groups_by_simulation_snapshot_and_line():
 
 def test_cli_defaults_to_canonical_forest_output(tmp_path, monkeypatch):
     los_file = _write_los(tmp_path / "Thesan-2" / "rays_054.hdf5")
-    output_root = tmp_path / "results" / "forest"
+    output_root = tmp_path / "r"
     args = build_forest_parser().parse_args(
         [
             "--los-file",
@@ -122,14 +122,16 @@ def test_cli_defaults_to_canonical_forest_output(tmp_path, monkeypatch):
 
     written = run_forest(args)
 
-    expected = output_root / "thesan" / "Thesan-2" / "snapshot054" / "lya" / "rays_054_lya.hdf5"
-    assert written == [expected]
-    assert expected.exists()
+    assert len(written) == 1 and written[0].exists()
+    owner = next(output_root.rglob("*.json"))
+    document = __import__("json").loads(owner.read_text())
+    assert document["method_spec"]["identifier"] == "forest.lyman-alpha"
+    assert document["artifacts"][0]["role"] == "lya-spectra"
 
 
 def test_cli_can_compute_spectra_and_mfp_together(tmp_path):
     los_file = _write_los(tmp_path / "Thesan-2" / "rays_080.hdf5", hi_scale=1e8)
-    output_root = tmp_path / "results" / "forest"
+    output_root = tmp_path / "r"
     args = build_forest_parser().parse_args([
         "--los-file", str(los_file), "--output-dir", str(output_root),
         "--resolution-kms", "25", "--compute-mfp", "--mfp-starts-per-ray", "3",
@@ -137,8 +139,7 @@ def test_cli_can_compute_spectra_and_mfp_together(tmp_path):
     ])
     spectra = run_forest(args)
     assert spectra[0].exists()
-    mfp = canonical_mfp_output_path(output_root, "Thesan-2", 80, los_file)
-    assert mfp.exists()
+    mfp = [path for path in output_root.rglob("*.json") if path.name != "manifest.json" and "mfp" in path.read_text()][0]
     document = __import__("json").loads(mfp.read_text())
     assert document["sample_count"] == 6
     assert document["cross_check"]["passed"] is True

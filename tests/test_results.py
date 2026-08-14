@@ -3,10 +3,11 @@ import json
 import numpy as np
 
 from clumping_factor.infrastructure.artifacts import (
-    analysis_directory, attach_artifacts, companion_artifact_path, validate_analysis_manifest, write_analysis_manifest,
+    analysis_directory, attach_artifacts, companion_artifact_path, validate_analysis_manifest, validate_archive_manifest,
+    write_analysis_manifest, write_archive_manifest,
 )
 from clumping_factor.infrastructure.models import GridResult, ParticleData
-from clumping_factor.infrastructure.results import build_result_document, read_json_result, write_json_result
+from clumping_factor.infrastructure.results import build_result_document, normalize_simulation_identity, read_json_result, write_json_result
 
 
 def _document():
@@ -64,18 +65,41 @@ def test_companion_artifact_index_is_checksum_backed(tmp_path):
 
 
 def test_analysis_paths_and_manifests_are_content_addressed(tmp_path):
+    input_a = tmp_path / "science-a.json"
+    input_b = tmp_path / "science-b.json"
+    input_a.write_text("a", encoding="utf-8")
+    input_b.write_text("b", encoding="utf-8")
     directory = analysis_directory(
         tmp_path, domain="clumping", family="thesan", analysis_kind="evolution", subject="Thesan-1",
-        method_label="cube", options={"threshold": 20}, inputs=["science-a", "science-b"],
+        method_label="cube", options={"threshold": 20}, inputs=[input_a, input_b],
     )
     artifact = directory / "artifacts" / "plot.png"
     artifact.parent.mkdir(parents=True)
     artifact.write_bytes(b"plot")
     manifest = write_analysis_manifest(
         directory, domain="clumping", family="thesan", analysis_kind="evolution", subject="Thesan-1",
-        method_label="cube", options={"threshold": 20}, inputs=["science-a", "science-b"], artifacts=[artifact],
+        method_label="cube", options={"threshold": 20}, inputs=[input_a, input_b], artifacts=[artifact],
         generator="tests", legacy_sources=["legacy/plot.png"],
     )
     assert directory.name.startswith("analysis-")
     assert validate_analysis_manifest(manifest) == []
+
+
+def test_archive_manifest_rejects_paths_outside_archive(tmp_path):
+    archive = tmp_path / "archive" / "import-1"
+    artifact = archive / "old" / "plot.png"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_bytes(b"plot")
+    manifest = write_archive_manifest(archive, import_id="import-1", files=[(artifact, "old/plot.png")])
+    assert validate_archive_manifest(manifest) == []
+    document = json.loads(manifest.read_text(encoding="utf-8"))
+    document["files"][0]["path"] = "../../outside.png"
+    manifest.write_text(json.dumps(document), encoding="utf-8")
+    assert validate_archive_manifest(manifest)
+
+
+def test_mini_thesan_identities_are_normalized_from_name_or_base_path():
+    assert normalize_simulation_identity("output_4_128_sl") == "thesan-mini-4-128-sl"
+    assert normalize_simulation_identity("thesan_in_house", base_path="/work/output_100_256") == "thesan-mini-100-256"
+    assert normalize_simulation_identity("Thesan-1-parallelized") == "Thesan-1"
 
