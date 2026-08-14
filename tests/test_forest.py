@@ -1,29 +1,16 @@
-import ast
+import json
 from pathlib import Path
-from types import SimpleNamespace
 
 import h5py
 import numpy as np
 
 from clumping_factor.forest.cli import build_forest_parser, canonical_forest_output_path, canonical_mfp_output_path, run_forest
-from clumping_factor.forest.constants import (
-    ELECTRON_CHARGE_ESU,
-    ELECTRON_MASS_G,
-    HYDROGEN_MASS_G,
-    K_BOLTZMANN_CGS,
-    KM_CM,
-    MPC_CM,
-    PRIMORDIAL_HYDROGEN_FRACTION,
-    PROTON_MASS_G,
-    SPEED_OF_LIGHT_CM_S,
-)
-from clumping_factor.forest.cosmology import hubble_param, length_kms_from_cmpc_h
-from clumping_factor.forest.lines import read_legacy_line_parameters, read_line_parameters
+from clumping_factor.forest.cosmology import length_kms_from_cmpc_h
+from clumping_factor.forest.lines import read_line_parameters
 from clumping_factor.forest.los_loader import read_thesan_random_los
 from clumping_factor.forest.spectra import calculate_tau_line, compute_los_spectra, doppler_shift_to_wavelength, voigt
 
-
-COMPARATIVE_ROOT = Path(__file__).resolve().parents[1] / "comparative_implementations" / "forest"
+GOLDEN_FIXTURE = Path(__file__).parent / "fixtures" / "forest_optical_depth_golden.json"
 
 
 def _write_los(path: Path, hi_scale: float = 1.0, velocity_scale: float = 1.0) -> Path:
@@ -61,30 +48,6 @@ def _write_los(path: Path, hi_scale: float = 1.0, velocity_scale: float = 1.0) -
             for ray, values in enumerate(ray_values):
                 group.create_dataset(str(ray), data=values)
     return path
-
-
-def _legacy_functions():
-    source_path = COMPARATIVE_ROOT / "compute_tau.py"
-    source = source_path.read_text(encoding="utf-8")
-    module = ast.parse(source)
-    function_defs = [node for node in module.body if isinstance(node, ast.FunctionDef)]
-    legacy_module = ast.Module(body=function_defs, type_ignores=[])
-    ast.fix_missing_locations(legacy_module)
-    namespace = {
-        "np": np,
-        "c": SPEED_OF_LIGHT_CM_S,
-        "km": KM_CM,
-        "Mpc": MPC_CM,
-        "kB": K_BOLTZMANN_CGS,
-        "mp": PROTON_MASS_G,
-        "me": ELECTRON_MASS_G,
-        "mH": HYDROGEN_MASS_G,
-        "ee": ELECTRON_CHARGE_ESU,
-        "X": PRIMORDIAL_HYDROGEN_FRACTION,
-        "mc": SimpleNamespace(HubbleParam=lambda a, OmegaM, OmegaL, Hubble0: hubble_param(a, Hubble0, OmegaM, OmegaL)),
-    }
-    exec(compile(legacy_module, str(source_path), "exec"), namespace)
-    return namespace
 
 
 def test_loader_converts_random_los_units(tmp_path):
@@ -181,43 +144,32 @@ def test_cli_can_compute_spectra_and_mfp_together(tmp_path):
     assert document["cross_check"]["passed"] is True
 
 
-def test_legacy_regression_against_compute_tau_functions(tmp_path):
+def test_optical_depth_regression_against_frozen_golden_fixture(tmp_path):
     path = _write_los(tmp_path / "rays_054.hdf5")
     los_data = read_thesan_random_los(path)
-    line_list = COMPARATIVE_ROOT / "line_list.txt"
-    legacy = _legacy_functions()
-    legacy_lines = legacy["read_line_parameters"](str(line_list))
-    new_lines = read_legacy_line_parameters(line_list)
-    assert legacy_lines["Ly a"] == new_lines["Ly a"]
+    golden = json.loads(GOLDEN_FIXTURE.read_text(encoding="utf-8"))
+    line = read_line_parameters()["Ly a"]
+    assert line.legacy_dict() == golden["line_lya"]
 
     u = np.linspace(-8.0, 8.0, 41)
-    assert np.allclose(legacy["Voigt"](1e-4, u), voigt(1e-4, u))
+    np.testing.assert_allclose(voigt(1.0e-4, u), golden["voigt_a1e-4_u_minus8_to_8"])
     length = length_kms_from_cmpc_h(1.0, los_data.redshift, los_data.omega0, 1.0 - los_data.omega0, los_data.hubble_param)
-    assert np.isclose(
-        legacy["get_length_kms_from_cMpch"](1.0, los_data.redshift, los_data.omega0, 1.0 - los_data.omega0, los_data.hubble_param),
-        length,
-    )
+    assert np.isclose(length, golden["length_kms"])
 
-    legacy["lines_parameter"] = legacy_lines
-    legacy_dv, legacy_tau_static = legacy["calculate_tau_line"](
-        los_data.legacy_dict(), 0.0, length, 8, "Ly a", static=True, only_rays=[0, 1]
+    velocity_grid, tau_static, ray_ids = calculate_tau_line(
+        los_data, 0.0, length, 8, line, static=True, only_rays=[0, 1]
     )
-    new_dv, new_tau_static, _ = calculate_tau_line(
-        los_data, 0.0, length, 8, read_line_parameters(line_list)["Ly a"], static=True, only_rays=[0, 1]
-    )
-    assert np.allclose(new_dv, legacy_dv)
-    assert np.allclose(new_tau_static, legacy_tau_static)
+    assert ray_ids == [0, 1]
+    np.testing.assert_allclose(velocity_grid, golden["velocity_grid_cm_s"])
+    np.testing.assert_allclose(tau_static, golden["tau_static"])
 
-    legacy_dv, legacy_tau_dynamic = legacy["calculate_tau_line"](
-        los_data.legacy_dict(), 0.0, length, 8, "Ly a", static=False, only_rays=[0, 1]
+    velocity_grid, tau_dynamic, ray_ids = calculate_tau_line(
+        los_data, 0.0, length, 8, line, static=False, only_rays=[0, 1]
     )
-    new_dv, new_tau_dynamic, _ = calculate_tau_line(
-        los_data, 0.0, length, 8, read_line_parameters(line_list)["Ly a"], static=False, only_rays=[0, 1]
-    )
-    assert np.allclose(new_dv, legacy_dv)
-    assert np.allclose(new_tau_dynamic, legacy_tau_dynamic)
+    assert ray_ids == [0, 1]
+    np.testing.assert_allclose(velocity_grid, golden["velocity_grid_cm_s"])
+    np.testing.assert_allclose(tau_dynamic, golden["tau_dynamic"])
 
-    legacy_wavelength = legacy["Doppler_shift_to_wavelength"](legacy_dv, "Ly a", los_data.redshift)
-    new_wavelength = doppler_shift_to_wavelength(new_dv, read_line_parameters(line_list)["Ly a"], los_data.redshift)
-    assert np.allclose(new_wavelength, legacy_wavelength)
-    assert np.allclose(np.exp(-new_tau_dynamic), np.exp(-legacy_tau_dynamic))
+    wavelength = doppler_shift_to_wavelength(velocity_grid, line, los_data.redshift)
+    np.testing.assert_allclose(wavelength, golden["wavelength_cm"])
+    np.testing.assert_allclose(np.exp(-tau_dynamic), np.exp(-np.asarray(golden["tau_dynamic"])))
