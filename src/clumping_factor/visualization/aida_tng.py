@@ -158,7 +158,7 @@ def _record(rows: list[dict], category: str, output: Path, inputs: Iterable[Path
     rows.append({"category": category, "output": str(output), "inputs": ";".join(str(path) for path in sorted(set(inputs))), "status": status, "message": message})
 
 
-def archive_aida_plots(analysis_root: str | Path = "results/analysis", *, dry_run: bool = False) -> Path | None:
+def archive_aida_plots(analysis_root: str | Path = "results", *, dry_run: bool = False) -> Path | None:
     source = Path(analysis_root)
     pngs = sorted(path for path in source.rglob("*.png") if "aida-tng" in path.parts)
     if not pngs:
@@ -182,7 +182,7 @@ def archive_aida_plots(analysis_root: str | Path = "results/analysis", *, dry_ru
 
 def generate_aida_tng_plots(
     results_root: str | Path = "results/aida-tng",
-    analysis_root: str | Path = "results/analysis",
+    analysis_root: str | Path = "results",
     *,
     threshold: float = 20.0,
     dry_run: bool = False,
@@ -402,7 +402,7 @@ def generate_aida_tng_plots(
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Generate the canonical AIDA-TNG plot catalog.")
     parser.add_argument("--results-root", default="results/aida-tng")
-    parser.add_argument("--analysis-root", default="results/analysis")
+    parser.add_argument("--analysis-root", default="results")
     parser.add_argument("--threshold", type=float, default=20.0)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--archive-existing", action="store_true")

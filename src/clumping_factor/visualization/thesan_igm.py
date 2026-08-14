@@ -11,6 +11,8 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+
+from clumping_factor.infrastructure.artifacts import write_explicit_analysis_sidecar
 import numpy as np
 
 
@@ -519,6 +521,11 @@ def main(argv: list[str] | None = None) -> None:
             title=args.title,
             log_y=args.log_y,
         )
+    write_explicit_analysis_sidecar(
+        output, domain="diagnostics", family="thesan", analysis_kind="igm",
+        options={"parameter": args.parameter, "redshift": args.redshift, "compare_simulations": args.compare_simulations},
+        inputs=args.results, generator="clumping.plot.igm",
+    )
     print(f"Wrote Thesan IGM plot: {output}")
 
 

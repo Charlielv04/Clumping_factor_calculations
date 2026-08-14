@@ -466,7 +466,7 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("inputs", nargs="+", help="Result JSON files or directories containing them.")
     parser.add_argument("--output-dir", type=Path, help="Legacy output directory. Omit for canonical analysis layout.")
-    parser.add_argument("--analysis-root", type=Path, default=Path("results/analysis"))
+    parser.add_argument("--analysis-root", type=Path, default=Path("results"))
     args = parser.parse_args(argv)
 
     rows = collect(args.inputs)

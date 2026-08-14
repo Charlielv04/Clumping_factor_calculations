@@ -998,7 +998,7 @@ def plot_campaign_files(
     result_inputs: list[str | Path],
     output_dir: str | Path | None = None,
     *,
-    analysis_root: str | Path = "results/analysis",
+    analysis_root: str | Path = "results",
     backend: str = "pylians",
     threshold: float = 20.0,
     batches: list[int] | None = None,

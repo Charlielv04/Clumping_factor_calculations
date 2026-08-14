@@ -174,6 +174,25 @@ def write_analysis_manifest(
     return output
 
 
+def write_explicit_analysis_sidecar(
+    artifact: str | Path, *, domain: str, family: str, analysis_kind: str, options: dict[str, Any],
+    inputs: Iterable[str | Path], generator: str,
+) -> Path:
+    """Record provenance for a caller-selected output without changing its path."""
+
+    target = Path(artifact)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    document = {
+        "schema_version": 1, "kind": "analysis-external", "domain": domain, "family": family,
+        "analysis_kind": analysis_kind, "options": options, "generator": generator,
+        "inputs": [{"path": str(Path(item).resolve()), "sha256": sha256_file(item) if Path(item).is_file() else None} for item in inputs],
+        "artifacts": [{"path": target.name, "size": target.stat().st_size, "sha256": sha256_file(target)}],
+    }
+    output = target.with_name(target.name + ".manifest.json")
+    output.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return output
+
+
 def validate_artifact_records(primary_result: str | Path, records: object, *, require_role: bool = True) -> list[str]:
     if records is None:
         return []

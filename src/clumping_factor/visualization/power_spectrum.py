@@ -9,6 +9,8 @@ from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
 
+from clumping_factor.infrastructure.artifacts import write_explicit_analysis_sidecar
+
 from clumping_factor.visualization.styles import dark_matter_model, simulation_style
 
 
@@ -409,6 +411,11 @@ def power_spectrum_plot_main(argv: list[str] | None = None) -> None:
         legend=not args.no_legend,
         alternate_linestyles=args.alternate_linestyles,
     )
+    write_explicit_analysis_sidecar(
+        output, domain="power-spectrum", family="explicit", analysis_kind="plot",
+        options={"field": args.field, "engine": args.engine, "relative_to_baseline": args.relative_to_baseline, "title": args.title},
+        inputs=[*args.results, *([args.relative_to_baseline] if args.relative_to_baseline else [])], generator="clumping.power.plot",
+    )
     print(f"Wrote power-spectrum plot: {output}")
 
 
@@ -443,6 +450,11 @@ def power_spectrum_compare_main(argv: list[str] | None = None) -> None:
         title=args.title,
         k_min=args.k_min,
         k_max=args.k_max,
+    )
+    write_explicit_analysis_sidecar(
+        output, domain="power-spectrum", family="explicit", analysis_kind="compare",
+        options={"arepo_block": args.arepo_block, "local_engine": args.local_engine, "field": args.field},
+        inputs=[args.arepo, *args.local], generator="clumping.power.compare",
     )
     print(f"Wrote AREPO/local power-spectrum comparison: {output}")
 

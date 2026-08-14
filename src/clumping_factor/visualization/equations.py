@@ -10,6 +10,8 @@ from typing import Sequence
 
 import numpy as np
 
+from clumping_factor.infrastructure.artifacts import write_explicit_analysis_sidecar
+
 from clumping_factor.infrastructure.results import read_json_result
 
 
@@ -645,6 +647,9 @@ def equation_story_plots_main(argv: list[str] | None = None) -> None:
         photon_groups=args.photon_groups,
     )
     for output in outputs:
+        write_explicit_analysis_sidecar(output, domain="diagnostics", family="explicit", analysis_kind="equation-story",
+                                        options={"best_masks": args.best_masks, "photon_mask": args.photon_mask, "photon_groups": args.photon_groups},
+                                        inputs=[args.result, *([args.overdensity_result] if args.overdensity_result else [])], generator="clumping.plot.equations")
         print(f"Wrote equation story plot: {output}")
 
 
@@ -1436,6 +1441,9 @@ def equation_diagnostic_plots_main(argv: list[str] | None = None) -> None:
             photon_groups=args.photon_groups,
         )
     for output in outputs:
+        write_explicit_analysis_sidecar(output, domain="diagnostics", family="explicit", analysis_kind="equation-diagnostics",
+                                        options={"density_cutoffs": args.density_cutoffs, "parameters": args.parameters},
+                                        inputs=[args.result, *([args.compare_result] if args.compare_result else [])], generator="clumping.plot.equations")
         print(f"Wrote equation diagnostic plot: {output}")
 
 
@@ -1453,5 +1461,8 @@ def equation_igm_check_plots_main(argv: list[str] | None = None) -> None:
         log_y=args.log_y,
     )
     for output in outputs:
+        write_explicit_analysis_sidecar(output, domain="diagnostics", family="explicit", analysis_kind="igm-check",
+                                        options={"density_cutoffs": args.density_cutoffs, "parameters": args.parameters, "axes": args.axes},
+                                        inputs=[args.result], generator="clumping.plot.equations")
         print(f"Wrote IGM check plot: {output}")
 
