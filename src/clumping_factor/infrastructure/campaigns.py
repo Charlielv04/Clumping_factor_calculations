@@ -104,6 +104,30 @@ def _as_list(table: dict[str, Any], key: str) -> list[Any]:
     return value
 
 
+def _snapshots_for_simulation(base_path: str, snapshot_spec: Any) -> list[int]:
+    """Resolve a static snapshot list or discover every snapshot on disk."""
+    if isinstance(snapshot_spec, list):
+        if not snapshot_spec:
+            raise ValueError("matrix.snapshots must be a non-empty array")
+        return [int(value) for value in snapshot_spec]
+    if snapshot_spec != "available":
+        raise ValueError("matrix.snapshots must be an array or the string 'available'")
+
+    numbers: set[int] = set()
+    root = Path(base_path)
+    for path in root.glob("snapdir_*"):
+        match = re.fullmatch(r"snapdir_(\d+)", path.name)
+        if match and path.is_dir() and any(path.glob("snap_*.hdf5")):
+            numbers.add(int(match.group(1)))
+    for path in root.glob("snap_*.hdf5"):
+        match = re.fullmatch(r"snap_(\d+)\.hdf5", path.name)
+        if match:
+            numbers.add(int(match.group(1)))
+    if not numbers:
+        raise ValueError(f"No snapshots were found under {base_path!r}.")
+    return sorted(numbers)
+
+
 def _backend(spec: MethodSpec) -> str:
     if spec.command_variant is not None:
         return spec.command_variant
@@ -184,6 +208,7 @@ def _task_command(
         command = ["clumping", "power", "compute", *common, "--particle-type", particle, "--spectrum-engine", engine]
         if grid is not None:
             command += ["--grid-size", str(grid)]
+        command += _option_tokens(method_options)
     elif spec.command_kind == "alternative-compute":
         alternative_backend = spec.command_variant
         if alternative_backend is None:
@@ -278,7 +303,9 @@ def _plan_matrix(source: Path, document: dict[str, Any]) -> CampaignManifest:
     if not isinstance(matrix, dict):
         raise ValueError("Typed campaigns require a [matrix] table")
     simulations = _simulation_tables(document)
-    snapshots = [int(value) for value in _as_list(matrix, "snapshots")]
+    snapshot_spec = matrix.get("snapshots")
+    if snapshot_spec is None:
+        raise ValueError("matrix.snapshots must be a non-empty array or 'available'")
     particles = [str(value) for value in _as_list(matrix, "particle_types")]
     methods = [METHOD_REGISTRY.get(str(value)) for value in _as_list(matrix, "methods")]
     grid_values = _as_list(matrix, "grids") if "grids" in matrix else [None]
@@ -294,66 +321,68 @@ def _plan_matrix(source: Path, document: dict[str, Any]) -> CampaignManifest:
 
     tasks: list[CampaignTask] = []
     seen: set[tuple[str, str, str, str, int, str, int | None]] = set()
-    for simulation, snapshot, particle, spec, requested_grid in itertools.product(
-        simulations, snapshots, particles, methods, grids
-    ):
-        family = str(simulation.get("family") or "").lower()
-        name = str(simulation.get("name") or "")
-        base_path = str(simulation.get("base_path") or "")
-        if not family or not name or not base_path:
-            raise ValueError("Every simulation requires family, name, and base_path")
-        _validate_compute_capability(spec)
-        if particle not in spec.supported_particle_types:
-            raise ValueError(f"Method {spec.identifier} does not support particle type {particle}")
-        load_mode = str(execution.get("load_mode", "auto"))
-        if load_mode in {"full", "chunked"} and load_mode not in spec.execution_modes:
-            raise ValueError(f"Method {spec.identifier} does not support execution.load_mode={load_mode}")
-        if threads > 1 and "threaded" not in spec.execution_modes:
-            raise ValueError(f"Method {spec.identifier} does not support threaded execution")
-        needs_grid = any(item in {"grid-size", "optional-grid"} for item in spec.grid_requirements)
-        grid = requested_grid if needs_grid else None
-        if needs_grid and grid is None:
-            raise ValueError(f"Method {spec.identifier} requires matrix.grids")
-        key = (family, name, base_path, spec.identifier, snapshot, particle, grid)
-        if key in seen:
-            continue
-        seen.add(key)
-        options = _method_options(document, spec)
-        method_spec = spec.to_dict()
-        method_spec["configuration"] = {**options, "grid_size": grid}
-        selection_spec = {"particle_type": particle}
-        execution_spec = {
-            **execution,
-            "cpus": resources.cpus,
-            "queue": resources.queue,
-            "walltime": resources.walltime,
-            "campaign": str(document.get("name") or source.stem),
-        }
-        output = canonical_result_path(
-            output_root,
-            family=family,
-            simulation_name=name,
-            particle_type=particle,
-            snapshot=snapshot,
-            method_spec=method_spec,
-            selection_spec=selection_spec,
-            execution_spec=execution_spec,
-        )
-        task_id = "-".join(filter(None, (_task_component(family), _task_component(name), f"s{snapshot:03d}", _task_component(particle), _task_component(spec.identifier), f"g{grid}" if grid else "nogrid")))
-        command = _task_command(
-            spec,
-            base_path=base_path,
-            simulation=name,
-            snapshot=snapshot,
-            particle=particle,
-            grid=grid,
-            execution=execution,
-            method_options=options,
-            output=output,
-        )
-        tasks.append(CampaignTask(task_id, command, method_id=spec.identifier, simulation=name,
-                                  snapshot=snapshot, particle_type=particle, grid_size=grid,
-                                  output=str(output), resources=resources))
+    for simulation in simulations:
+        simulation_snapshots = _snapshots_for_simulation(str(simulation.get("base_path") or ""), snapshot_spec)
+        for snapshot, particle, spec, requested_grid in itertools.product(
+            simulation_snapshots, particles, methods, grids
+        ):
+            family = str(simulation.get("family") or "").lower()
+            name = str(simulation.get("name") or "")
+            base_path = str(simulation.get("base_path") or "")
+            if not family or not name or not base_path:
+                raise ValueError("Every simulation requires family, name, and base_path")
+            _validate_compute_capability(spec)
+            if particle not in spec.supported_particle_types:
+                raise ValueError(f"Method {spec.identifier} does not support particle type {particle}")
+            load_mode = str(execution.get("load_mode", "auto"))
+            if load_mode in {"full", "chunked"} and load_mode not in spec.execution_modes:
+                raise ValueError(f"Method {spec.identifier} does not support execution.load_mode={load_mode}")
+            if threads > 1 and "threaded" not in spec.execution_modes:
+                raise ValueError(f"Method {spec.identifier} does not support threaded execution")
+            needs_grid = any(item in {"grid-size", "optional-grid"} for item in spec.grid_requirements)
+            grid = requested_grid if needs_grid else None
+            if needs_grid and grid is None:
+                raise ValueError(f"Method {spec.identifier} requires matrix.grids")
+            key = (family, name, base_path, spec.identifier, snapshot, particle, grid)
+            if key in seen:
+                continue
+            seen.add(key)
+            options = _method_options(document, spec)
+            method_spec = spec.to_dict()
+            method_spec["configuration"] = {**options, "grid_size": grid}
+            selection_spec = {"particle_type": particle}
+            execution_spec = {
+                **execution,
+                "cpus": resources.cpus,
+                "queue": resources.queue,
+                "walltime": resources.walltime,
+                "campaign": str(document.get("name") or source.stem),
+            }
+            output = canonical_result_path(
+                output_root,
+                family=family,
+                simulation_name=name,
+                particle_type=particle,
+                snapshot=snapshot,
+                method_spec=method_spec,
+                selection_spec=selection_spec,
+                execution_spec=execution_spec,
+            )
+            task_id = "-".join(filter(None, (_task_component(family), _task_component(name), f"s{snapshot:03d}", _task_component(particle), _task_component(spec.identifier), f"g{grid}" if grid else "nogrid")))
+            command = _task_command(
+                spec,
+                base_path=base_path,
+                simulation=name,
+                snapshot=snapshot,
+                particle=particle,
+                grid=grid,
+                execution=execution,
+                method_options=options,
+                output=output,
+            )
+            tasks.append(CampaignTask(task_id, command, method_id=spec.identifier, simulation=name,
+                                      snapshot=snapshot, particle_type=particle, grid_size=grid,
+                                      output=str(output), resources=resources))
     return CampaignManifest(str(document.get("name") or source.stem), str(source), tuple(sorted(tasks, key=lambda task: task.task_id)))
 
 

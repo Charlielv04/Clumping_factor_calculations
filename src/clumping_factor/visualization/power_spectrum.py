@@ -85,6 +85,23 @@ def _positive_spectrum(k: np.ndarray, values: np.ndarray) -> tuple[np.ndarray, n
     return k[valid], values[valid]
 
 
+def _log_average(k: np.ndarray, values: np.ndarray, bins: int | None) -> tuple[np.ndarray, np.ndarray]:
+    if bins is None:
+        return k, values
+    if bins < 1:
+        raise ValueError("average_bins must be positive.")
+    edges = np.geomspace(float(k.min()), float(k.max()), min(int(bins), k.size) + 1)
+    index = np.digitize(k, edges) - 1
+    index[k == edges[-1]] = edges.size - 2
+    result_k, result_values = [], []
+    for group in range(edges.size - 1):
+        mask = index == group
+        if np.any(mask):
+            result_k.append(float(np.exp(np.mean(np.log(k[mask])))))
+            result_values.append(float(np.exp(np.mean(np.log(values[mask])))))
+    return np.asarray(result_k), np.asarray(result_values)
+
+
 def plot_arepo_local_comparison(
     arepo_path: str | Path,
     local_path: str | Path | list[str | Path],
@@ -98,6 +115,9 @@ def plot_arepo_local_comparison(
     title: str | None = None,
     k_min: float | None = None,
     k_max: float | None = None,
+    local_fold_factor: int | str = "all",
+    average_bins: int | None = None,
+    show_nyquist: bool = True,
 ) -> Path:
     """Compare AREPO spectrum block(s) with one or more local JSON results.
 
@@ -133,6 +153,7 @@ def plot_arepo_local_comparison(
     arepo_colors = ["#1f77b4", "#2ca02c", "#8c564b"]
     arepo_linestyles = ["-", "--", ":"]
     for curve_index, block_k, block_values in arepo_curves:
+        block_k, block_values = _log_average(block_k, block_values, average_bins)
         spectrum_axis.plot(
             block_k,
             block_values,
@@ -148,19 +169,24 @@ def plot_arepo_local_comparison(
         local = _load_result(path)
         engines = ["numpy", "pylians"] if local_engine == "both" else [None if local_engine == "primary" else local_engine]
         for selected_engine in engines:
-            local_k, local_values, actual_engine = _spectrum(local, field, selected_engine)
-            local_k *= k_unit_factor
-            common_k = np.geomspace(max(reference_k.min(), local_k.min()), min(reference_k.max(), local_k.max()), 500)
-            arepo_interp = np.exp(np.interp(np.log(common_k), np.log(reference_k), np.log(reference_values)))
-            local_interp = np.exp(np.interp(np.log(common_k), np.log(local_k), np.log(local_values)))
-            default_label = Path(path).parent.parent.name if actual_engine is not None else Path(path).stem
-            label_prefix = local_labels[path_index] if local_labels is not None else default_label
-            label = f"{label_prefix} ({actual_engine})" if local_engine == "both" else label_prefix
-            color = local_colors[series_index % len(local_colors)]
-            linestyle = local_linestyles[series_index % len(local_linestyles)]
-            spectrum_axis.plot(local_k, local_values, color=color, linewidth=1.5, linestyle=linestyle, label=label)
-            ratio_axis.plot(common_k, local_interp / arepo_interp, color=color, linewidth=1.4, linestyle=linestyle, label=label)
-            series_index += 1
+            blocks = _spectrum_blocks(local, field, selected_engine, local_fold_factor)
+            for block in blocks:
+                local_k, local_values, actual_engine = block[:3]
+                local_k, local_values = _log_average(local_k, local_values, average_bins)
+                common_k = np.geomspace(max(reference_k.min(), local_k.min()), min(reference_k.max(), local_k.max()), 500)
+                arepo_interp = np.exp(np.interp(np.log(common_k), np.log(reference_k), np.log(reference_values)))
+                local_interp = np.exp(np.interp(np.log(common_k), np.log(local_k), np.log(local_values)))
+                default_label = Path(path).parent.parent.name if actual_engine is not None else Path(path).stem
+                fold_label = f" fold {block[3]}" if block[3] is not None else ""
+                label_prefix = local_labels[path_index] if local_labels is not None else default_label
+                label = f"{label_prefix}{fold_label} ({actual_engine})" if local_engine == "both" else f"{label_prefix}{fold_label}"
+                color = local_colors[series_index % len(local_colors)]
+                linestyle = local_linestyles[series_index % len(local_linestyles)]
+                spectrum_axis.plot(local_k, local_values, color=color, linewidth=1.5, linestyle=linestyle, label=label)
+                ratio_axis.plot(common_k, local_interp / arepo_interp, color=color, linewidth=1.4, linestyle=linestyle, label=label)
+                if show_nyquist and block[4] is not None:
+                    spectrum_axis.axvline(block[4] * k_unit_factor, color=color, alpha=0.25, linewidth=0.8)
+                series_index += 1
     ratio_axis.axhline(1.0, color="0.35", linestyle="--", linewidth=1)
     spectrum_axis.set_ylabel(r"$\Delta^2(k)$" if field == "dimensionless_power" else r"$P(k)$")
     ratio_axis.set_ylabel("Local / AREPO")
@@ -170,6 +196,10 @@ def plot_arepo_local_comparison(
         axis.set_xscale("log")
         axis.grid(True, which="both", alpha=0.25)
     spectrum_axis.set_yscale("log")
+    if show_nyquist:
+        for block_index, block in enumerate(arepo_spectra):
+            if block.k.size:
+                spectrum_axis.axvline(float(np.max(block.k) * k_unit_factor), color=arepo_colors[block_index % len(arepo_colors)], alpha=0.18, linewidth=0.8)
     if k_min is not None or k_max is not None:
         ratio_axis.set_xlim(k_min, k_max)
     spectrum_axis.legend()
@@ -189,18 +219,32 @@ def _load_result(path: str | Path) -> dict[str, Any]:
     return document
 
 
-def _spectrum(document: dict[str, Any], field: str, engine: str | None) -> tuple[np.ndarray, np.ndarray, str]:
+def _spectrum_blocks(document: dict[str, Any], field: str, engine: str | None, fold_factor: int | str | None = None) -> list[tuple[np.ndarray, np.ndarray, str, int | None, float | None]]:
     spectra = document.get("spectra", {})
     selected = engine or document.get("primary_spectrum_engine") or document.get("spectrum_engine")
     if selected == "both":
         selected = "numpy"
-    payload = spectra.get(selected, document)
-    k = np.asarray(payload.get("k", []), dtype=float)
-    values = np.asarray(payload.get(field, []), dtype=float)
-    valid = np.isfinite(k) & np.isfinite(values) & (k > 0) & (values > 0)
-    if not np.any(valid):
+    folded = document.get("folded_spectra", {})
+    keys = sorted(folded, key=lambda value: int(value)) if fold_factor == "all" else ([str(fold_factor)] if fold_factor is not None and str(fold_factor) in folded else [])
+    if not keys:
+        keys = [None]
+    blocks = []
+    for key in keys:
+        block = document if key is None else folded[key]
+        payload = block.get("spectra", {}).get(selected, block if key is not None else spectra.get(selected, document))
+        k = np.asarray(payload.get("k", []), dtype=float)
+        values = np.asarray(payload.get(field, []), dtype=float)
+        valid = np.isfinite(k) & np.isfinite(values) & (k > 0) & (values > 0)
+        if np.any(valid):
+            blocks.append((k[valid], values[valid], str(selected or "primary"), None if key is None else int(key), None if key is None else float(block.get("nominal_nyquist", np.nan))))
+    if not blocks:
         raise ValueError(f"The result contains no valid {field} values.")
-    return k[valid], values[valid], str(selected or "primary")
+    return blocks
+
+
+def _spectrum(document: dict[str, Any], field: str, engine: str | None, fold_factor: int | str | None = None) -> tuple[np.ndarray, np.ndarray, str]:
+    k, values, actual_engine, _, _ = _spectrum_blocks(document, field, engine, fold_factor)[0]
+    return k, values, actual_engine
 
 
 def _label(document: dict[str, Any], engine: str) -> str:
@@ -228,6 +272,9 @@ def plot_power_spectrum_files(
     legend: bool = True,
     alternate_linestyles: bool = False,
     color_by_snapshot: bool = False,
+    fold_factor: int | str | None = None,
+    average_bins: int | None = None,
+    show_nyquist: bool = True,
 ) -> Path:
     if field not in {"power", "dimensionless_power"}:
         raise ValueError("field must be 'power' or 'dimensionless_power'.")
@@ -259,24 +306,27 @@ def plot_power_spectrum_files(
     for path, document in documents:
         engines = ["numpy", "pylians"] if engine == "both" else [None if engine == "primary" else engine]
         for selected_engine in engines:
-            k, values, actual_engine = _spectrum(document, field, selected_engine)
-            label = _label(document, actual_engine)
-            style = simulation_style(document, series_index)
-            linestyle = (
-                linestyles[series_index % len(linestyles)]
-                if alternate_linestyles
-                else style["linestyle"] if dark_matter_model(document) is not None else "-"
-            )
-            color = snapshot_colors.get(document.get("parameters", {}).get("snapshot"), style["color"]) if color_by_snapshot else style["color"]
-            series_index += 1
-            if baseline is None:
-                axis.plot(k, values, linewidth=1.5, linestyle=linestyle, color=color, label=label)
-                continue
-            baseline_k, baseline_values = baseline
-            common_k = np.linspace(max(k.min(), baseline_k.min()), min(k.max(), baseline_k.max()), 400)
-            curve = np.exp(np.interp(np.log(common_k), np.log(k), np.log(values)))
-            reference = np.exp(np.interp(np.log(common_k), np.log(baseline_k), np.log(baseline_values)))
-            axis.plot(common_k, curve / reference, linewidth=1.5, linestyle=linestyle, color=color, label=label)
+            for k, values, actual_engine, block_factor, nyquist in _spectrum_blocks(document, field, selected_engine, fold_factor):
+                k, values = _log_average(k, values, average_bins)
+                label = _label(document, actual_engine) + (f" | fold {block_factor}" if block_factor is not None else "")
+                style = simulation_style(document, series_index)
+                linestyle = (
+                    linestyles[series_index % len(linestyles)]
+                    if alternate_linestyles
+                    else style["linestyle"] if dark_matter_model(document) is not None else "-"
+                )
+                color = snapshot_colors.get(document.get("parameters", {}).get("snapshot"), style["color"]) if color_by_snapshot else style["color"]
+                series_index += 1
+                if baseline is None:
+                    axis.plot(k, values, linewidth=1.5, linestyle=linestyle, color=color, label=label)
+                    if show_nyquist and nyquist is not None:
+                        axis.axvline(nyquist, color=color, alpha=0.2, linewidth=0.8)
+                    continue
+                baseline_k, baseline_values = baseline
+                common_k = np.linspace(max(k.min(), baseline_k.min()), min(k.max(), baseline_k.max()), 400)
+                curve = np.exp(np.interp(np.log(common_k), np.log(k), np.log(values)))
+                reference = np.exp(np.interp(np.log(common_k), np.log(baseline_k), np.log(baseline_values)))
+                axis.plot(common_k, curve / reference, linewidth=1.5, linestyle=linestyle, color=color, label=label)
 
     axis.set_xlabel(r"$k\ [h\,\mathrm{Mpc}^{-1}]$")
     axis.set_ylabel(
@@ -391,6 +441,9 @@ def build_power_spectrum_plot_parser() -> argparse.ArgumentParser:
         help="Cycle through solid, dashed, dotted, and dash-dot styles for separate curves.",
     )
     parser.add_argument("--no-legend", action="store_true")
+    parser.add_argument("--fold-factor", default=None, help="Fold factor to plot, or 'all' for every explicit fold block.")
+    parser.add_argument("--average-bins", type=int, help="Optional logarithmic-bin average count.")
+    parser.add_argument("--no-nyquist", action="store_true")
     return parser
 
 
@@ -410,6 +463,9 @@ def power_spectrum_plot_main(argv: list[str] | None = None) -> None:
         y_max=args.y_max,
         legend=not args.no_legend,
         alternate_linestyles=args.alternate_linestyles,
+        fold_factor="all" if args.fold_factor == "all" else (int(args.fold_factor) if args.fold_factor is not None else None),
+        average_bins=args.average_bins,
+        show_nyquist=not args.no_nyquist,
     )
     write_explicit_analysis_sidecar(
         output, domain="power-spectrum", family="explicit", analysis_kind="plot",
@@ -425,6 +481,7 @@ def build_power_spectrum_compare_parser() -> argparse.ArgumentParser:
     parser.add_argument("--local", required=True, nargs="+", help="One or more local power-spectrum JSON results.")
     parser.add_argument("--output", required=True, help="PNG/PDF/etc. output path.")
     parser.add_argument("--arepo-block", default="0", help="AREPO block: 0 normal, 1 folded, 2 double-folded, or all.")
+    parser.add_argument("--local-fold-factor", default="all", help="Local fold factor, or 'all' for every explicit fold block.")
     parser.add_argument("--local-engine", choices=["primary", "numpy", "pylians", "both"], default="numpy")
     parser.add_argument("--local-label", action="append", help="Display label for each --local file; repeat once per file.")
     parser.add_argument("--field", choices=["dimensionless_power", "power"], default="dimensionless_power")
@@ -432,6 +489,8 @@ def build_power_spectrum_compare_parser() -> argparse.ArgumentParser:
     parser.add_argument("--title")
     parser.add_argument("--k-min", type=float)
     parser.add_argument("--k-max", type=float)
+    parser.add_argument("--average-bins", type=int, help="Optional logarithmic-bin average count.")
+    parser.add_argument("--no-nyquist", action="store_true")
     return parser
 
 
@@ -443,6 +502,7 @@ def power_spectrum_compare_main(argv: list[str] | None = None) -> None:
         args.local,
         args.output,
         arepo_block="all" if args.arepo_block == "all" else int(args.arepo_block),
+        local_fold_factor="all" if args.local_fold_factor == "all" else int(args.local_fold_factor),
         local_engine=args.local_engine,
         local_labels=args.local_label,
         field=args.field,
@@ -450,6 +510,8 @@ def power_spectrum_compare_main(argv: list[str] | None = None) -> None:
         title=args.title,
         k_min=args.k_min,
         k_max=args.k_max,
+        average_bins=args.average_bins,
+        show_nyquist=not args.no_nyquist,
     )
     write_explicit_analysis_sidecar(
         output, domain="power-spectrum", family="explicit", analysis_kind="compare",

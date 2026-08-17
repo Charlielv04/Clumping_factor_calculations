@@ -1,0 +1,43 @@
+{
+  "analysis_kind": "compare",
+  "artifacts": [
+    {
+      "media_type": "image/png",
+      "path": "artifacts/arepo_vs_local.png",
+      "sha256": "a43eb306bf92b264836424742ec643f58a2dff3d85daaedefa6d42701ecb3da0",
+      "size": 235061
+    }
+  ],
+  "domain": "power-spectrum",
+  "family": "aida-tng",
+  "generator": "clumping.power.arepo-comparison",
+  "inputs": [
+    {
+      "path": "C:/Users/carlo/Documents/ClumpingFactorSuite/Clumping_factor_calculations/results/aida-tng/L75n910_vSIDM/power-spectrum/power-spectrum.arepo-comparison/dm/snapshot099/arepo/powerspec_099.txt",
+      "sha256": "cd90ea25dce617fca28b8b22be8a6e587a96076fb882c562ca86bf29f1ebad45"
+    },
+    {
+      "path": "C:/Users/carlo/Documents/ClumpingFactorSuite/Clumping_factor_calculations/results/aida-tng/L75n910_vSIDM/power-spectrum/power-spectrum.combined/gas/snapshot099/science-77adacac4674/execution-828951378904_run001.json",
+      "sha256": "55f9dcc322393e3b89414b6d8b912bb01df0cc21c5309f5a5093bf80a546cbad"
+    },
+    {
+      "path": "C:/Users/carlo/Documents/ClumpingFactorSuite/Clumping_factor_calculations/results/aida-tng/L75n910_vSIDM/power-spectrum/power-spectrum.combined/gas/snapshot099/science-0caef14027fd/execution-97bb77bc24f0_run001.json",
+      "sha256": "879b5bdba223b67224ad40ee51b8c03eb1d44272813760356236eeeeb5771baa"
+    }
+  ],
+  "kind": "analysis",
+  "legacy_sources": [],
+  "method_label": "dm-arepo-vs-local",
+  "options": {
+    "arepo_block": "all",
+    "field": "dimensionless_power",
+    "k_unit_factor": 1000.0,
+    "local_engine": "both",
+    "local_grids": [
+      256,
+      256
+    ]
+  },
+  "schema_version": 1,
+  "subject": "L75n910_vSIDM_snapshot099"
+}

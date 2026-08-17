@@ -129,6 +129,68 @@ load_mode = "full"
     assert all("--spectrum-engine" in task.command and "both" in task.command for task in manifest.tasks)
 
 
+def test_power_spectrum_campaign_forwards_fold_options(tmp_path: Path):
+    campaign = tmp_path / "folded.toml"
+    campaign.write_text(
+        '''name = "folded"
+output_root = "results"
+[simulation]
+family = "tng"
+name = "toy"
+base_path = "/data/toy"
+[matrix]
+snapshots = [98]
+particle_types = ["dm"]
+methods = ["power-spectrum.combined"]
+grids = [256, 512, 1024]
+[method_options."power-spectrum.combined"]
+fold_factors = [1, 2, 4]
+[execution]
+threads = 1
+load_mode = "chunked"
+''',
+        encoding="utf-8",
+    )
+    manifest = plan_campaign(campaign)
+    assert len(manifest.tasks) == 3
+    assert all("--fold-factors" in task.command for task in manifest.tasks)
+    assert all("1" in task.command and "2" in task.command and "4" in task.command for task in manifest.tasks)
+
+
+def test_available_snapshots_are_discovered_per_simulation(tmp_path: Path):
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    (first / "snapdir_017").mkdir(parents=True)
+    (first / "snapdir_099").mkdir()
+    (second / "snapdir_025").mkdir(parents=True)
+    (first / "snapdir_017" / "snap_017.0.hdf5").touch()
+    (first / "snapdir_099" / "snap_099.0.hdf5").touch()
+    (second / "snapdir_025" / "snap_025.0.hdf5").touch()
+    campaign = tmp_path / "available.toml"
+    campaign.write_text(
+        f'''name = "available"
+[[simulations]]
+family = "tng"
+name = "first"
+base_path = "{first.as_posix()}"
+[[simulations]]
+family = "tng"
+name = "second"
+base_path = "{second.as_posix()}"
+[matrix]
+snapshots = "available"
+particle_types = ["dm"]
+methods = ["power-spectrum.numpy"]
+grids = [256]
+''',
+        encoding="utf-8",
+    )
+    manifest = plan_campaign(campaign)
+    assert {(task.simulation, task.snapshot) for task in manifest.tasks} == {
+        ("first", 17), ("first", 99), ("second", 25)
+    }
+
+
 def test_typed_campaign_plans_both_alternative_compute_methods(tmp_path: Path):
     campaign = tmp_path / "alternative.toml"
     campaign.write_text(

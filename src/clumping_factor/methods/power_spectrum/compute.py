@@ -10,6 +10,7 @@ import numpy as np
 from clumping_factor.methods.clumping.fields import build_density_grid_mass_assignment, build_density_grid_mass_assignment_chunked
 from clumping_factor.infrastructure.loaders import estimate_full_load_bytes, iter_particle_chunks, load_tng_particles, read_snapshot_metadata
 from clumping_factor.methods.power_spectrum.estimator import PowerSpectrumResult, density_power_spectrum, density_power_spectrum_pylians
+from clumping_factor.methods.power_spectrum.folding import fold_chunk_factory, fold_particle_data, folded_box_size, validate_fold_factors
 from clumping_factor.infrastructure.results import build_provenance, resolve_simulation_name, write_json_result
 
 
@@ -56,6 +57,10 @@ def build_power_spectrum_parser() -> argparse.ArgumentParser:
     parser.add_argument("--binning", choices=["log", "linear"], default="log")
     parser.add_argument("--k-min", type=float)
     parser.add_argument("--k-max", type=float)
+    parser.add_argument(
+        "--fold-factors", type=int, nargs="+", default=[1], metavar="F",
+        help="Spatial folds to compute independently (for example: --fold-factors 1 2 4).",
+    )
     parser.add_argument("--threads", type=int, default=1)
     parser.add_argument("--output")
     parser.add_argument("--output-dir", default="results")
@@ -76,7 +81,7 @@ def _progress(args: argparse.Namespace, message: str) -> None:
         print(message, flush=True)
 
 
-def _build_one_field(args: argparse.Namespace, particle_type: str, smoothing: str, load_mode: str):
+def _build_one_field(args: argparse.Namespace, particle_type: str, smoothing: str, load_mode: str, fold_factor: int = 1):
     load_radius_mode = args.radius_mode if particle_type == "gas" else "sphere"
     if load_mode == "full":
         particles, load_timings = load_tng_particles(
@@ -86,6 +91,7 @@ def _build_one_field(args: argparse.Namespace, particle_type: str, smoothing: st
             load_radius_mode,
             verbose=args.verbose,
         )
+        particles = fold_particle_data(particles, fold_factor)
         if smoothing == "none":
             grid_result = build_density_grid_mass_assignment(particles, args.grid_size, args.mas)
         elif smoothing == "pylians":
@@ -119,7 +125,7 @@ def _build_one_field(args: argparse.Namespace, particle_type: str, smoothing: st
         timings = {"load_data": load_timings.get("load_data", 0.0), **grid_result.timings}
         return grid_result.density_grid, spec, timings
 
-    def chunk_factory():
+    def source_chunk_factory():
         return iter_particle_chunks(
             args.base_path,
             args.snapshot,
@@ -127,39 +133,31 @@ def _build_one_field(args: argparse.Namespace, particle_type: str, smoothing: st
             load_radius_mode,
             args.chunk_size,
         )
+    chunk_factory = fold_chunk_factory(source_chunk_factory, fold_factor)
 
     if smoothing == "none":
         grid_result = build_density_grid_mass_assignment_chunked(chunk_factory, args.grid_size, args.mas)
     elif smoothing == "pylians":
-        from clumping_factor.methods.clumping.fields import build_density_grid_pylians_chunked_parallel
+        from clumping_factor.methods.clumping.fields import build_density_grid_pylians_chunked
 
-        grid_result = build_density_grid_pylians_chunked_parallel(
-            args.base_path,
-            args.snapshot,
-            particle_type,
-            load_radius_mode,
+        grid_result = build_density_grid_pylians_chunked(
+            chunk_factory,
             args.grid_size,
             args.radius_bins,
             args.chunk_size,
-            args.threads,
-            radius_bin_batch_size=args.radius_bin_batch_size,
             mas=args.mas,
             filter_type=args.filter_type,
+            threads=args.threads,
         )
     else:
-        from clumping_factor.methods.clumping.fields import build_density_grid_scipy_chunked_parallel
+        from clumping_factor.methods.clumping.fields import build_density_grid_scipy_chunked
 
-        grid_result = build_density_grid_scipy_chunked_parallel(
-            args.base_path,
-            args.snapshot,
-            particle_type,
-            load_radius_mode,
+        grid_result = build_density_grid_scipy_chunked(
+            chunk_factory,
             args.grid_size,
             args.radius_bins,
             smoothing,
             args.chunk_size,
-            args.threads,
-            radius_bin_batch_size=args.radius_bin_batch_size,
             mas=args.mas,
         )
     spec = {
@@ -171,13 +169,13 @@ def _build_one_field(args: argparse.Namespace, particle_type: str, smoothing: st
     return grid_result.density_grid, spec, grid_result.timings
 
 
-def _build_density_field(args: argparse.Namespace, load_mode: str):
+def _build_density_field(args: argparse.Namespace, load_mode: str, fold_factor: int = 1):
     smoothing = args.smoothing
     if args.particle_type != "both":
-        return _build_one_field(args, args.particle_type, smoothing, load_mode)
+        return _build_one_field(args, args.particle_type, smoothing, load_mode, fold_factor)
 
-    gas_grid, gas_spec, gas_timings = _build_one_field(args, "gas", smoothing, load_mode)
-    dm_grid, dm_spec, dm_timings = _build_one_field(args, "dm", smoothing, load_mode)
+    gas_grid, gas_spec, gas_timings = _build_one_field(args, "gas", smoothing, load_mode, fold_factor)
+    dm_grid, dm_spec, dm_timings = _build_one_field(args, "dm", smoothing, load_mode, fold_factor)
     density_grid = gas_grid + dm_grid
     spec = {
         "particle_type": "both",
@@ -236,11 +234,31 @@ def run_power_spectrum(args: argparse.Namespace) -> Path:
     total_t0 = perf_counter()
     simulation_name = resolve_simulation_name(args.base_path, args.simulation_name)
     selected_load_mode, estimated_gb = _selected_load_mode(args)
-    _progress(args, f"building {args.particle_type} density field with smoothing={args.smoothing}, load_mode={selected_load_mode}")
-    density_grid, grid_spec, grid_timings = _build_density_field(args, selected_load_mode)
     metadata = read_snapshot_metadata(args.base_path, args.snapshot)
-    _progress(args, f"computing power spectrum with engine={args.spectrum_engine}")
-    spectra = _compute_spectra(args, density_grid, metadata.lbox)
+    fold_factors = validate_fold_factors(args.fold_factors, metadata.lbox)
+    fold_blocks: dict[str, dict[str, Any]] = {}
+    for fold_factor in fold_factors:
+        effective_box = folded_box_size(metadata.lbox, fold_factor)
+        _progress(args, f"building {args.particle_type} density field with fold_factor={fold_factor}, effective_box={effective_box:g}, smoothing={args.smoothing}, load_mode={selected_load_mode}")
+        density_grid, grid_spec, grid_timings = _build_density_field(args, selected_load_mode, fold_factor)
+        _progress(args, f"computing power spectrum with engine={args.spectrum_engine}")
+        spectra = _compute_spectra(args, density_grid, effective_box)
+        fold_blocks[str(fold_factor)] = {
+            "fold_factor": int(fold_factor),
+            "effective_box_size": effective_box,
+            "nominal_nyquist": float(np.pi * args.grid_size / effective_box),
+            "k_coordinate_system": "original_simulation_inverse_length",
+            "grid": grid_spec,
+            "spectra": {engine: _spectrum_payload(result) for engine, result in spectra.items()},
+            "diagnostics": {engine: result.diagnostics for engine, result in spectra.items()},
+            "timings": {engine: result.timings for engine, result in spectra.items()},
+        }
+        if fold_factor == fold_factors[0]:
+            normal_grid_spec, normal_grid_timings = grid_spec, grid_timings
+            normal_spectra = spectra
+    spectra = normal_spectra
+    grid_spec = normal_grid_spec
+    grid_timings = normal_grid_timings
     primary_engine = "numpy" if args.spectrum_engine == "both" else args.spectrum_engine
     primary_spectrum = spectra[primary_engine]
 
@@ -267,6 +285,7 @@ def run_power_spectrum(args: argparse.Namespace) -> Path:
         "binning": args.binning,
         "k_min": args.k_min,
         "k_max": args.k_max,
+        "fold_factors": list(fold_factors),
         "threads": int(args.threads),
     }
     timings = {
@@ -288,6 +307,7 @@ def run_power_spectrum(args: argparse.Namespace) -> Path:
         "spectrum_engine": args.spectrum_engine,
         "primary_spectrum_engine": primary_engine,
         "spectra": {engine: _spectrum_payload(result) for engine, result in spectra.items()},
+        "folded_spectra": fold_blocks,
         "k": primary_spectrum.k,
         "power": primary_spectrum.power,
         "dimensionless_power": primary_spectrum.dimensionless_power,

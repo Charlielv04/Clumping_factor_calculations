@@ -44,6 +44,40 @@ mypy src/clumping_factor
 Pylians is optional. Install it separately when running its parity or production
 methods.
 
+## Spatially folded power spectra
+
+The power-spectrum command can measure the same periodic particle distribution
+at several effective box sizes.  A fold factor `f` maps each particle once with
+`x_folded = x mod (L/f)` in all three coordinates, then deposits the remapped
+particles on the selected mesh.  It does not duplicate particles.  Factor `1`
+is the normal full-box spectrum, `2` is the folded spectrum in a box of size
+`L/2`, and `4` is the double-folded spectrum in a box of size `L/4`.
+
+The effective box changes the Fourier fundamental and nominal Nyquist limit:
+`k_fundamental = 2π/(L/f)` and `k_Nyquist = πN/(L/f)`.  The reported values
+remain in the original simulation inverse-length units.  Every block is stored
+under `folded_spectra` with explicit `fold_factor`, `effective_box_size`, and
+`nominal_nyquist` metadata; the unfurled top-level fields remain for backward
+compatibility.
+
+For example:
+
+```bash
+clumping power compute --base-path /data/L75n910 --snapshot 99 --particle-type dm \
+  --grid-size 512 --spectrum-engine both --fold-factors 1 2 4 \
+  --output results/L75n910_snapshot099_folded.json
+clumping power compare --arepo results/aida-tng/L75n910_CDM/power-spectrum/power-spectrum.arepo-comparison/dm/snapshot099/arepo/powerspec_099.txt \
+  --local results/L75n910_snapshot099_folded.json --local-fold-factor all \
+  --arepo-block all --average-bins 35 --output reports/L75n910_snapshot099_folded.png
+```
+
+Folding extends the nominal mesh limit by approximately factors of two and
+four, but it also increases sensitivity to mass-assignment aliasing and shot
+noise.  Treat the high-k tail cautiously, use logarithmic-bin averaging when
+plotting, and compare blocks primarily in their overlapping k-ranges.  A
+disagreement that begins near a Nyquist marker is generally numerical rather
+than a physical difference.
+
 ## Public command tree
 
 `clumping` is the only installed executable:
@@ -125,6 +159,18 @@ Submission is a dry run unless `--execute` is supplied. See
 [`campaigns/README.md`](campaigns/README.md) and the checked-in AIDA-TNG,
 THESAN, diagnostic, forest, and alternative-estimator campaigns.
 
+For snapshot-aware folded power-spectrum submission, use
+`campaigns/aida-tng-power-spectrum-folded.toml`. Its `snapshots = "available"`
+matrix value discovers snapshots independently below each simulation
+`base_path`; its Cartesian product covers DM, combined NumPy/Pylians spectra,
+fold factors `1 2 4`, and meshes `256`, `512`, and `1024`:
+
+```bash
+clumping campaign plan campaigns/aida-tng-power-spectrum-folded.toml \
+  --manifest campaigns/aida-tng-power-spectrum-folded.manifest.json
+clumping campaign submit campaigns/aida-tng-power-spectrum-folded.toml --execute
+```
+
 ## Strict schema-2 results
 
 JSON result readers accept schema 2 only. Every result requires:
@@ -191,6 +237,49 @@ input identities. Its manifest records the generator, inputs, legacy source
 paths, and checksums for every artifact. External output paths are allowed only
 as explicit user-requested escape hatches and must receive a validating
 `analysis-external` sidecar.
+
+AREPO power-spectrum text outputs imported for AIDA-TNG comparisons are stored
+under the registered comparison method and remain associated with their
+simulation and snapshot:
+
+```text
+results/aida-tng/<simulation>/power-spectrum/power-spectrum.arepo-comparison/dm/
+  snapshotNNN/arepo/powerspec_NNN.txt
+```
+
+The corresponding AREPO-versus-local plots use the canonical analysis tree:
+
+```text
+results/analysis/power-spectrum/aida-tng/compare/<simulation>_snapshotNNN/
+  dm-arepo-vs-local/analysis-<12hex>/
+    manifest.json
+    artifacts/arepo_vs_local.png
+```
+
+These comparisons include all three AREPO spectrum blocks and the 256^3 local
+mass-assignment-only and Pylians-smoothed results, with both NumPy and Pylians
+estimators where available.
+
+Matched model comparisons (CDM, SIDM1, vSIDM, and WDM3) are generated with:
+
+```text
+python scripts/compare_aida_models.py
+```
+
+They are stored under `results/analysis/power-spectrum/aida-tng/model-comparison/`
+and contain absolute spectra for AREPO and the home calculations, plus ratios
+to CDM for the same box and snapshot. The plotted curves use logarithmic-bin
+means (35 bins) to suppress high-k sampling noise. The available common snapshots are
+L35n1080: 017, 025, 033, 050, 067; and L75n910: 025, 033, 050, 067, 084, 099.
+
+Grid-resolution checks for the later L75n910 snapshot 099 are generated with:
+
+```text
+python scripts/compare_aida_grid_sizes.py
+```
+
+This compares the AREPO blocks against home Pylians spectra on 256^3, 512^3,
+and 1024^3 meshes for all four models.
 
 Unique historical material belongs under `results/archive/<import-id>/` with an
 archive inventory and is excluded from normal discovery. Byte-identical files

@@ -1,0 +1,68 @@
+name = "aida-tng-power-spectrum-folded"
+output_root = "results"
+
+# Each simulation contributes every snapdir_###/snap_###.hdf5 snapshot found
+# below its base_path. Override the base paths or use a static snapshot list
+# when submitting from a different filesystem layout.
+[[simulations]]
+family = "aida-tng"
+name = "L35n1080_CDM"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L35n1080_CDM/output"
+
+[[simulations]]
+family = "aida-tng"
+name = "L35n1080_SIDM1"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L35n1080_SIDM1/output"
+
+[[simulations]]
+family = "aida-tng"
+name = "L35n1080_vSIDM"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L35n1080_vSIDM/output"
+
+[[simulations]]
+family = "aida-tng"
+name = "L35n1080_WDM3"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L35n1080_WDM3/output"
+
+[[simulations]]
+family = "aida-tng"
+name = "L75n910_CDM"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L75n910_CDM/output"
+
+[[simulations]]
+family = "aida-tng"
+name = "L75n910_SIDM1"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L75n910_SIDM1/output"
+
+[[simulations]]
+family = "aida-tng"
+name = "L75n910_vSIDM"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L75n910_vSIDM/output"
+
+[[simulations]]
+family = "aida-tng"
+name = "L75n910_WDM3"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L75n910_WDM3/output"
+
+[matrix]
+snapshots = "available"
+particle_types = ["dm"]
+methods = ["power-spectrum.combined"]
+grids = [256, 512, 1024]
+
+[method_options."power-spectrum.combined"]
+fold_factors = [1, 2, 4]
+bin_count = 80
+binning = "log"
+
+[execution]
+threads = 8
+load_mode = "chunked"
+chunk_size = 1000000
+mas = "CIC"
+
+[resources]
+cpus = 8
+memory = "128gb"
+walltime = "24:00:00"
+queue = "mini"
