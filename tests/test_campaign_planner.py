@@ -78,7 +78,7 @@ def test_pbs_worker_uses_manifest_resources(tmp_path: Path):
     worker = render_pbs_worker(plan_campaign(campaign).tasks[0])
     assert "#PBS -q mini" in worker
     assert "#PBS -V" in worker
-    assert "#PBS -d " in worker
+    assert "cd \"${PBS_O_WORKDIR:-.}\"" in worker
     assert "conda activate clumping-factor" in worker
     assert "$HOME/.conda/envs/clumping-factor/bin" in worker
     assert "select=1:ncpus=8:mem=32gb" in worker

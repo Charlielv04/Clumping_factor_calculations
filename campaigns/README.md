@@ -39,5 +39,5 @@ dry-run; use `--manifest` to choose its JSON manifest path.
 
 Generated workers explicitly activate the `clumping-factor` conda environment,
 with a fallback to `~/.conda/envs/clumping-factor/bin`, and include `#PBS -V` as
-an additional environment safeguard. They also include `#PBS -d` so relative
-canonical result paths resolve from the submission directory.
+an additional environment safeguard. They also change to `$PBS_O_WORKDIR` so
+relative canonical result paths resolve from the submission directory.

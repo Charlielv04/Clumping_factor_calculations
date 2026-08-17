@@ -406,13 +406,13 @@ def render_pbs_worker(task: CampaignTask, *, job_name: str | None = None) -> str
 
     resources = task.resources
     # qsub does not otherwise inherit an activated conda/venv environment.
-    # Preserve both the executable PATH and relative result paths used by
-    # canonical output names.
+    # Preserve the executable PATH used by the activated environment.  This
+    # PBS implementation does not support the -d directive, so the worker
+    # changes directory from PBS_O_WORKDIR below instead.
     lines = [
         "#!/bin/sh",
         f"#PBS -N {job_name or task.task_id}",
         "#PBS -V",
-        f"#PBS -d {shlex.quote(str(Path.cwd()))}",
     ]
     if resources.queue:
         lines.append(f"#PBS -q {resources.queue}")
@@ -431,6 +431,7 @@ def render_pbs_worker(task: CampaignTask, *, job_name: str | None = None) -> str
         "    echo 'clumping-factor conda environment was not found' >&2",
         "    exit 127",
         "fi",
+        "cd \"${PBS_O_WORKDIR:-.}\"",
     ]
     lines.extend(f"export {key}={shlex.quote(value)}" for key, value in task.environment)
     lines.append("exec " + " ".join(shlex.quote(token) for token in task.command))
