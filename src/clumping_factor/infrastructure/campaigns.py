@@ -420,6 +420,17 @@ def render_pbs_worker(task: CampaignTask, *, job_name: str | None = None) -> str
         f"#PBS -l select=1:ncpus={resources.cpus}:mem={resources.memory}",
         f"#PBS -l walltime={resources.walltime}",
         "set -eu",
+        "if [ -f \"$HOME/.conda/etc/profile.d/conda.sh\" ]; then",
+        "    . \"$HOME/.conda/etc/profile.d/conda.sh\"",
+        "    conda activate clumping-factor",
+        "elif [ -x \"$HOME/.conda/envs/clumping-factor/bin/clumping\" ]; then",
+        "    export PATH=\"$HOME/.conda/envs/clumping-factor/bin:$PATH\"",
+        "    export CONDA_DEFAULT_ENV=clumping-factor",
+        "    export CONDA_PREFIX=\"$HOME/.conda/envs/clumping-factor\"",
+        "else",
+        "    echo 'clumping-factor conda environment was not found' >&2",
+        "    exit 127",
+        "fi",
     ]
     lines.extend(f"export {key}={shlex.quote(value)}" for key, value in task.environment)
     lines.append("exec " + " ".join(shlex.quote(token) for token in task.command))

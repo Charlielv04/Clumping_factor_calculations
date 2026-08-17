@@ -79,6 +79,8 @@ def test_pbs_worker_uses_manifest_resources(tmp_path: Path):
     assert "#PBS -q mini" in worker
     assert "#PBS -V" in worker
     assert "#PBS -d " in worker
+    assert "conda activate clumping-factor" in worker
+    assert "$HOME/.conda/envs/clumping-factor/bin" in worker
     assert "select=1:ncpus=8:mem=32gb" in worker
     assert "#PBS -l walltime=04:00:00" in worker
 
