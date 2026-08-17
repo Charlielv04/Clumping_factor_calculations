@@ -77,6 +77,8 @@ def test_pbs_worker_uses_manifest_resources(tmp_path: Path):
     _write_matrix(campaign, methods='["sphere"]', threads=8)
     worker = render_pbs_worker(plan_campaign(campaign).tasks[0])
     assert "#PBS -q mini" in worker
+    assert "#PBS -V" in worker
+    assert "#PBS -d " in worker
     assert "select=1:ncpus=8:mem=32gb" in worker
     assert "#PBS -l walltime=04:00:00" in worker
 
