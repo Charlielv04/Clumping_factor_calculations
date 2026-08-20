@@ -799,6 +799,7 @@ def _build_single_density_grid(args: argparse.Namespace, particle_type: str, bac
         "particle_type": particle_type,
         "backend": backend,
         "radius_mode": load_radius_mode if particle_type == "gas" else None,
+        "dm_radius_source": "PartType1/SubfindHsml" if particle_type == "dm" else None,
         "backend_metadata": grid_result.backend_metadata,
         "diagnostics": grid_result.diagnostics,
         "load_mode": selected_load_mode,

@@ -38,6 +38,8 @@ def write_snapshot_file(path, lbox, counts_this_file, counts_total, gas=None, dm
             group.create_dataset("Coordinates", data=dm["Coordinates"])
             if "Masses" in dm:
                 group.create_dataset("Masses", data=dm["Masses"])
+            if "SubfindHsml" in dm:
+                group.create_dataset("SubfindHsml", data=dm["SubfindHsml"])
 
 
 def write_split_snapshot(tmp_path):
@@ -53,8 +55,14 @@ def write_split_snapshot(tmp_path):
         "Density": np.array([8.0, 8.0], dtype=np.float32),
         "Masses": np.array([1.0, 1.0], dtype=np.float32),
     }
-    dm0 = {"Coordinates": np.array([[0.2, 0.2, 0.2]], dtype=np.float32)}
-    dm1 = {"Coordinates": np.array([[0.7, 0.7, 0.7]], dtype=np.float32)}
+    dm0 = {
+        "Coordinates": np.array([[0.2, 0.2, 0.2]], dtype=np.float32),
+        "SubfindHsml": np.array([0.15], dtype=np.float32),
+    }
+    dm1 = {
+        "Coordinates": np.array([[0.7, 0.7, 0.7]], dtype=np.float32),
+        "SubfindHsml": np.array([0.35], dtype=np.float32),
+    }
     total = np.array([4, 2, 0, 0, 0, 0], dtype=np.uint32)
     write_snapshot_file(
         snapdir / "snap_000.0.hdf5",
@@ -116,6 +124,7 @@ def test_full_and_chunked_dm_preserve_variable_particle_masses(tmp_path):
     dm = {
         "Coordinates": np.array([[0.1, 0.1, 0.1], [0.9, 0.9, 0.9]], dtype=np.float32),
         "Masses": np.array([1.25, 3.75], dtype=np.float32),
+        "SubfindHsml": np.array([0.2, 0.6], dtype=np.float32),
     }
     counts = np.array([0, 2, 0, 0, 0, 0], dtype=np.uint32)
     write_snapshot_file(
@@ -129,7 +138,20 @@ def test_full_and_chunked_dm_preserve_variable_particle_masses(tmp_path):
 
     assert np.array_equal(full.masses, dm["Masses"])
     assert np.array_equal(full.masses, chunked_masses)
+    assert np.array_equal(full.radii, dm["SubfindHsml"])
     assert full.metadata["dm_mass_source"] == "PartType1/Masses"
+    assert full.metadata["dm_radius_source"] == "PartType1/SubfindHsml"
+
+
+def test_dm_loading_requires_valid_subfind_hsml(tmp_path):
+    snapdir = tmp_path / "snapdir_000"
+    snapdir.mkdir()
+    counts = np.array([0, 1, 0, 0, 0, 0], dtype=np.uint32)
+    dm = {"Coordinates": np.array([[0.5, 0.5, 0.5]], dtype=np.float32)}
+    write_snapshot_file(snapdir / "snap_000.0.hdf5", 1.0, counts, counts, dm=dm)
+
+    with np.testing.assert_raises_regex(ValueError, "PartType1/SubfindHsml"):
+        list(iter_particle_chunks(tmp_path, 0, "dm", "sphere", chunk_size=1))
 
 
 def test_chunked_scipy_grid_matches_full_grid_for_single_radius(tmp_path):

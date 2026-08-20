@@ -9,7 +9,7 @@ import numpy as np
 
 from clumping_factor.methods.clumping.fields import build_density_grid_mass_assignment, build_density_grid_mass_assignment_chunked
 from clumping_factor.infrastructure.loaders import estimate_full_load_bytes, iter_particle_chunks, load_tng_particles, read_snapshot_metadata
-from clumping_factor.methods.power_spectrum.estimator import PowerSpectrumResult, density_power_spectrum, density_power_spectrum_pylians
+from clumping_factor.methods.power_spectrum.estimator import PowerSpectrumResult, density_power_spectrum, density_power_spectrum_pylians, rescale_power_spectrum
 from clumping_factor.methods.power_spectrum.folding import fold_chunk_factory, fold_particle_data, folded_box_size, validate_fold_factors
 from clumping_factor.infrastructure.results import build_provenance, resolve_simulation_name, write_json_result
 
@@ -206,7 +206,7 @@ def _spectrum_payload(result: PowerSpectrumResult) -> dict[str, Any]:
     return payload
 
 
-def _compute_spectra(args: argparse.Namespace, density_grid: np.ndarray, box_size: float) -> dict[str, PowerSpectrumResult]:
+def _compute_spectra(args: argparse.Namespace, density_grid: np.ndarray, box_size: float, fold_factor: int) -> dict[str, PowerSpectrumResult]:
     spectra: dict[str, PowerSpectrumResult] = {}
     if args.spectrum_engine in {"numpy", "both"}:
         spectra["numpy"] = density_power_spectrum(
@@ -227,7 +227,12 @@ def _compute_spectra(args: argparse.Namespace, density_grid: np.ndarray, box_siz
             axis=args.pylians_axis,
             verbose=args.verbose,
         )
-    return spectra
+    # Folding averages the f^3 overlaid subboxes.  Correct the effective-box
+    # volume normalization so folded P(k) and Delta^2(k) remain comparable to
+    # the normal full-box spectrum; k is already in original inverse-length
+    # coordinates because the FFT uses box_size=L/f.
+    amplitude_factor = float(fold_factor**3)
+    return {engine: rescale_power_spectrum(result, amplitude_factor) for engine, result in spectra.items()}
 
 
 def run_power_spectrum(args: argparse.Namespace) -> Path:
@@ -242,11 +247,12 @@ def run_power_spectrum(args: argparse.Namespace) -> Path:
         _progress(args, f"building {args.particle_type} density field with fold_factor={fold_factor}, effective_box={effective_box:g}, smoothing={args.smoothing}, load_mode={selected_load_mode}")
         density_grid, grid_spec, grid_timings = _build_density_field(args, selected_load_mode, fold_factor)
         _progress(args, f"computing power spectrum with engine={args.spectrum_engine}")
-        spectra = _compute_spectra(args, density_grid, effective_box)
+        spectra = _compute_spectra(args, density_grid, effective_box, fold_factor)
         fold_blocks[str(fold_factor)] = {
             "fold_factor": int(fold_factor),
             "effective_box_size": effective_box,
             "nominal_nyquist": float(np.pi * args.grid_size / effective_box),
+            "power_amplitude_rescaling": int(fold_factor**3),
             "k_coordinate_system": "original_simulation_inverse_length",
             "grid": grid_spec,
             "spectra": {engine: _spectrum_payload(result) for engine, result in spectra.items()},
@@ -286,6 +292,7 @@ def run_power_spectrum(args: argparse.Namespace) -> Path:
         "k_min": args.k_min,
         "k_max": args.k_max,
         "fold_factors": list(fold_factors),
+        "fold_power_normalization": "effective_box_power multiplied by fold_factor^3",
         "threads": int(args.threads),
     }
     timings = {

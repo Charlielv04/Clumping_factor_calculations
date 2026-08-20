@@ -4,7 +4,7 @@ import numpy as np
 
 from clumping_factor.infrastructure.models import ParticleData
 from clumping_factor.methods.power_spectrum.folding import fold_coordinates, fold_particle_data, validate_fold_factors
-from clumping_factor.methods.power_spectrum.estimator import density_power_spectrum
+from clumping_factor.methods.power_spectrum.estimator import PowerSpectrumResult, density_power_spectrum, rescale_power_spectrum
 from clumping_factor.visualization.power_spectrum import plot_power_spectrum_files
 
 
@@ -44,6 +44,26 @@ def test_fold_factor_validation_and_metadata():
         pass
     else:
         raise AssertionError("non-positive folds must fail")
+
+
+def test_fold_power_amplitude_correction_is_f_cubed_and_fold_one_is_unchanged():
+    result = density_power_spectrum(np.ones((8, 8, 8)), 10.0, bin_count=4)
+    assert rescale_power_spectrum(result, 1) is result
+    corrected = rescale_power_spectrum(
+        PowerSpectrumResult(
+            k=result.k,
+            power=np.ones_like(result.power),
+            dimensionless_power=np.ones_like(result.dimensionless_power),
+            mode_counts=result.mode_counts,
+            k_edges=result.k_edges,
+            diagnostics=result.diagnostics,
+            timings=result.timings,
+        ),
+        2**3,
+    )
+    np.testing.assert_allclose(corrected.power, 8.0)
+    np.testing.assert_allclose(corrected.dimensionless_power, 8.0)
+    assert corrected.diagnostics["power_amplitude_rescaling"] == 8.0
 
 
 def test_plot_all_fold_blocks_and_json_round_trip(tmp_path):

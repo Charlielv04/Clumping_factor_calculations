@@ -1,0 +1,77 @@
+name = "dm-clumping-subfind-hsml"
+# Keep adaptive-SubfindHsml results separate from the legacy fixed-spacing runs.
+output_root = "results-subfind-hsml"
+
+[[simulations]]
+family = "thesan"
+name = "Thesan-1"
+base_path = "/lustre/work/carlos.lopez/Thesan-1/output"
+
+[[simulations]]
+family = "thesan"
+name = "Thesan-2"
+base_path = "/lustre/work/carlos.lopez/Thesan-2/output"
+
+[[simulations]]
+family = "aida-tng"
+name = "L35n1080_CDM"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L35n1080_CDM/output"
+
+[[simulations]]
+family = "aida-tng"
+name = "L35n1080_SIDM1"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L35n1080_SIDM1/output"
+
+[[simulations]]
+family = "aida-tng"
+name = "L35n1080_vSIDM"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L35n1080_vSIDM/output"
+
+[[simulations]]
+family = "aida-tng"
+name = "L35n1080_WDM3"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L35n1080_WDM3/output"
+
+[[simulations]]
+family = "aida-tng"
+name = "L75n910_CDM"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L75n910_CDM/output"
+
+[[simulations]]
+family = "aida-tng"
+name = "L75n910_SIDM1"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L75n910_SIDM1/output"
+
+[[simulations]]
+family = "aida-tng"
+name = "L75n910_vSIDM"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L75n910_vSIDM/output"
+
+[[simulations]]
+family = "aida-tng"
+name = "L75n910_WDM3"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L75n910_WDM3/output"
+
+[matrix]
+# Each simulation contributes every snapshot that actually exists under its output path.
+snapshots = "available"
+particle_types = ["dm"]
+methods = ["pylians"]
+grids = [256]
+
+[method_options."clumping.pylians"]
+filter_type = "Top-Hat"
+radius_bins = 32
+
+[execution]
+threads = 8
+load_mode = "chunked"
+chunk_size = 1000000
+mas = "CIC"
+radius_bin_batch_size = 2
+
+[resources]
+cpus = 8
+memory = "128gb"
+walltime = "24:00:00"
+queue = "mini"

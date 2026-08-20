@@ -275,11 +275,25 @@ def estimate_full_load_bytes(metadata: SnapshotMetadata, particle_type: str) -> 
     return count * (3 * np.dtype(np.float64).itemsize + 2 * np.dtype(np.float32).itemsize)
 
 
-def _valid_dm_arrays(coords: np.ndarray, masses: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def _valid_dm_arrays(
+    coords: np.ndarray,
+    masses: np.ndarray,
+    smoothing_lengths: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     coords = np.asarray(coords, dtype=np.float32)
     masses = np.asarray(masses, dtype=np.float32)
+    smoothing_lengths = np.asarray(smoothing_lengths, dtype=np.float32)
+    if smoothing_lengths.shape != masses.shape:
+        raise ValueError("PartType1/SubfindHsml must have one value per dark matter particle.")
+    if np.any(~np.isfinite(smoothing_lengths) | (smoothing_lengths <= 0)):
+        raise ValueError("PartType1/SubfindHsml must be finite and positive for every dark matter particle.")
     valid = np.all(np.isfinite(coords), axis=1) & np.isfinite(masses) & (masses > 0)
-    return valid, np.ascontiguousarray(coords[valid], dtype=np.float32), np.ascontiguousarray(masses[valid], dtype=np.float32)
+    return (
+        valid,
+        np.ascontiguousarray(coords[valid], dtype=np.float32),
+        np.ascontiguousarray(masses[valid], dtype=np.float32),
+        np.ascontiguousarray(smoothing_lengths[valid], dtype=np.float32),
+    )
 
 
 def iter_particle_chunks(
@@ -304,9 +318,6 @@ def iter_particle_chunks(
     metadata = read_snapshot_metadata(base_path, snapshot)
     group_name = PARTICLE_GROUPS[particle_type]
     particle_index = PARTICLE_INDICES[particle_type]
-    total_count = int(metadata.particle_counts[particle_index])
-    mean_spacing = metadata.lbox / total_count ** (1.0 / 3.0) if total_count else 0.0
-
     paths = snapshot_file_paths(base_path, snapshot)
     ranges_by_file: dict[int, list[tuple[int, int]]] | None = None
     if work_units is not None:
@@ -340,6 +351,7 @@ def iter_particle_chunks(
                     coords_raw = group["Coordinates"][start:stop]
                     density_raw = None
                     masses_raw = None
+                    smoothing_lengths_raw = None
                     hi_raw = None
                     hii_raw = None
                     electron_raw = None
@@ -369,12 +381,21 @@ def iter_particle_chunks(
                             )
                     elif "Masses" in group:
                         masses_raw = group["Masses"][start:stop]
+                    if particle_type == "dm":
+                        if "SubfindHsml" not in group:
+                            raise ValueError(
+                                "Dark matter smoothing requires PartType1/SubfindHsml; "
+                                f"it is missing from {path}."
+                            )
+                        smoothing_lengths_raw = group["SubfindHsml"][start:stop]
                     io_seconds = perf_counter() - io_t0
                     bytes_read = int(coords_raw.nbytes)
                     if density_raw is not None:
                         bytes_read += int(density_raw.nbytes)
                     if masses_raw is not None:
                         bytes_read += int(masses_raw.nbytes)
+                    if smoothing_lengths_raw is not None:
+                        bytes_read += int(smoothing_lengths_raw.nbytes)
                     preprocess_t0 = perf_counter()
                     if particle_type == "gas":
                         coords, density, masses, diagnostics = validate_gas_arrays(coords_raw, density_raw, masses_raw)
@@ -422,8 +443,11 @@ def iter_particle_chunks(
                             if particle_mass <= 0:
                                 raise ValueError("Dark matter particle mass in MassTable[1] must be positive when PartType1/Masses is absent.")
                             masses_raw = np.full(stop - start, particle_mass, dtype=np.float32)
-                        valid, coords, masses = _valid_dm_arrays(coords_raw, masses_raw)
-                        radii = np.full(coords.shape[0], mean_spacing, dtype=np.float32)
+                        valid, coords, masses, radii = _valid_dm_arrays(
+                            coords_raw,
+                            masses_raw,
+                            smoothing_lengths_raw,
+                        )
                         preprocess_seconds = perf_counter() - preprocess_t0
                         yield {
                             "particle_type": "dm",
@@ -498,7 +522,8 @@ def load_tng_particles(base_path: str | Path, snapshot: int, particle_type: str,
             "dropped_count": input_count - n_particles,
             "dm_mass_source": "PartType1/Masses" if has_particle_masses else "Header/MassTable[1]",
             "dm_particle_mass": None if has_particle_masses else float(mass_table[1]),
-            "dm_radius_definition": "mean particle spacing",
+            "dm_radius_definition": "PartType1/SubfindHsml",
+            "dm_radius_source": "PartType1/SubfindHsml",
         }
     elif particle_type == "gas":
         il = _load_illustris_python()

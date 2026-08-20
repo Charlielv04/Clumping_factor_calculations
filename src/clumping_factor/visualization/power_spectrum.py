@@ -234,6 +234,12 @@ def _spectrum_blocks(document: dict[str, Any], field: str, engine: str | None, f
         payload = block.get("spectra", {}).get(selected, block if key is not None else spectra.get(selected, document))
         k = np.asarray(payload.get("k", []), dtype=float)
         values = np.asarray(payload.get(field, []), dtype=float)
+        if key is not None and "power_amplitude_rescaling" not in block:
+            # Results written before the fold-normalization fix contain the
+            # effective-box power, suppressed by f^3.  Correct those legacy
+            # blocks at read time; newly written blocks carry explicit
+            # metadata and are already corrected.
+            values = values * float(int(key) ** 3)
         valid = np.isfinite(k) & np.isfinite(values) & (k > 0) & (values > 0)
         if np.any(valid):
             blocks.append((k[valid], values[valid], str(selected or "primary"), None if key is None else int(key), None if key is None else float(block.get("nominal_nyquist", np.nan))))

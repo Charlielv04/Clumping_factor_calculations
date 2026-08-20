@@ -281,6 +281,17 @@ python scripts/compare_aida_grid_sizes.py
 This compares the AREPO blocks against home Pylians spectra on 256^3, 512^3,
 and 1024^3 meshes for all four models.
 
+Folded model differences relative to CDM, using
+`(P_model - P_CDM) / P_CDM` for every AREPO block and local fold/grid block,
+are generated with:
+
+```text
+python scripts/compare_aida_model_differences_folded.py
+```
+
+The figures are stored under
+`results/analysis/power-spectrum/aida-tng/folded-model-difference/`.
+
 Unique historical material belongs under `results/archive/<import-id>/` with an
 archive inventory and is excluded from normal discovery. Byte-identical files
 may share one canonical owner; the migration manifest must retain every alias.

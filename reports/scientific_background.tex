@@ -1,0 +1,103 @@
+% Standalone Scientific Background section for the clumping-factor paper.
+% Include this file after the Introduction with: \input{scientific_background}
+
+\section{Scientific Background}
+
+This section summarizes the physical and numerical context needed to interpret the clumping factor as an observable of the intergalactic medium (IGM). We first introduce the clumping factor in the context of reionization and clarify the spatial region over which the relevant averages are taken. We then briefly discuss how simulations represent the matter and gas fields, before reviewing the dark-matter models compared in AIDA-TNG and the different ways in which they can modify small-scale structure.
+
+\subsection{Reionization and the intergalactic medium}
+
+Cosmic reionization is the epoch during which the IGM was ionized and heated by radiation from the first generations of galaxies and active galactic nuclei. The end of reionization occurred within approximately the first billion years after the Big Bang, although the duration and topology of the transition depend on the abundance and radiative properties of the early sources \cite{feng2019reionization}. The evolution of the ionized fraction is governed by the competition between the production of ionizing photons and their absorption by neutral hydrogen and recombinations in ionized gas.
+
+Recombinations are two-body interactions: an electron and an ionized hydrogen atom must encounter one another before a recombination can occur. The recombination rate per unit volume is therefore
+
+$$
+\dot n_{\rm rec}=n_e n_{\mathrm{H\,II}}\alpha_{\mathrm{H\,II}},
+$$
+
+where $n_e$ and $n_{\mathrm{H\,II}}$ are the number densities of free electrons and ionized hydrogen, respectively, and $\alpha_{\mathrm{H\,II}}$ is the recombination coefficient. In a fully ionized gas of fixed composition, both number densities are proportional to the gas density. The recombination rate then scales approximately as $\rho^2$. This is why density inhomogeneities enhance the total recombination rate: at fixed mean density, overdense regions contribute disproportionately more recombinations than underdense regions. This dependence is the physical motivation for introducing a clumping factor in reionization calculations \cite{feng2019reionization,davies2024clumping}.
+
+A simple density-based definition is
+
+$$
+C \equiv \frac{\langle \rho^2 \rangle}{\langle \rho \rangle^2},
+$$
+
+where the averages must be taken over a precisely specified gas phase and spatial region. For reionization, a more directly relevant definition weights the electron and ionized-hydrogen densities and the recombination coefficient,
+
+$$
+C_{\rm rec} \equiv \frac{\left\langle n_e n_{\mathrm{H\,II}} \alpha_{\mathrm{H\,II}} \right\rangle}{\langle n_e\rangle \langle n_{\mathrm{H\,II}}\rangle \langle\alpha_{\mathrm{H\,II}}\rangle}.
+$$
+
+The averages in these expressions are meaningful only after specifying which gas is considered part of the IGM. We use the dimensionless density, or overdensity,\footnote{Some literature uses the word ``overdensity'' for the fractional quantity $\rho/\bar\rho-1$. Here we use $\Delta$ for the density ratio, so that the two conventions are related by $\delta=\Delta-1$.}
+
+$$
+\Delta \equiv \frac{\rho - \bar\rho}{\bar\rho},
+$$
+
+where $\bar\rho$ is the cosmic mean density. In practice, we define the IGM by establishing a mask that eliminates the gas that is part of collapsed, galaxy-associated, or otherwise very dense structures by requiring $\Delta<\Delta_{\rm max}$. During reionization, it is also useful to remove cells that are not sufficiently ionized by requiring $x_{\mathrm{H\,II}}>x_{\mathrm{H\,II,min}}$, where $x_{\mathrm{H\,II}}$ is the ionized-hydrogen fraction. The exact thresholds are analysis choices and will be varied in the methodology below; their purpose is to make explicit which phase of the gas enters the average.
+
+We distinguish two related uses of the clumping factor. A local, simulation-defined clumping factor describes the density variations within a selected region of the simulation. An effective global clumping factor instead measures how much the total recombination rate in the selected IGM differs from the rate expected for a uniform gas with the same mean density. These two definitions give the same result only when they use the same gas, volume, ionization state, and temperature assumptions.
+
+This distinction matters because our choice of IGM changes the result. An overdensity cut removes dense gas from the calculation, while an ionization cut removes cells that are not sufficiently ionized. The resulting clumping factor therefore describes only the gas that passes both cuts. It should not be directly compared with a value calculated for the entire external IGM or for a different selection of cells. Davies et al. show that this distinction is also important when relating the clumping factor to the ionizing mean free path and photoionization rate \cite{davies2024clumping}.
+
+The reionization review literature often quotes values of order a few for simulation-based clumping factors during the epoch of reionization, but these values depend on redshift, resolution, the IGM definition, and whether the calculation is restricted to ionized gas \cite{feng2019reionization}. More recent analyses of the observed mean free path and photoionization rate infer larger effective global values under ionization-equilibrium assumptions \cite{davies2024clumping}. These estimates should therefore be interpreted as model- and definition-dependent quantities rather than universal constants.
+
+\subsection{Cosmological simulations and density-field observables}
+
+Cosmological simulations provide a way of following the nonlinear evolution of dark matter, gas, stars, and radiation from specified initial conditions. The large-scale initial density field is usually established by a linear matter power spectrum, while the late-time distribution is obtained by solving the gravitational dynamics and, in hydrodynamical simulations, the equations governing gas flows and thermochemistry \cite{vogelsberger2019simulations}. Dark matter is commonly represented by particles. In moving-mesh calculations, the gas is represented by Voronoi cells whose volumes and shapes evolve with the flow; quantities such as density, temperature, and ionization fractions are assigned to these cells.
+
+These different data representations matter for any measurement constructed from a density field. Particle data must be deposited onto a grid before a cell-based density can be formed. Therefore, the density field will heavily depend on the mass-assignment scheme, grid resolution, smoothing prescription, and treatment of empty cells. These choices affect the small-scale density variance and therefore have a particularly direct impact on a density-squared observable such as the clumping factor. They also affect the high-wavenumber part of the power spectrum since they introduce some scale-specific patterns into the density field.
+
+The THESAN suite is a radiation-hydrodynamical set of simulations designed to model the sources, gas, and radiation field responsible for hydrogen reionization \cite{garaldi2022thesan}. It therefore provides the gas and ionization information required to compare direct recombination-weighted clumping factors with estimators based on the photoionization rate and mean free path. In the present work, the corresponding numerical choices are tested explicitly rather than being hidden in the notation of the clumping-factor definition.
+
+The AIDA-TNG suite is designed to study how changes in the dark-matter model affect galaxy formation and large-scale structure. It combines the IllustrisTNG galaxy-formation model with several dark-matter scenarios, including CDM, thermal-relic WDM, constant-cross-section SIDM, and velocity-dependent SIDM. Because the simulations use the same baryonic model and matched initial conditions across the different dark-matter scenarios, differences in the resulting density fields can be related more directly to the underlying dark-matter physics \cite{despali2025aidatng}. This makes AIDA-TNG particularly suitable for comparing the clumping factor and matter power spectrum across dark-matter models.
+
+\subsection{Dark-matter models and small-scale clustering}
+
+Although dark matter is strongly supported by its gravitational effects on galaxies, clusters, and the expansion history of the Universe, its particle nature remains unknown. The standard $\Lambda$CDM model assumes that dark matter is cold and collisionless, an assumption that successfully describes structure formation on large scales. It is not, however, the only possibility consistent with those observations. Different microscopic properties, such as a non-negligible primordial velocity, a wave-like nature, or self-interactions between dark-matter particles, can leave the large-scale predictions nearly unchanged while producing different amounts and internal structures of small-scale halos. These alternatives motivate comparing several dark-matter models using observables that are sensitive to the nonlinear density field. The models relevant for the AIDA-TNG comparison are introduced below.
+
+\subsubsection{Cold dark matter}
+
+The reference cosmology is the $\Lambda$CDM model with cold, collisionless dark matter. Here, ``cold'' means that the particles had negligible thermal velocities when structure began to grow, while ``collisionless'' means that they interact primarily through gravity. As a result, density perturbations can grow over a broad range of scales, and small halos form first before merging into larger systems. In the linear regime, this behavior is described by the matter power spectrum, $P(k)$, which quantifies the strength of density fluctuations as a function of scale.
+
+CDM therefore provides the baseline against which the other models are compared. For this purpose, it is useful to consider the ratio
+
+$$
+R_P(k) \equiv \frac{P_{\rm model}(k)}{P_{\rm CDM}(k)}.
+$$
+
+In this work, $R_P(k)$ can refer either to the ratio of linear power spectra or to power spectra measured from the simulations. In the latter case, it includes the effects of nonlinear evolution and, when present, baryonic physics.
+
+On large scales, the alternative models considered below can remain close to this CDM prediction. Their differences become more apparent on smaller scales, where they can alter the initial power spectrum, the abundance of low-mass halos, or the internal distribution of matter within halos. These changes are relevant to the clumping factor because dense regions contribute disproportionately to the recombination rate.
+
+\subsubsection{Warm dark matter}
+
+Warm dark matter (WDM) particles have a non-negligible velocity dispersion after decoupling. Their free streaming erases perturbations below a characteristic scale before those perturbations can collapse gravitationally. As a result, the linear WDM power spectrum is smaller than the CDM power spectrum at sufficiently large wavenumber. This reduces the density variance on small mass scales, delays the formation of low-mass halos, and lowers the nonlinear abundance of dense structures. The resulting change in $P(k)$ is scale dependent and cannot be represented by a simple rescaling of the CDM amplitude.
+
+High-redshift Ly-$\alpha$ forest observations provide some of the strongest constraints on WDM because they probe the small scales where this suppression is expected. Current analyses generally place the lower bound on a thermal-relic WDM mass at several keV, with representative results ranging from roughly $3$ to $6\,\mathrm{keV}$ depending on the data and assumptions about the thermal history \cite{irsic2024wdm,villasenor2022wdm}. In this work we will analyze the clumping factor and power spectrum of the $3\,\mathrm{keV}$ mass model.
+
+
+\subsubsection{Self-interacting dark matter}
+
+Self-interacting dark matter (SIDM) extends the collisionless CDM picture by allowing dark-matter particles to exchange momentum and energy through elastic scattering. The interaction strength is commonly described by the cross section per unit mass, $\sigma/m_\chi$. Repeated scattering can redistribute energy within a halo, isotropize the velocity distribution, alter halo shapes, and produce central density cores or other changes in the inner density profile \cite{tulin2018sidm}.
+
+SIDM therefore differs conceptually from WDM and FDM. WDM and FDM primarily modify the initial small-scale power and the subsequent abundance of low-mass halos, whereas SIDM can leave the large-scale linear power spectrum close to CDM while changing the nonlinear evolution and internal structure of collapsed halos. Since the clumping factor weights dense regions strongly, changes in halo concentrations, central profiles, and substructure can propagate into both dark-matter and gas clumping statistics. The magnitude and even the sign of the change need not be universal because baryonic contraction, feedback, and the adopted IGM mask also affect the density field.
+
+\subsubsection{Velocity-dependent self-interacting dark matter}
+
+In velocity-dependent SIDM (vSIDM), the scattering strength varies with the relative velocity of the dark-matter particles,
+
+$$
+\frac{\sigma}{m_\chi}=\frac{\sigma(v)}{m_\chi}.
+$$
+
+This dependence allows interactions to be stronger in low-velocity dwarf-galaxy environments and weaker in groups and clusters. It can therefore provide appreciable changes to small halos while reducing the impact on systems with larger characteristic velocities. The resulting model can preserve the large-scale success of CDM while producing scale-dependent changes in halo structure and nonlinear density statistics.
+
+The AIDA-TNG suite includes both a constant-cross-section SIDM model and a velocity-dependent model, alongside CDM and several thermal-relic WDM models \cite{despali2025aidatng}. In this context, SIDM1 and vSIDM should be treated as specific simulation prescriptions, not as synonyms for the full class of possible self-interacting theories. Their observational constraints depend on the assumed mediator model, the velocity dependence, halo modeling, baryonic physics, and the observable used. The present analysis therefore compares their clumping and power-spectrum predictions directly rather than translating those predictions into a model-independent cross-section bound.
+
+\subsection{Connection to this work}
+
+The dark-matter models considered here affect the density field through different physical mechanisms. WDM reduces small-scale structure through free streaming, while SIDM and vSIDM modify the subsequent nonlinear evolution and internal structure of halos. All of these effects can influence a density-squared statistic, but they need not produce the same response in the matter power spectrum and in the clumping factor.
+
+The clumping factor could therefore provide us with a newfound way to differentiate the different dark matter models, which lies at the heart of the motivation for this work. However, its calculation also depends on nonlinear evolution, baryonic physics, ionization topology, the overdensity and ionization masks, spatial resolution, smoothing, and the density-field estimator. The methodology below makes these dependencies explicit before applying the estimators to THESAN and comparing the dark-matter models in AIDA-TNG.

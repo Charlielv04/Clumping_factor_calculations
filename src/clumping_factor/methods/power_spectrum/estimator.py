@@ -18,6 +18,36 @@ class PowerSpectrumResult:
     timings: dict[str, float]
 
 
+def rescale_power_spectrum(result: PowerSpectrumResult, factor: float) -> PowerSpectrumResult:
+    """Rescale power amplitudes without changing the measured wavenumbers.
+
+    A spatially folded field occupies a volume smaller by ``f^3``.  The FFT
+    estimator therefore reports the power of the averaged folded field, which
+    is lower than the parent-box power by that same volume factor.  Folding
+    callers can apply the compensating factor to both ``P(k)`` and
+    ``Delta^2(k)`` while retaining the effective-box k grid.
+    """
+    value = float(factor)
+    if not np.isfinite(value) or value <= 0:
+        raise ValueError("power rescaling factor must be positive and finite.")
+    if value == 1.0:
+        return result
+    diagnostics = {
+        **result.diagnostics,
+        "power_amplitude_rescaling": value,
+        "normalization": f"{result.diagnostics.get('normalization', 'power spectrum')}; amplitude rescaled by {value:g}",
+    }
+    return PowerSpectrumResult(
+        k=result.k,
+        power=result.power * value,
+        dimensionless_power=result.dimensionless_power * value,
+        mode_counts=result.mode_counts,
+        k_edges=result.k_edges,
+        diagnostics=diagnostics,
+        timings=result.timings,
+    )
+
+
 def _positive_k_values(grid_size: int, box_size: float) -> np.ndarray:
     frequency = 2.0 * np.pi * np.fft.fftfreq(grid_size, d=float(box_size) / grid_size)
     kx, ky, kz = np.meshgrid(frequency, frequency, frequency, indexing="ij", sparse=True)
