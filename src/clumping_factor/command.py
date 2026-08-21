@@ -20,7 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
         "diagnostics": ("equations", "density-ratio"),
         "plot": ("result", "campaign", "evolution", "model", "equations", "benchmark", "igm"),
         "results": ("validate",),
-        "campaign": ("plan", "submit"),
+        "campaign": ("plan", "submit", "submit-array"),
         "methods": ("catalog",),
     }.items():
         subparsers = groups.add_parser(group).add_subparsers(dest="action")

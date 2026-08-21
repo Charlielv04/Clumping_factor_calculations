@@ -34,7 +34,7 @@ def test_command_tree_forwards_options_and_help(monkeypatch):
         ("plot", "result"), ("plot", "campaign"), ("plot", "evolution"), ("plot", "model"),
         ("plot", "equations"), ("plot", "benchmark"), ("plot", "igm"),
         ("results", "validate"),
-        ("campaign", "plan"), ("campaign", "submit"),
+        ("campaign", "plan"), ("campaign", "submit"), ("campaign", "submit-array"),
     ],
 )
 def test_every_approved_route_delegates_real_nested_help(group, action, capsys):
@@ -53,7 +53,7 @@ def test_every_declared_route_resolves():
         "diagnostics": ("equations", "density-ratio"),
         "plot": ("result", "campaign", "evolution", "model", "equations", "benchmark", "igm"),
         "results": ("validate",),
-        "campaign": ("plan", "submit"),
+        "campaign": ("plan", "submit", "submit-array"),
         "methods": ("catalog",),
     }
     assert all(callable(command._route(group, action)) for group, actions in routes.items() for action in actions)

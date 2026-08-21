@@ -1,0 +1,46 @@
+name = "paper-aida-l75-power-consistency"
+output_root = "results-paper-validation"
+
+[simulation]
+family = "aida-tng"
+name = "L75n910_CDM"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L75n910_CDM/output"
+
+[matrix]
+# CDM at z=0 is the low-cost numerical reference; model-to-model spectra can
+# reuse the existing AIDA campaign after this estimator convention is fixed.
+snapshots = [99]
+particle_types = ["dm"]
+methods = ["power-spectrum.combined", "power-spectrum.pylians"]
+grids = [256, 512, 1024]
+
+[method_options."power-spectrum.combined"]
+fold_factors = [1, 2, 4]
+bin_count = 80
+binning = "log"
+smoothing = "none"
+# This is the strict NumPy-versus-Pylians consistency pass: neither backend
+# applies a mass-assignment deconvolution.  The corrected control is listed in
+# the hand-off commands accompanying this manifest.
+pylians_mas = "None"
+
+[method_options."power-spectrum.pylians"]
+fold_factors = [1, 2, 4]
+bin_count = 80
+binning = "log"
+smoothing = "none"
+# This second series is the corrected control for comparison with AREPO-style
+# spectra after the strict same-grid backend comparison above.
+pylians_mas = "CIC"
+
+[execution]
+threads = 8
+load_mode = "chunked"
+chunk_size = 1000000
+mas = "CIC"
+
+[resources]
+cpus = 8
+memory = "128gb"
+walltime = "24:00:00"
+queue = "mini"

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from clumping_factor.infrastructure.campaigns import plan_campaign, render_pbs_worker, write_manifest
+from clumping_factor.infrastructure.campaigns import plan_campaign, render_pbs_array, render_pbs_worker, write_manifest
 
 
 def _write_matrix(
@@ -83,6 +83,31 @@ def test_pbs_worker_uses_manifest_resources(tmp_path: Path):
     assert "$HOME/.conda/envs/clumping-factor/bin" in worker
     assert "select=1:ncpus=8:mem=32gb" in worker
     assert "#PBS -l walltime=04:00:00" in worker
+
+
+def test_pbs_array_uses_one_submission_and_selects_each_task(tmp_path: Path):
+    campaign = tmp_path / "campaign.toml"
+    _write_matrix(campaign, methods='["sphere"]', threads=8)
+    manifest = plan_campaign(campaign)
+
+    worker = render_pbs_array(manifest)
+
+    assert "#PBS -J 0-1" in worker
+    assert 'task_index="${PBS_ARRAY_INDEX:-${PBS_ARRAYID:-}}"' in worker
+    assert 'case "$task_index" in' in worker
+    assert "    0)" in worker and "    1)" in worker
+    assert worker.count("clumping clumping compute") == 2
+    assert "Invalid PBS array index" in worker
+    assert "#PBS -l select=1:ncpus=8:mem=32gb" in worker
+
+
+def test_pbs_array_supports_torque_directive(tmp_path: Path):
+    campaign = tmp_path / "campaign.toml"
+    _write_matrix(campaign, methods='["sphere"]')
+
+    worker = render_pbs_array(plan_campaign(campaign), array_syntax="torque")
+
+    assert "#PBS -t 0-1" in worker
 
 
 def test_explicit_command_tasks_are_rejected(tmp_path: Path):

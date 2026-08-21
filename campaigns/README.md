@@ -14,6 +14,14 @@ clumping campaign plan campaigns/tng-smoke.toml
 
 Use `clumping campaign submit ...` to render generic PBS workers. Submission
 is dry-run by default; `--execute` is the explicit opt-in for `qsub`.
+For a single scheduler submission that keeps the campaign tasks independent,
+use `submit-array`: it renders one PBS/OpenPBS job array, indexed over the
+deterministic task manifest.  Pass `--array-syntax torque` on Torque systems.
+
+```text
+clumping campaign submit-array campaigns/tng-smoke.toml
+clumping campaign submit-array campaigns/tng-smoke.toml --execute
+```
 
 Every executable method is capability-checked by the planner. Combined power
 spectra use `power-spectrum.combined`; alternative raw/grid methods may provide their

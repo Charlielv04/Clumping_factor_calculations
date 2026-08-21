@@ -1,0 +1,38 @@
+name = "paper-thesan1-reference-diagnostics"
+# Kept separate from historical result trees so that the paper inputs are
+# identifiable and can be regenerated without overwriting exploratory work.
+output_root = "results-paper-validation"
+
+[simulation]
+family = "thesan"
+name = "Thesan-1"
+base_path = "/lustre/work/carlos.lopez/Thesan-1/output"
+
+[matrix]
+# Snapshot 065 is the matched comparison point to existing THESAN-2 products;
+# snapshot 080 extends the check to the late reionization-era output.
+snapshots = [65, 80]
+particle_types = ["gas"]
+methods = ["diagnostics.equations"]
+
+[method_options."diagnostics.equations"]
+# These three inputs must be provenance-bearing, THESAN-1-specific tables.
+# The command deliberately fails rather than accepting a legacy table without
+# provenance.  Update these paths only if the authoritative tables live elsewhere.
+mfp_file = "/lustre/work/carlos.lopez/Thesan-1/mfp.dat"
+gamma_hi_file = "/lustre/work/carlos.lopez/Thesan-1/Gamma_HI_Thesan1.dat"
+temperature_file = "/lustre/work/carlos.lopez/Thesan-1/Tigm_Thesan1.dat"
+sigma_hi_cm2 = 6.3e-18
+photon_groups = [0, 1, 2]
+thresholds = [-0.5, 0.0, 5.0, 10.0, 15.0, 20.0, 25.0]
+ionized_density_thresholds = [10.0, 15.0, 20.0, 25.0]
+ionized_cuts = [0.9, 0.99]
+recombination_temperature_mode = "tigm"
+chunk_size = 1000000
+workers = 1
+
+[resources]
+cpus = 1
+memory = "16gb"
+walltime = "08:00:00"
+queue = "tiny"

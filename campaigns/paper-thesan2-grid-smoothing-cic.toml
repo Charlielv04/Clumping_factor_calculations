@@ -1,0 +1,47 @@
+name = "paper-thesan2-grid-smoothing-cic"
+output_root = "results-paper-validation"
+
+[simulation]
+family = "thesan"
+name = "Thesan-2"
+base_path = "/lustre/work/carlos.lopez/Thesan-2/output"
+
+[matrix]
+# A compact representative grid test.  The native-cell reference is supplied
+# by the equation-diagnostic campaign/results; these are gridded estimators.
+snapshots = [80]
+particle_types = ["gas"]
+methods = ["clumping.sphere", "clumping.cube", "clumping.pylians"]
+grids = [256, 512, 1024]
+
+[method_options."clumping.sphere"]
+radius_bins = 10
+threshold_min = -1.0
+threshold_max = 25.0
+threshold_count = 261
+
+[method_options."clumping.cube"]
+radius_bins = 10
+threshold_min = -1.0
+threshold_max = 25.0
+threshold_count = 261
+
+[method_options."clumping.pylians"]
+filter_type = "Top-Hat"
+radius_bins = 10
+threshold_min = -1.0
+threshold_max = 25.0
+threshold_count = 261
+
+[execution]
+threads = 8
+load_mode = "chunked"
+chunk_size = 1000000
+mas = "CIC"
+radius_bin_batch_size = 1
+
+[resources]
+cpus = 8
+memory = "128gb"
+walltime = "24:00:00"
+queue = "mini"

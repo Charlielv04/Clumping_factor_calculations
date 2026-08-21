@@ -438,6 +438,79 @@ def render_pbs_worker(task: CampaignTask, *, job_name: str | None = None) -> str
     return "\n".join(lines) + "\n"
 
 
+def render_pbs_array(
+    manifest: CampaignManifest,
+    *,
+    job_name: str | None = None,
+    array_syntax: str = "pbspro",
+) -> str:
+    """Render one PBS job array whose index selects a deterministic campaign task.
+
+    PBS Pro/OpenPBS uses ``-J`` and ``PBS_ARRAY_INDEX``; Torque uses ``-t``
+    and ``PBS_ARRAYID``.  The worker accepts either environment variable so
+    that only the scheduler directive needs to change between implementations.
+    Arrays require uniform resources because PBS allocates one resource shape
+    for every index in a single array.
+    """
+    tasks = manifest.tasks
+    if not tasks:
+        raise ValueError("Cannot render a PBS array for an empty campaign manifest.")
+    resources = tasks[0].resources
+    if any(task.resources != resources for task in tasks[1:]):
+        raise ValueError("PBS array tasks must have identical resource requests.")
+    directive_by_syntax = {"pbspro": "-J", "torque": "-t"}
+    try:
+        array_directive = directive_by_syntax[array_syntax]
+    except KeyError as exc:
+        allowed = ", ".join(sorted(directive_by_syntax))
+        raise ValueError(f"array_syntax must be one of: {allowed}") from exc
+
+    lines = [
+        "#!/bin/sh",
+        f"#PBS -N {job_name or manifest.name}",
+        "#PBS -V",
+        f"#PBS {array_directive} 0-{len(tasks) - 1}",
+    ]
+    if resources.queue:
+        lines.append(f"#PBS -q {resources.queue}")
+    lines += [
+        f"#PBS -l select=1:ncpus={resources.cpus}:mem={resources.memory}",
+        f"#PBS -l walltime={resources.walltime}",
+        "set -eu",
+        "if [ -f \"$HOME/.conda/etc/profile.d/conda.sh\" ]; then",
+        "    . \"$HOME/.conda/etc/profile.d/conda.sh\"",
+        "    conda activate clumping-factor",
+        "elif [ -x \"$HOME/.conda/envs/clumping-factor/bin/clumping\" ]; then",
+        "    export PATH=\"$HOME/.conda/envs/clumping-factor/bin:$PATH\"",
+        "    export CONDA_DEFAULT_ENV=clumping-factor",
+        "    export CONDA_PREFIX=\"$HOME/.conda/envs/clumping-factor\"",
+        "else",
+        "    echo 'clumping-factor conda environment was not found' >&2",
+        "    exit 127",
+        "fi",
+        "cd \"${PBS_O_WORKDIR:-.}\"",
+        "task_index=\"${PBS_ARRAY_INDEX:-${PBS_ARRAYID:-}}\"",
+        "if [ -z \"$task_index\" ]; then",
+        "    echo 'PBS array index was not set' >&2",
+        "    exit 2",
+        "fi",
+        "case \"$task_index\" in",
+    ]
+    for index, task in enumerate(tasks):
+        lines.append(f"    {index})")
+        lines.extend(f"        export {key}={shlex.quote(value)}" for key, value in task.environment)
+        lines.append("        exec " + " ".join(shlex.quote(token) for token in task.command))
+        lines.append("        ;;")
+    lines += [
+        "    *)",
+        "        echo \"Invalid PBS array index: $task_index\" >&2",
+        "        exit 2",
+        "        ;;",
+    ]
+    lines += ["esac"]
+    return "\n".join(lines) + "\n"
+
+
 def submit_campaign(manifest: CampaignManifest, *, execute: bool = False) -> list[str]:
     rendered = [render_pbs_worker(task) for task in manifest.tasks]
     if execute:
@@ -446,19 +519,40 @@ def submit_campaign(manifest: CampaignManifest, *, execute: bool = False) -> lis
     return rendered
 
 
+def submit_campaign_array(
+    manifest: CampaignManifest,
+    *,
+    execute: bool = False,
+    array_syntax: str = "pbspro",
+) -> str:
+    """Render or submit a single PBS job array for every task in a campaign."""
+    rendered = render_pbs_array(manifest, array_syntax=array_syntax)
+    if execute:
+        subprocess.run(["qsub"], input=rendered, text=True, check=True)
+    return rendered
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Plan or submit a declarative campaign.")
-    parser.add_argument("action", choices=("plan", "submit"))
+    parser.add_argument("action", choices=("plan", "submit", "submit-array"))
     parser.add_argument("campaign", type=Path)
     parser.add_argument("--manifest", type=Path)
     parser.add_argument("--execute", action="store_true", help="Submit rendered workers with qsub.")
+    parser.add_argument(
+        "--array-syntax",
+        choices=("pbspro", "torque"),
+        default="pbspro",
+        help="PBS array directive: pbspro uses -J; torque uses -t.",
+    )
     args = parser.parse_args(argv)
     manifest = plan_campaign(args.campaign)
     if args.action == "plan":
         destination = args.manifest or args.campaign.with_suffix(".manifest.json")
         write_manifest(manifest, destination)
         print(f"Planned {len(manifest.tasks)} tasks: {destination}")
-    else:
+    elif args.action == "submit":
         for index, script in enumerate(submit_campaign(manifest, execute=args.execute), start=1):
             print(f"# worker {index}\n{script}", end="")
+    else:
+        print(submit_campaign_array(manifest, execute=args.execute, array_syntax=args.array_syntax), end="")
 
