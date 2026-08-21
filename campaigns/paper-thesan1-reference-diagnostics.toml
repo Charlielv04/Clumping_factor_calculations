@@ -9,9 +9,9 @@ name = "Thesan-1"
 base_path = "/lustre/work/carlos.lopez/Thesan-1/output"
 
 [matrix]
-# Snapshot 065 is the matched comparison point to existing THESAN-2 products;
-# snapshot 080 extends the check to the late reionization-era output.
-snapshots = [65, 80]
+# THESAN-1 supplies outputs at 075 and 080; 075 is the earliest available
+# representative late-reionization snapshot and 080 extends the check later.
+snapshots = [75, 80]
 particle_types = ["gas"]
 methods = ["diagnostics.equations"]
 
@@ -19,7 +19,7 @@ methods = ["diagnostics.equations"]
 # These three inputs must be provenance-bearing, THESAN-1-specific tables.
 # The command deliberately fails rather than accepting a legacy table without
 # provenance.  Update these paths only if the authoritative tables live elsewhere.
-mfp_file = "/lustre/work/carlos.lopez/Thesan-1/mfp.dat"
+mfp_file = "/lustre/work/carlos.lopez/Thesan-1/mfp_Thesan1.dat"
 gamma_hi_file = "/lustre/work/carlos.lopez/Thesan-1/Gamma_HI_Thesan1.dat"
 temperature_file = "/lustre/work/carlos.lopez/Thesan-1/Tigm_Thesan1.dat"
 sigma_hi_cm2 = 6.3e-18
@@ -29,10 +29,10 @@ ionized_density_thresholds = [10.0, 15.0, 20.0, 25.0]
 ionized_cuts = [0.9, 0.99]
 recombination_temperature_mode = "tigm"
 chunk_size = 1000000
-workers = 1
+workers = 8
 
 [resources]
-cpus = 1
-memory = "16gb"
-walltime = "08:00:00"
-queue = "tiny"
+cpus = 8
+memory = "128gb"
+walltime = "24:00:00"
+queue = "mini"
