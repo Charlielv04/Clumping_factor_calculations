@@ -49,3 +49,5 @@ Generated workers explicitly activate the `clumping-factor` conda environment,
 with a fallback to `~/.conda/envs/clumping-factor/bin`, and include `#PBS -V` as
 an additional environment safeguard. They also change to `$PBS_O_WORKDIR` so
 relative canonical result paths resolve from the submission directory.
+Scheduler stdout and stderr are written to `logs/pbs/` with the scheduler's
+native job-name and job-ID suffixes (for example, `campaign-name.o589737`).

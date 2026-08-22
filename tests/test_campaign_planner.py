@@ -78,6 +78,8 @@ def test_pbs_worker_uses_manifest_resources(tmp_path: Path):
     worker = render_pbs_worker(plan_campaign(campaign).tasks[0])
     assert "#PBS -q mini" in worker
     assert "#PBS -V" in worker
+    assert "#PBS -o logs/pbs/" in worker
+    assert "#PBS -e logs/pbs/" in worker
     assert "cd \"${PBS_O_WORKDIR:-.}\"" in worker
     assert "conda activate clumping-factor" in worker
     assert "$HOME/.conda/envs/clumping-factor/bin" in worker
@@ -93,6 +95,8 @@ def test_pbs_array_uses_one_submission_and_selects_each_task(tmp_path: Path):
     worker = render_pbs_array(manifest)
 
     assert "#PBS -J 1-2" in worker
+    assert "#PBS -o logs/pbs/" in worker
+    assert "#PBS -e logs/pbs/" in worker
     assert 'task_index="${PBS_ARRAY_INDEX:-${PBS_ARRAYID:-}}"' in worker
     assert 'case "$task_index" in' in worker
     assert "    1)" in worker and "    2)" in worker

@@ -413,6 +413,8 @@ def render_pbs_worker(task: CampaignTask, *, job_name: str | None = None) -> str
         "#!/bin/sh",
         f"#PBS -N {job_name or task.task_id}",
         "#PBS -V",
+        "#PBS -o logs/pbs/",
+        "#PBS -e logs/pbs/",
     ]
     if resources.queue:
         lines.append(f"#PBS -q {resources.queue}")
@@ -470,6 +472,8 @@ def render_pbs_array(
         "#!/bin/sh",
         f"#PBS -N {job_name or manifest.name}",
         "#PBS -V",
+        "#PBS -o logs/pbs/",
+        "#PBS -e logs/pbs/",
         f"#PBS {array_directive} 1-{len(tasks)}",
     ]
     if resources.queue:
@@ -515,6 +519,7 @@ def render_pbs_array(
 def submit_campaign(manifest: CampaignManifest, *, execute: bool = False) -> list[str]:
     rendered = [render_pbs_worker(task) for task in manifest.tasks]
     if execute:
+        Path("logs/pbs").mkdir(parents=True, exist_ok=True)
         for script in rendered:
             subprocess.run(["qsub"], input=script, text=True, check=True)
     return rendered
@@ -529,6 +534,7 @@ def submit_campaign_array(
     """Render or submit a single PBS job array for every task in a campaign."""
     rendered = render_pbs_array(manifest, array_syntax=array_syntax)
     if execute:
+        Path("logs/pbs").mkdir(parents=True, exist_ok=True)
         subprocess.run(["qsub"], input=rendered, text=True, check=True)
     return rendered
 

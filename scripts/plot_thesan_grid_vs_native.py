@@ -50,21 +50,15 @@ def pylians_curves(simulation: str) -> tuple[dict[int, tuple[np.ndarray, np.ndar
 
 def thesan1_native_curve() -> tuple[np.ndarray, np.ndarray, Path]:
     path = (
-        ROOT
+        CANONICAL_RESULTS
         / "thesan/Thesan-1/diagnostics/diagnostics.equations/gas/snapshot080"
-        / "science-0542ede416c9/execution-44136fa355b3_run001.json"
+        / "science-c96633188a5b/execution-829d7e11abfd_run001.json"
     )
     document = read_document(path)
     if document.get("raw_volume_clumping_factor_quantity") != "C_standard_raw_volume":
         raise ValueError(f"{path} does not contain the standard native volume-weighted clumping factor.")
-    rows = [
-        row
-        for row in document["rows"]
-        if str(row.get("mask_name", "")).startswith("overdensity_lt_")
-        and "__" not in str(row.get("mask_name", ""))
-    ]
     thresholds = np.asarray(document["thresholds"], dtype=float)
-    values = np.asarray([row["C_standard_raw_volume"] for row in rows], dtype=float)
+    values = np.asarray(document["raw_volume_clumping_factors"], dtype=float)
     if thresholds.shape != values.shape:
         raise ValueError(f"{path} has mismatched standard native-cell threshold and clumping arrays.")
     return thresholds, values, path
