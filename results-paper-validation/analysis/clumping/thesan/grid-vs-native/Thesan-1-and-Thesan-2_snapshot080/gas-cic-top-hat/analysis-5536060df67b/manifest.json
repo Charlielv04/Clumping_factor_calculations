@@ -1,0 +1,67 @@
+{
+  "analysis_kind": "grid-vs-native",
+  "artifacts": [
+    {
+      "media_type": "image/png",
+      "path": "artifacts/thesan_grid_vs_native_snapshot080.png",
+      "sha256": "a2a87cfbda40c38ba42f2646e97b6fbac51a50bd42822339065417df41d3d2cd",
+      "size": 249839
+    }
+  ],
+  "domain": "clumping",
+  "family": "thesan",
+  "generator": "scripts/plot_thesan_grid_vs_native.py",
+  "inputs": [
+    {
+      "path": "C:/Users/carlo/Documents/ClumpingFactorSuite/Clumping_factor_calculations/results-paper-validation/thesan/Thesan-1/clumping/clumping.pylians/gas/snapshot080/science-258ce0931bb1/execution-e758008c7cc5_run001.json",
+      "sha256": "6633cb4f9f08882600fc620cd34b09c842865e8f0524b764d273d5c5b123f773"
+    },
+    {
+      "path": "C:/Users/carlo/Documents/ClumpingFactorSuite/Clumping_factor_calculations/results-paper-validation/thesan/Thesan-1/clumping/clumping.pylians/gas/snapshot080/science-41644f20f264/execution-e758008c7cc5_run001.json",
+      "sha256": "416990cef304dde21011eb3106937f4efc678b5c71c9950982eb4ae983907fb0"
+    },
+    {
+      "path": "C:/Users/carlo/Documents/ClumpingFactorSuite/Clumping_factor_calculations/results-paper-validation/thesan/Thesan-1/clumping/clumping.pylians/gas/snapshot080/science-fb11780b2d61/execution-e758008c7cc5_run001.json",
+      "sha256": "7d9dbabae560014b92426280ab367280763165a4a35407a7b0ef657371a05caf"
+    },
+    {
+      "path": "C:/Users/carlo/Documents/ClumpingFactorSuite/Clumping_factor_calculations/results-paper-validation/thesan/Thesan-2/clumping/clumping.pylians/gas/snapshot080/science-0e8321f3a243/execution-e758008c7cc5_run001.json",
+      "sha256": "8d608177fa6c13610d0d7a25fe47ada85b4c047d00eda629ee4bd5595df2d496"
+    },
+    {
+      "path": "C:/Users/carlo/Documents/ClumpingFactorSuite/Clumping_factor_calculations/results-paper-validation/thesan/Thesan-2/clumping/clumping.pylians/gas/snapshot080/science-737f82c3bb27/execution-e758008c7cc5_run001.json",
+      "sha256": "2bea72632211609fcc2e7b9b6e92321743d3d08c05c8329c24dc3f6fda975ee8"
+    },
+    {
+      "path": "C:/Users/carlo/Documents/ClumpingFactorSuite/Clumping_factor_calculations/results-paper-validation/thesan/Thesan-2/clumping/clumping.pylians/gas/snapshot080/science-d0d81360d462/execution-e758008c7cc5_run001.json",
+      "sha256": "ca2e412e6555db32abc5b4e6efcc2a68a9bea829363840f5209d7bc93bbf5426"
+    },
+    {
+      "path": "C:/Users/carlo/Documents/ClumpingFactorSuite/Clumping_factor_calculations/results-paper-validation/thesan/Thesan-1/diagnostics/diagnostics.equations/gas/snapshot080/science-0542ede416c9/execution-44136fa355b3_run001.json",
+      "sha256": "f42c605aa8d0fa92efcbe93143e37c95d91154a31c127a74cd13ae10286858df"
+    },
+    {
+      "path": "C:/Users/carlo/Documents/ClumpingFactorSuite/Clumping_factor_calculations/results/thesan/Thesan-2/clumping/clumping.raw-volume-weighted/gas/snapshot080/science-6360d60b6c57/execution-83be40a864d4_run001.json",
+      "sha256": "ea014d4f368dac9008c397bd95d1a59b8c936e65e8c976c3856b8b72cebdaa81"
+    }
+  ],
+  "kind": "analysis",
+  "legacy_sources": [],
+  "method_label": "gas-cic-top-hat",
+  "options": {
+    "field": "total-gas-density",
+    "filter_type": "Top-Hat",
+    "grid_backend": "pylians",
+    "grids": [
+      256,
+      512,
+      1024
+    ],
+    "mas": "CIC",
+    "native_estimator": "volume-weighted-standard-density-clumping",
+    "snapshot": 80,
+    "x_axis": "density-contrast-cutoff-delta-max"
+  },
+  "schema_version": 1,
+  "subject": "Thesan-1-and-Thesan-2_snapshot080"
+}
