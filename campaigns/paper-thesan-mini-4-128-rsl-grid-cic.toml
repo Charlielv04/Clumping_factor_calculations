@@ -1,0 +1,33 @@
+me = "paper-thesan-mini-4-128-rsl-grid-cic"
+output_root = "results"
+
+[simulation]
+family = "thesan"
+name = "thesan-mini-4-128-rsl"
+base_path = "/lustre/work/carlos.lopez/Simulations/output_4_128_rsl"
+
+[matrix]
+snapshots = [12]
+particle_types = ["gas"]
+methods = ["clumping.pylians"]
+grids = [64, 128, 256, 512, 1024]
+
+[method_options."clumping.pylians"]
+filter_type = "Top-Hat"
+radius_bins = 10
+threshold_min = -1.0
+threshold_max = 25.0
+threshold_count = 200
+
+[execution]
+threads = 8
+load_mode = "chunked"
+chunk_size = 1000000
+mas = "CIC"
+radius_bin_batch_size = 1
+
+[resources]
+cpus = 8
+memory = "128gb"
+walltime = "24:00:00"
+queue = "mini"
