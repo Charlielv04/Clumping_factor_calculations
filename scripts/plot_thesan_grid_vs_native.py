@@ -11,8 +11,8 @@ import numpy as np
 from clumping_factor.infrastructure.artifacts import analysis_artifact_path, write_analysis_manifest
 
 
-ROOT = Path("results-paper-validation").resolve()
-CANONICAL_RESULTS = Path("results").resolve()
+ROOT = Path("results").resolve()
+CANONICAL_RESULTS = ROOT
 SNAPSHOT = 80
 GRIDS = (256, 512, 1024)
 COLORS = {256: "#1f77b4", 512: "#ff7f0e", 1024: "#2ca02c"}

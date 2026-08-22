@@ -450,7 +450,8 @@ def render_pbs_array(
     and ``PBS_ARRAYID``.  The worker accepts either environment variable so
     that only the scheduler directive needs to change between implementations.
     Arrays require uniform resources because PBS allocates one resource shape
-    for every index in a single array.
+    for every index in a single array.  Use one-based indices because the
+    target OpenPBS/Torque installations reject a zero-valued array index.
     """
     tasks = manifest.tasks
     if not tasks:
@@ -469,7 +470,7 @@ def render_pbs_array(
         "#!/bin/sh",
         f"#PBS -N {job_name or manifest.name}",
         "#PBS -V",
-        f"#PBS {array_directive} 0-{len(tasks) - 1}",
+        f"#PBS {array_directive} 1-{len(tasks)}",
     ]
     if resources.queue:
         lines.append(f"#PBS -q {resources.queue}")
@@ -496,7 +497,7 @@ def render_pbs_array(
         "fi",
         "case \"$task_index\" in",
     ]
-    for index, task in enumerate(tasks):
+    for index, task in enumerate(tasks, start=1):
         lines.append(f"    {index})")
         lines.extend(f"        export {key}={shlex.quote(value)}" for key, value in task.environment)
         lines.append("        exec " + " ".join(shlex.quote(token) for token in task.command))
