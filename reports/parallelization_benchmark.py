@@ -204,20 +204,18 @@ def _write_figure(controlled: list[dict[str, Any]], output: Path) -> None:
     speedup = medians[workers.index(1)] / medians[-1]
 
     figure, axis = plt.subplots(figsize=(6.4, 3.25), constrained_layout=True)
-    positions = list(range(len(workers)))
-    axis.bar(positions, medians, width=0.56, color="#4C72B0", zorder=2)
-    axis.errorbar(positions, medians, yerr=[lower, upper], fmt="none", color="black", capsize=4, lw=1.2, zorder=3)
-    for position, median in zip(positions, medians):
-        axis.text(position, median + 0.35, f"{median:.2f}", ha="center", va="bottom", fontsize=10)
-    axis.text(0.5, max(medians) * 0.78, f"{speedup:.2f}$\\times$ speedup", ha="center", va="center", fontsize=11)
+    axis.plot(workers, medians, marker="o", markersize=6, lw=2, color="#4C72B0", zorder=3)
+    axis.errorbar(workers, medians, yerr=[lower, upper], fmt="none", color="black", capsize=4, lw=1.2, zorder=4)
+    axis.text(0.62, 0.79, f"{speedup:.2f}$\\times$ speedup", transform=axis.transAxes, ha="center", va="center", fontsize=11)
     axis.set(
-        title=r"Controlled Thesan-2 timing ($512^3$ dark-matter grid)",
+        title=r"Controlled Thesan-2 scaling ($512^3$ dark-matter grid)",
         xlabel="Effective workers",
         ylabel="End-to-end wall time [min]",
-        xticks=positions,
-        xticklabels=[str(worker) for worker in workers],
         ylim=(0, max(medians) * 1.14),
     )
+    axis.set_xscale("log", base=2)
+    axis.set_xlim(0.8, 18)
+    axis.set_xticks(workers, [str(worker) for worker in workers])
     axis.grid(axis="y", alpha=0.25, zorder=0)
     figure.savefig(output, dpi=220)
     plt.close(figure)

@@ -61,6 +61,82 @@ nofootinbib,
 
 \preprint{APS/123-QED}
 
+% The report cover and integrity declaration required by the Ecole polytechnique
+% internship booklet (printed pages 11 and 12).
+\onecolumngrid
+\pagestyle{empty}
+\thispagestyle{empty}
+    \begin{center}
+        {\large\bfseries \`ECOLE POLYTECHNIQUE\par}
+        \vspace{1.2cm}
+        {\large PROMOTION : [\`a compl\'eter]\par}
+        {\large MASTER : High Energy Physics\par}
+
+        \vfill
+
+        {\large\bfseries RAPPORT DE STAGE DE RECHERCHE\par}
+        \vspace{0.8cm}
+        {\large\bfseries Titre du sujet \`a d\'eterminer\par}
+        \vspace{0.8cm}
+        {\large RAPPORT NON CONFIDENTIEL\par}
+
+        \vfill
+
+        {\large Carlos Lopez Villanueva\par}
+        \vspace{1.2cm}
+
+        \begin{tabular}{@{}ll@{}}
+            \textbf{Option :} & D\'epartement de physique \\
+            \textbf{Champ :} & Astroparticle physics \\
+            \textbf{Enseignant r\'ef\'erent :} & S\'ebastien Renaux-Petel \\
+            \textbf{Tuteur de stage :} & Enrico Garaldi \\
+            \textbf{Dates du stage :} & 11 May 2026 -- 31 August 2026
+        \end{tabular}
+
+        \vfill
+
+        \begin{minipage}{0.8\textwidth}
+            \centering
+            \textbf{Organisme d'accueil}\\[0.2cm]
+            KAVLI Institute for the Physics and Mathematics of the Universe\\
+            University of Tokyo\\[0.2cm]
+            5 Chome-1-5 Kashiwanoha\\
+            Kashiwa, Chiba 277-8583, Japan
+        \end{minipage}
+    \end{center}
+
+\newpage
+\thispagestyle{empty}
+\begin{center}
+    {\large\bfseries D\'eclaration d'int\'egrit\'e relative au plagiat\par}
+\end{center}
+
+\vspace{1.5cm}
+
+Je soussign\'e(e) Carlos Lopez Villanueva certifie sur l'honneur :
+
+\begin{enumerate}
+    \item Que les r\'esultats d\'ecrits dans ce rapport sont l'aboutissement de mon travail.
+    \item Que je suis l'auteur de ce rapport.
+    \item Que je n'ai pas utilis\'e des sources ou r\'esultats tiers sans clairement les citer et les r\'ef\'erencer selon les r\`egles bibliographiques pr\'econis\'ees.
+\end{enumerate}
+
+\vspace{1.2cm}
+
+\noindent\textbf{Mention \`a recopier}\par
+
+\vspace{0.4cm}
+
+\noindent Je d\'eclare que ce travail ne peut \^etre suspect\'e de plagiat.
+
+\vfill
+
+\noindent Date : \rule{2.3cm}{0.4pt}\hfill Signature : \rule{2.3cm}{0.4pt}
+
+\clearpage
+\twocolumngrid
+\pagestyle{plain}
+
 \title{Testing Clumping-Factor Estimators in the THESAN Simulations}% Force line breaks with \\
 
 \author{Carlos Lopez Villanueva}
@@ -75,7 +151,7 @@ nofootinbib,
 
 %\keywords{Suggested keywords}%Use showkeys class option if keyword
                               %display desired
-\maketitle
+% The custom cover above replaces the standard REVTeX title block.
 
 %\tableofcontents
 \section{Introduction}
@@ -464,6 +540,7 @@ We later compare this estimator with our standard direct implementation. However
 
 
 \subsection{Approximate estimator 2: photon-density closure}
+\label{sec:photon-density-estimator}
 Davies et al. introduce a second estimator, which also relies on the ionization-equilibrium assumption studied above. In addition, they define an effective photon interaction rate,
 $$
 \Gamma_{\gamma}=\frac{c}{\lambda_{\mathrm{mfp}}},
@@ -541,35 +618,82 @@ Reference the AIDA-TNG paper and the explanations they make.
 
 \subsection{Clumping factor}
 
-We first compare the gas clumping factors at redshift zero, using snapshot 099 and the native Voronoi-cell, volume-weighted calculation. Figures~\ref{fig:aida-l35-z0-clumping} and~\ref{fig:aida-l75-z0-clumping} show the absolute clumping factors as a function of the maximum overdensity defining the IGM, together with the relative difference from the CDM result,
+We first compare the gas clumping factors at redshift zero, using snapshot 099 and the native Voronoi-cell, volume-weighted calculation. Figures~\ref{fig:aida-z0-gas-clumping-absolute} and~\ref{fig:aida-z0-gas-clumping-relative} show the absolute clumping factors and the corresponding relative difference from the CDM result,
 $$
 \frac{C_{\rm CDM}-C_{\rm model}}{C_{\rm CDM}}.
 $$
 
-\begin{figure*}[t]
+The corresponding dark-matter measurements are shown in Figures~\ref{fig:aida-z0-dm-clumping-absolute} and~\ref{fig:aida-z0-dm-clumping-relative}; because dark matter is particle based, these use the standardized $512^3$ CIC, top-hat--smoothed grid calculation.
+
+\begin{figure}[t]
     \centering
-    \includegraphics[width=0.72\textwidth]{figures/aida_tng_l35n1080_z0_gas_clumping.png}
-    \caption{Gas clumping factors in the AIDA-TNG L35n1080 simulations at snapshot 099 ($z=0$), calculated directly from the native Voronoi cells. The upper panel shows the clumping factor as a function of the maximum overdensity threshold, while the lower panel shows $(C_{\rm CDM}-C_{\rm model})/C_{\rm CDM}$. The available models in this box are CDM, WDM3, and vSIDM.}
-    \label{fig:aida-l35-z0-clumping}
-\end{figure*}
+    \includegraphics[width=\linewidth]{figures/aida_tng_z0_gas_clumping_absolute.png}
+    \caption{Absolute gas clumping factor at snapshot 099 ($z=0$), calculated directly from the native Voronoi cells. Colours identify the dark-matter model; dashed lines show L35n1080 and solid lines L75n910.}
+    \label{fig:aida-z0-gas-clumping-absolute}
+\end{figure}
 
-\begin{figure*}[t]
+\begin{figure}[t]
     \centering
-    \includegraphics[width=0.72\textwidth]{figures/aida_tng_l75n910_z0_gas_clumping.png}
-    \caption{Gas clumping factors in the AIDA-TNG L75n910 simulations at snapshot 099 ($z=0$), calculated directly from the native Voronoi cells. The upper panel shows the clumping factor as a function of the maximum overdensity threshold, while the lower panel shows $(C_{\rm CDM}-C_{\rm model})/C_{\rm CDM}$. The available models in this box are CDM, WDM3, SIDM1, and vSIDM.}
-    \label{fig:aida-l75-z0-clumping}
-\end{figure*}
+    \includegraphics[width=\linewidth]{figures/aida_tng_z0_gas_clumping_relative_to_cdm.png}
+    \caption{Relative difference between the CDM and alternative-model gas clumping factors at snapshot 099 ($z=0$). The quantity shown is $(C_{\rm CDM}-C_{\rm model})/C_{\rm CDM}$; dashed lines show L35n1080 and solid lines L75n910.}
+    \label{fig:aida-z0-gas-clumping-relative}
+\end{figure}
 
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\linewidth]{figures/aida_tng_z0_dm_clumping_absolute.png}
+    \caption{Absolute dark-matter clumping factor at snapshot 099 ($z=0$), calculated on the standardized $512^3$ CIC, top-hat--smoothed grid. Colours identify the dark-matter model; dashed lines show L35n1080 and solid lines L75n910.}
+    \label{fig:aida-z0-dm-clumping-absolute}
+\end{figure}
 
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\linewidth]{figures/aida_tng_z0_dm_clumping_relative_to_cdm.png}
+    \caption{Relative difference between the CDM and alternative-model dark-matter clumping factors at snapshot 099 ($z=0$), calculated on the standardized $512^3$ CIC, top-hat--smoothed grid. The quantity shown is $(C_{\rm CDM}-C_{\rm model})/C_{\rm CDM}$; dashed lines show L35n1080 and solid lines L75n910.}
+    \label{fig:aida-z0-dm-clumping-relative}
+\end{figure}
 
+To examine the redshift dependence, we follow the clumping factor at the nominal threshold $\Delta_{\rm max}=20$ and the CDM-relative difference integrated over the full overdensity interval $0\leq\Delta\leq25$. Colours distinguish dark-matter models; dashed and solid lines denote L35n1080 and L75n910, respectively. Each curve uses the snapshots available for that model, without interpolation where an output is unavailable. The gas result is calculated directly from the native Voronoi cells, whereas the dark-matter result uses the standardized $512^3$ CIC, top-hat--smoothed grid calculation.
 
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\linewidth]{figures/aida_tng_gas_clumping_evolution.png}
+    \caption{Redshift evolution of the native gas clumping factor at $\Delta_{\rm max}=20$. Colours identify the dark-matter model; dashed lines show L35n1080 and solid lines L75n910. Redshift decreases from left to right, and curves terminate where a model lacks a matching snapshot.}
+    \label{fig:aida-gas-clumping-evolution-absolute}
+\end{figure}
 
-\section{Disclosure of the use of AI in this work}
-What things i've used AI in:
-- This section
-- Editorial review for mistakes
-- Coding support, particularly for bug finding and familiarizing with large code infrastructures that have lots of documention (i.e. arepo) and with more technical tasks such as parallelization of current code
-- Coding support for plot creation based on the existing results
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\linewidth]{figures/aida_tng_gas_clumping_evolution_relative_to_cdm.png}
+    \caption{Redshift evolution of the overdensity-integrated CDM-relative gas-clumping difference, $\Delta_C=\int_0^{25}(C_{\rm CDM}-C_{\rm model})/C_{\rm CDM}\,d\Delta$. Dashed lines show L35n1080 and solid lines L75n910.}
+    \label{fig:aida-gas-clumping-evolution-relative}
+\end{figure}
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\linewidth]{figures/aida_tng_dm_clumping_evolution.png}
+    \caption{Redshift evolution of the dark-matter clumping factor at $\Delta_{\rm max}=20$, calculated on the standardized $512^3$ CIC, top-hat--smoothed grid. Colours identify the dark-matter model; dashed lines show L35n1080 and solid lines L75n910.}
+    \label{fig:aida-dm-clumping-evolution-absolute}
+\end{figure}
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\linewidth]{figures/aida_tng_dm_clumping_evolution_relative_to_cdm.png}
+    \caption{Redshift evolution of the overdensity-integrated CDM-relative dark-matter clumping difference, $\Delta_C=\int_0^{25}(C_{\rm CDM}-C_{\rm model})/C_{\rm CDM}\,d\Delta$. Dashed lines show L35n1080 and solid lines L75n910.}
+    \label{fig:aida-dm-clumping-evolution-relative}
+\end{figure}
+
+\section{Disclosure of the use of artificial intelligence}
+
+In the present day, artificial intelligence, and particularly generative artificial intelligence and large language models (LLMs), has become increasingly widespread throughout society. We therefore consider it prudent to disclose which parts of this report and the associated work were produced with the assistance of such systems.
+
+In particular, during the preparation of this report, artificial-intelligence tools were used to support the drafting and organization of selected parts of the work, as well as the editorial review of spelling, grammar, clarity, and consistency.
+
+AI tools were also used during the development of the computational code. In particular, they supported bug finding, familiarization with large and technically complex codebases, such as the AREPO cosmological simulation code and its associated documentation, and the implementation of technical improvements such as code parallelization.
+
+These tools were additionally used to generate and refine plotting code based on results that had already been produced by the analysis pipeline. This provided substantial advantages in the speed of iteration and analysis of the calculated data.
+
+In accordance with standard scientific practice, these tools did not independently generate any of the simulation data, perform the scientific calculations, analyze the results, or determine the scientific conclusions presented in this report. All material whose preparation involved generative machine-learning tools was reviewed and verified by the author, who retains full responsibility for the content of this work.
 
 
 
@@ -606,21 +730,28 @@ We can observe in Figure~\ref{fig:aida-gridding-deviation-factor} that the quali
 \section{Impact of the Reduced Speed of Light on the THESAN Observables}
 \label{apx:reduced-speed-of-light}
 
-The main text uses the reduced speed of light adopted in the THESAN
-radiation-transport calculations when evaluating the photon-density
-estimator. In this appendix, we document a pilot comparison between the
-in-house simulations run with the standard speed of light and with the
-reduced speed of light. We examine the direct recombination clumping factor,
-the ionization-equilibrium estimator, the photon-density estimator, and the
-mean-free-path closure.
+The THESAN simulations use a reduced-speed-of-light approximation,
+$\tilde{c}=0.2c$. The physical speed of light would require much smaller
+radiation-transport time steps; THESAN therefore adopts this approximation to
+make the simulations computationally feasible, after demonstrating convergence
+of the neutral-fraction evolution at this value \cite{garaldi2022thesan}.
+However, the reduced speed of light also appears explicitly in the
+photon-density estimator evaluated in Section~\ref{sec:photon-density-estimator}.
+To test whether using $\tilde{c}$ in this expression is sufficient, we ran new
+simulations using both the reduced and standard speeds of light.
 
-The purpose of this comparison is diagnostic. The in-house standard-speed
-and reduced-speed runs are useful as a paired test of the current
-implementation, but the comparison is not by itself a fully controlled
-convergence study. Differences between the available outputs can also be
-affected by the simulation volume, resolution, initial conditions, source
-history, snapshot selection, and the IGM mask. We therefore do not interpret
-the comparison as a universal correction to the reduced speed of light.
+Because these simulations require long runtimes, we can present only the
+smaller of the two configurations originally planned. In the main text, the
+reduced-speed version of this simulation is referred to as THESAN-mini. The
+data analysed here are from two simulations with a box length of
+$4\,\mathrm{Mpc}$ and $128^3$ particles. We also compare them with the full
+THESAN simulations to better understand their differences.
+
+We focus on the direct recombination clumping factor, the ionization-equilibrium
+estimator, the photon-density estimator, and the mean-free-path closure. These
+comparisons are primarily diagnostic and are intended to clarify how the
+reduced-speed-of-light approximation affects the quantities relevant to this
+work. Further analysis is needed and is planned for future work.
 
 \subsection{Simulation suite and comparison metadata}
 
@@ -790,7 +921,7 @@ The requested and effective worker counts were equal in every run.
 \centering
 \includegraphics[width=0.82\textwidth]{figures/parallelization_benchmark.png}
 \caption{Controlled wall-time measurement for the Thesan-2 dark-matter
-snapshot at $z=5.49$ on a $512^3$ grid.  Bar heights give the median of three
+snapshot at $z=5.49$ on a $512^3$ grid.  Points give the median of three
 cache-free repetitions and error bars show the full repeat range.}
 \label{fig:parallel-timing}
 \end{figure*}

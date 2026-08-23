@@ -1,0 +1,46 @@
+name = "paper-thesan2-parallel-grid1024"
+output_root = "results"
+
+[simulation]
+family = "thesan"
+name = "Thesan-2"
+base_path = "/lustre/work/carlos.lopez/Thesan-2/output"
+
+[matrix]
+snapshots = [80]
+particle_types = ["dm"]
+methods = ["clumping.pylians"]
+grids = [1024]
+
+[method_options."clumping.pylians"]
+filter_type = "Top-Hat"
+radius_bins = 10
+threshold_min = -1.0
+threshold_max = 25.0
+threshold_count = 200
+
+[execution]
+load_mode = "chunked"
+chunk_size = 1000000
+mas = "CIC"
+radius_bin_batch_size = 1
+summary_cache = "off"
+work_partition = "auto"
+max_file_readers = 2
+memory_limit = "128gb"
+memory_safety_fraction = 0.1
+
+[benchmark]
+# The memory policy may cap larger requests at the same effective count, so
+# this sweep stops at eight workers and preserves unique scaling points.
+worker_counts = [1, 2, 4, 8]
+repeats = 3
+order = [1, 8, 2, 4, 2, 8, 4, 1, 4, 1, 8, 2]
+output_root = "reports/parallelization_benchmark_runs"
+
+[resources]
+# Keep the node allocation and memory policy identical to the other sweeps.
+cpus = 16
+memory = "128gb"
+walltime = "24:00:00"
+queue = "mini"
