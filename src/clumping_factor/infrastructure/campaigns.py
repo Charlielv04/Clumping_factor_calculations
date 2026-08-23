@@ -322,7 +322,13 @@ def _plan_matrix(source: Path, document: dict[str, Any]) -> CampaignManifest:
     tasks: list[CampaignTask] = []
     seen: set[tuple[str, str, str, str, int, str, int | None]] = set()
     for simulation in simulations:
-        simulation_snapshots = _snapshots_for_simulation(str(simulation.get("base_path") or ""), snapshot_spec)
+        # A simulation may override the campaign-wide snapshot selector.  This
+        # is useful for targeted retries while preserving the existing global
+        # ``matrix.snapshots`` behavior for ordinary campaigns.
+        simulation_snapshot_spec = simulation.get("snapshots", snapshot_spec)
+        simulation_snapshots = _snapshots_for_simulation(
+            str(simulation.get("base_path") or ""), simulation_snapshot_spec
+        )
         for snapshot, particle, spec, requested_grid in itertools.product(
             simulation_snapshots, particles, methods, grids
         ):

@@ -1,0 +1,70 @@
+name = "aida-tng-gas-grid-1024-retry"
+output_root = "results-aida-gas-grid-retry-1024"
+
+# Targeted retry: these are the AIDA-TNG snapshots with completed 256^3 and
+# 512^3 gas results but no completed 1024^3 result in the grid campaign.
+# Per-simulation snapshots are supported by the campaign planner so this
+# expands to exactly eight tasks.
+
+[[simulations]]
+family = "aida-tng"
+name = "L35n1080_CDM"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L35n1080_CDM/output"
+snapshots = [50, 84]
+
+[[simulations]]
+family = "aida-tng"
+name = "L35n1080_WDM3"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L35n1080_WDM3/output"
+snapshots = [17]
+
+[[simulations]]
+family = "aida-tng"
+name = "L35n1080_vSIDM"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L35n1080_vSIDM/output"
+snapshots = [33]
+
+[[simulations]]
+family = "aida-tng"
+name = "L75n910_CDM"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L75n910_CDM/output"
+snapshots = [25]
+
+[[simulations]]
+family = "aida-tng"
+name = "L75n910_SIDM1"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L75n910_SIDM1/output"
+snapshots = [84, 99]
+
+[[simulations]]
+family = "aida-tng"
+name = "L75n910_WDM3"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L75n910_WDM3/output"
+snapshots = [33]
+
+[matrix]
+snapshots = "available"
+particle_types = ["gas"]
+methods = ["clumping.pylians"]
+grids = [1024]
+
+[method_options."clumping.pylians"]
+filter_type = "Top-Hat"
+radius_bins = 10
+threshold_min = -1.0
+threshold_max = 25.0
+threshold_count = 200
+memory_limit = "256gb"
+
+[execution]
+threads = 2
+load_mode = "chunked"
+chunk_size = 1000000
+mas = "CIC"
+radius_bin_batch_size = 1
+
+[resources]
+cpus = 4
+memory = "256gb"
+walltime = "48:00:00"
+queue = "small"

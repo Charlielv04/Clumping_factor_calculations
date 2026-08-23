@@ -162,6 +162,36 @@ load_mode = "full"
     assert all("--spectrum-engine" in task.command and "both" in task.command for task in manifest.tasks)
 
 
+def test_simulation_snapshot_override_targets_only_requested_tasks(tmp_path: Path):
+    campaign = tmp_path / "targeted-retry.toml"
+    campaign.write_text(
+        '''name = "targeted-retry"
+output_root = "results"
+[[simulations]]
+family = "tng"
+name = "one"
+base_path = "/data/one"
+snapshots = [17, 25]
+[[simulations]]
+family = "tng"
+name = "two"
+base_path = "/data/two"
+snapshots = [98]
+[matrix]
+snapshots = "available"
+particle_types = ["dm"]
+methods = ["power-spectrum.numpy"]
+grids = [128]
+[execution]
+threads = 1
+load_mode = "full"
+''',
+        encoding="utf-8",
+    )
+    manifest = plan_campaign(campaign)
+    assert [(task.simulation, task.snapshot) for task in manifest.tasks] == [("one", 17), ("one", 25), ("two", 98)]
+
+
 def test_power_spectrum_campaign_forwards_fold_options(tmp_path: Path):
     campaign = tmp_path / "folded.toml"
     campaign.write_text(
