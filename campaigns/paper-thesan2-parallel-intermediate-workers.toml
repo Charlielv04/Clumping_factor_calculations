@@ -1,0 +1,46 @@
+name = "paper-thesan2-parallel-intermediate-workers"
+output_root = "results"
+
+[simulation]
+family = "thesan"
+name = "Thesan-2"
+base_path = "/lustre/work/carlos.lopez/Thesan-2/output"
+
+[matrix]
+snapshots = [80]
+particle_types = ["dm"]
+methods = ["clumping.pylians"]
+grids = [512]
+
+[method_options."clumping.pylians"]
+filter_type = "Top-Hat"
+radius_bins = 10
+threshold_min = -1.0
+threshold_max = 25.0
+threshold_count = 200
+
+[execution]
+load_mode = "chunked"
+chunk_size = 1000000
+mas = "CIC"
+radius_bin_batch_size = 1
+summary_cache = "off"
+work_partition = "auto"
+max_file_readers = 2
+memory_limit = "128gb"
+memory_safety_fraction = 0.1
+
+[benchmark]
+# Three repeats per setting, interleaved to distribute transient machine load.
+worker_counts = [2, 4, 8, 12]
+repeats = 3
+order = [2, 4, 8, 12, 12, 8, 4, 2, 2, 4, 8, 12]
+output_root = "reports/parallelization_benchmark_runs"
+
+[resources]
+# One fixed PBS resource shape keeps the node allocation identical to the
+# completed one- and sixteen-worker measurements.
+cpus = 16
+memory = "128gb"
+walltime = "24:00:00"
+queue = "mini"

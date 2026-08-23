@@ -365,11 +365,6 @@ In order to validate our implementation, we compare the spectra with those produ
     \caption{Dimensionless dark-matter power spectra for the AIDA-TNG L75n910 CDM simulation at snapshot 99. Solid curves show the AREPO measurements and dashed curves show the cloud-in-celll corrected Pylians $1024^3$ grid calculation. Colours identify the folding factors $f=1$, $16$, and $256$; the lower panel shows the Pylians-to-AREPO ratio over the overlapping ranges.}
     \label{fig:pylians-arepo}
 \end{figure}
-
-
-
-... comparison against AIDATNG paper 
-
 \section{Application I: Comparison with Davies et al.}
 \label{sec:appl1}
 
@@ -417,22 +412,22 @@ We also note that there is an almost perfect proportionality relationship betwee
 
 \subsection{Approximate estimator 1: ionization equilibrium}
 
-The first approximate estimator assumes ionization equilibrium.
-
-We make the ionization equilibrium assumption
-$$\langle n_{\mathrm{H\,I}} \Gamma_{\mathrm{H\,I}} \rangle
+The first approximate estimator presented by Davies et al. assumes ionization equilibrium. This corresponds to the assumption
+$$
+\left\langle n_{\mathrm{H\,I}}\Gamma_{\mathrm{H\,I}}\right\rangle
 =
-\left\langle
-n_e n_{\mathrm{H\,II}} \alpha_{\mathrm{H\,II}}
-\right\rangle
-=
-C \chi_e \left(1-x_{\mathrm{H\,I}}\right)^2
-n_{\mathrm{H}}^2 \alpha_{\mathrm{H\,II}}$$
+\left\langle n_e n_{\mathrm{H\,II}}\alpha_{\mathrm{H\,II}}\right\rangle,
+$$
+which, using the definition of the recombination clumping factor, becomes
+$$
+\left\langle n_{\mathrm{H\,I}}\Gamma_{\mathrm{H\,I}}\right\rangle
+= C\chi_e\left(1-x_{\mathrm{H\,I}}\right)^2
+n_{\mathrm{H}}^2\alpha_{\mathrm{H\,II}}.
+$$
 
-which corresponds to 
-$$ \langle n_{HI}\Gamma_{HI} \rangle = \langle n_e n_{\mathrm{H\,II}} \alpha_{\mathrm{H\,II}} \rangle$$
+We are interested in testing this assumption in the context of our simulations. Ionization equilibrium is expected to hold only in fully ionized gas. Because the THESAN snapshots studied here are recorded near the end of reionization, they can still contain neutral islands. We therefore introduce an additional ionization cutoff in our definition of the IGM, preventing these neutral regions from affecting the calculation.
 
-Figure~\ref{fig:ionization-equilibrium} shows that the equality is approached only after imposing a more restrictive ionization cut. This is consistent with the presence of neutral islands in the available snapshots, which are taken before the end of reionization.
+The results are shown in Figure~\ref{fig:ionization-equilibrium}. With a sufficiently strict ionization cutoff, the equilibrium relation is satisfied for each of the three overdensity cutoffs considered.
 
 \begin{figure}
     \centering
@@ -441,7 +436,12 @@ Figure~\ref{fig:ionization-equilibrium} shows that the equality is approached on
     \label{fig:ionization-equilibrium}
 \end{figure}
 
-Davies et al. additionally approximate the mean free path by $\lambda_{\mathrm{mfp}}=(n_{\mathrm{H\,I}}\sigma_{\mathrm{H\,I}})^{-1}$. Figure~\ref{fig:meanfreepath-sigma} shows that this approximation introduces a systematic bias in the region where ionization equilibrium is closest to being satisfied. Thus, the two assumptions cannot generally be imposed simultaneously for the masks considered here.
+In calculating the first estimator, Davies et al. additionally approximate the mean free path as
+$$
+\lambda_{\mathrm{mfp}}=
+\left(n_{\mathrm{H\,I}}\sigma_{\mathrm{H\,I}}\right)^{-1},
+$$
+where $n_{\mathrm{H\,I}}$ is the neutral-hydrogen number density and $\sigma_{\mathrm{H\,I}}$ is the photoionization cross section of neutral hydrogen. We also test this approximation as a function of the overdensity and ionization cutoffs introduced above. Figure~\ref{fig:meanfreepath-sigma} shows that it introduces a bias in the region of parameter space where ionization equilibrium is most closely satisfied. We therefore conclude that these two assumptions cannot be satisfied simultaneously for any of the threshold choices used to define the IGM in the THESAN simulations.
 \begin{figure}
     \centering
     \includegraphics[width=\linewidth]{figures/thesan1_thesan2_lambda_mfp_nHI_sigma_HI_vs_ionization_cut.png}
@@ -450,23 +450,32 @@ Davies et al. additionally approximate the mean free path by $\lambda_{\mathrm{m
 \end{figure}
 
 
-Combining these assumptions gives the first approximate estimator,
+Combining these two assumptions gives the first approximate estimator,
 
-$$C = \frac{ \Gamma_{\mathrm{H\,I}}}
-{\lambda_{\mathrm{mfp}} \sigma_{\mathrm{H\,I}} \chi_e \left(1-x_{\mathrm{H\,I}}\right)^2 n_{\mathrm{H}}^2 \alpha_{\mathrm{H\,II}}}$$
+$$
+C = \frac{\Gamma_{\mathrm{H\,I}}}
+{\lambda_{\mathrm{mfp}}\sigma_{\mathrm{H\,I}}\chi_e
+\left(1-x_{\mathrm{H\,I}}\right)^2 n_{\mathrm{H}}^2
+\alpha_{\mathrm{H\,II}}}.
+$$
+
+We later compare this estimator with our standard direct implementation. However, the tests of its underlying assumptions already show that there is no IGM definition, within the thresholds examined here, for which both relations can be reconciled.
 
 
 
 \subsection{Approximate estimator 2: photon-density closure}
-A second estimator defines an effective photon interaction rate by $\Gamma_{\gamma}=c/\lambda_{\mathrm{mfp}}$. The corresponding photoionization rate per unit volume is then assumed to balance the recombination rate:
-$$\frac{n_{\gamma} c}{\lambda_{\mathrm{mfp}}}  = \langle n_e n_{\mathrm{H\,II}} \alpha_{\mathrm{H\,II}} \rangle .$$
+Davies et al. introduce a second estimator, which also relies on the ionization-equilibrium assumption studied above. In addition, they define an effective photon interaction rate,
+$$
+\Gamma_{\gamma}=\frac{c}{\lambda_{\mathrm{mfp}}},
+$$
+such that the photoionization rate per unit volume balances the recombination rate. Ionization equilibrium then gives the additional assumption
+$$
+\frac{n_{\gamma}c}{\lambda_{\mathrm{mfp}}}
+=
+\left\langle n_e n_{\mathrm{H\,II}}\alpha_{\mathrm{H\,II}}\right\rangle.
+$$
 
-The THESAN simulations use a reduced speed of light. We therefore use
-the corresponding reduced value of $c$ in this relation. Even
-after this correction, the relation is not satisfied for the masks
-examined here. The resulting discrepancy is shown in
-Fig.~\ref{fig:photon-density} and introduces an additional
-multiplicative factor in the inferred clumping factor.
+The THESAN simulations use a reduced speed of light. We therefore use the corresponding reduced value of $c$ in this relation. Even after this correction, the relation is not satisfied for any of the combinations of overdensity and ionization masks examined here. The resulting discrepancy is shown in Figure~\ref{fig:photon-density}.
 
 \begin{figure}
     \centering
@@ -479,34 +488,30 @@ multiplicative factor in the inferred clumping factor.
 \end{figure}
 
 The resulting estimator is
-$$C = \frac{ n_{\gamma} c}
-{\lambda_{\mathrm{mfp}}  \chi_e \left(1-x_{\mathrm{H\,I}}\right)^2 n_{\mathrm{H}}^2 \alpha_{\mathrm{H\,II}}}.$$
+$$
+C = \frac{n_{\gamma}c}
+{\lambda_{\mathrm{mfp}}\chi_e\left(1-x_{\mathrm{H\,I}}\right)^2
+n_{\mathrm{H}}^2\alpha_{\mathrm{H\,II}}}.
+$$
+
+The effects that the reduced speed of light can have on these relations were studied during the preparation of this work; the current results are presented in Appendix~\ref{apx:reduced-speed-of-light}. However, simulations of the required size are computationally expensive, and further study is needed to establish the general impact of this approximation.
 
 \subsection{Comparison of clumping-factor estimators}
 
-We have tested the assumptions entering the approximate estimators
-individually. We now compare the resulting clumping factors with the
-direct calculation for the THESAN simulations. The comparison is shown
-in Fig.~\ref{fig:clumpingfactors} for several choices of the minimum
-ionized fraction defining the IGM mask.
+After testing the assumptions entering the approximate estimators individually, we now compare their resulting clumping factors with the direct calculations for the THESAN simulations. Figure~\ref{fig:clumpingfactors} shows this comparison for several choices of the overdensity and ionization thresholds used to define the IGM.
 
-The direct calculation provides the reference result. Depending on the
-overdensity threshold, its clumping factor is typically between
-approximately 2 and 4. The estimator based on ionization equilibrium
-gives a slightly larger value, with its closest agreement with the
-reference result occurring for
-$10^{-3}\lesssim x_{\mathrm{H\,II,min}}\lesssim10^{-2}$.
+The direct calculation provides the reference result. Depending on the overdensity threshold, it gives a clumping factor between approximately 2 and 4. If we retain only the ionization-equilibrium assumption, the resulting estimator is in close agreement with the reference value for $10^{-3}\lesssim x_{\mathrm{H\,II,min}}\lesssim10^{-2}$. This is again consistent with the presence of neutral islands in the simulated IGM. It would be useful to repeat this comparison using a THESAN-like simulation at a later stage, once the IGM is fully ionized.
 
 Including the additional approximation
-$\lambda_{\mathrm{mfp}}=(n_{\mathrm{H\,I}}\sigma_{\mathrm{H\,I}})^{-1}$
-increases the discrepancy. In the range where ionization equilibrium is
-approximately satisfied, this estimator introduces a correction of up
-to a factor of approximately 2.5 relative to the direct calculation.
+$$
+\lambda_{\mathrm{mfp}}=
+\left(n_{\mathrm{H\,I}}\sigma_{\mathrm{H\,I}}\right)^{-1}
+$$
+increases the discrepancy. This is consistent with the earlier finding that the two assumptions entering the first estimator cannot be satisfied simultaneously. The dependence of the two assumptions on the ionization threshold appears to cancel over most of the explored range, producing an almost constant estimator except at very high ionization cutoffs. The resulting clumping factors lie between approximately 4 and 6.
 
-The photon-density estimator gives the largest clumping factors. After
-accounting for the reduced speed of light used in the THESAN
-simulations, it still exceeds the direct estimate by up to a factor of
-approximately 5 for the masks considered here.
+The second estimator gives the largest values. Even after accounting for the reduced speed of light, which enters through the photon-interaction-rate assumption, it exceeds the direct estimate by up to a factor of approximately 5. Its clumping factors are between approximately 8 and 12.
+
+As for the first estimator, the second estimator is nearly independent of the ionization cutoff except at very high ionized fractions. This near-constant behavior could be encouraging, since the direct clumping-factor measurement is also insensitive to the ionization cutoff over most of the explored range. However, the relation between the direct and approximate estimators differs between THESAN-1 and THESAN-2 in a way that we cannot yet explain predictably. A correction factor may exist, but the current sample is insufficient to characterize it reliably.
 
 \begin{figure*}[t]
     \centering
@@ -524,23 +529,36 @@ approximately 5 for the masks considered here.
 
 \bibliography{apssamp}
 
-
-
-
-
-
-Check in the appendix a comparison of the effects of the reduced speed of light
-
-
 \section{Application II: Comparison between dark matter models}
 
-\section{Power spectrum}
-Reference the aida tng paper and the explanations they make
+This section addresses the main objective of this work: whether the clumping factor can serve as an observable for constraining the parameter spaces of different dark-matter models. We compare the predictions of the AIDA-TNG simulations for cold dark matter (CDM), warm dark matter (WDM), self-interacting dark matter (SIDM), and velocity-dependent self-interacting dark matter (vSIDM).
 
-\section{Clumping factor}
-Show calculations at different redshifts and the difference
+We first present the power-spectrum measurements for these models and characterize their departures from the $\Lambda$CDM reference. We then present the corresponding clumping-factor measurements and compare them with the $\Lambda$CDM values to assess whether this statistic contains complementary discriminatory information.
 
-Say we havent' found anything relevant at the current scales we can measure. 
+\subsection{Power spectrum}
+
+Reference the AIDA-TNG paper and the explanations they make.
+
+\subsection{Clumping factor}
+
+We first compare the gas clumping factors at redshift zero, using snapshot 099 and the native Voronoi-cell, volume-weighted calculation. Figures~\ref{fig:aida-l35-z0-clumping} and~\ref{fig:aida-l75-z0-clumping} show the absolute clumping factors as a function of the maximum overdensity defining the IGM, together with the relative difference from the CDM result,
+$$
+\frac{C_{\rm CDM}-C_{\rm model}}{C_{\rm CDM}}.
+$$
+
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=0.72\textwidth]{figures/aida_tng_l35n1080_z0_gas_clumping.png}
+    \caption{Gas clumping factors in the AIDA-TNG L35n1080 simulations at snapshot 099 ($z=0$), calculated directly from the native Voronoi cells. The upper panel shows the clumping factor as a function of the maximum overdensity threshold, while the lower panel shows $(C_{\rm CDM}-C_{\rm model})/C_{\rm CDM}$. The available models in this box are CDM, WDM3, and vSIDM.}
+    \label{fig:aida-l35-z0-clumping}
+\end{figure*}
+
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=0.72\textwidth]{figures/aida_tng_l75n910_z0_gas_clumping.png}
+    \caption{Gas clumping factors in the AIDA-TNG L75n910 simulations at snapshot 099 ($z=0$), calculated directly from the native Voronoi cells. The upper panel shows the clumping factor as a function of the maximum overdensity threshold, while the lower panel shows $(C_{\rm CDM}-C_{\rm model})/C_{\rm CDM}$. The available models in this box are CDM, WDM3, SIDM1, and vSIDM.}
+    \label{fig:aida-l75-z0-clumping}
+\end{figure*}
 
 
 
@@ -561,32 +579,32 @@ What things i've used AI in:
 
 \label{apx:AIDA-TNG}
 
-In this section, we validate the conclusions of Section~\ref{sec:density-grid-tests} in the context of the AIDA-TNG simulations. As described in Section~III.A, the matter distribution is represented by dark-matter particles and finite-volume gas Voronoi cells. We therefore repeat the comparison between the direct Voronoi-cell calculation and a standardized mass-deposited grid before applying the adopted choices to the dark-matter fields. Furthermore, we introduce figures in which the SubfindHsml particle property is used to determine the smoothing scale and the clumping factor, rather than adopting the interparticle distance as a universal particle size.
+In this section, we validate the conclusions of Section~\ref{sec:density-grid-tests} in the context of the AIDA-TNG simulations. As described in the scientific background, the matter distribution is represented by dark-matter particles and finite-volume gas Voronoi cells. We therefore repeat the comparison between the direct Voronoi-cell calculation and a standardized mass-deposited grid. Furthermore, we introduce figures in which the SubfindHsml particle property is used to determine the smoothing scale and the clumping factor, rather than adopting the interparticle distance as a universal particle size.
 
 \subsection{Grid-size tests and gridding deviation}
 
-We first repeat the grid-size comparison using the gas fields of the AIDA-TNG simulations. Following the density-field construction described in Section~III.A, the gas cells are treated as point-like elements carrying their cell masses when constructing the standardized mass-deposited grid. We use cloud-in-cell as the mass-assignment scheme and apply top-hat smoothing to the resulting density field. To compare the gridded estimates with the direct Voronoi-cell result over the full overdensity range, we use the normalized gridding-deviation factor introduced in Section~\ref{sec:density-grid-tests},
+We first repeat the grid-size comparison using the gas fields of the AIDA-TNG simulations. Once again, the gas cells are treated as point-like elements carrying their cell masses and then deposited into the grid. We use cloud-in-cell as the mass-assignment scheme and apply spherical Pylians smoothing to the resulting density field. To compare the gridded estimates with the direct Voronoi-cell result over the full overdensity range, we use the normalized gridding-deviation factor introduced in Section~\ref{sec:density-grid-tests},
 \begin{equation}
     \Delta_{grid} = \int_{0}^{25}
     \frac{C_{Voronoi} - C_{grid}}
     {C_{Voronoi}}\,\mathrm{d}\delta,
     \label{eq:aida-gridding-deviation}
 \end{equation}
-where $C_{Voronoi}$ is the clumping factor calculated directly from the native Voronoi cells and $C_{grid}$ is the estimate obtained from the standardized mass-deposited grid. Positive values indicate that the gridded calculation underestimates the direct Voronoi-cell result over the integrated overdensity range, whereas negative values indicate an overestimate.
+where $C_{Voronoi}$ is the clumping factor calculated directly from the native Voronoi cells and $C_{grid}$ is the estimate obtained from the standardized mass-deposited grid. We recall that positive values indicate that the gridded calculation underestimates the direct calculation, whereas negative values indicate that it overestimates it.
 
 \begin{figure*}[t]
     \centering
     \includegraphics[width=\textwidth]{figures/aida_tng_grid_deviation_vs_redshift_no_formula.png}
-    \caption{Normalized gridding-deviation factor, Eq.~\eqref{eq:aida-gridding-deviation}, for the gas fields of the AIDA-TNG simulations. Each panel corresponds to one dark-matter model and simulation box. The curves show estimates from standardized mass-deposited grids with cloud-in-cell mass assignment and top-hat smoothing at $256^3$, $512^3$, and $1024^3$ grid cells, using the direct Voronoi-cell calculation as the reference. The redshift axis decreases from left to right; only snapshots for which all three grid calculations and the direct Voronoi-cell result are available are shown.}
+    \caption{Normalized gridding-deviation factor, Eq.~\eqref{eq:aida-gridding-deviation}, for the gas fields of the AIDA-TNG simulations. Each panel corresponds to one dark-matter model and simulation box. The curves show estimates from standardized mass-deposited grids with cloud-in-cell mass assignment and spherical Pylians smoothing at $256^3$, $512^3$, and $1024^3$ grid cells, using the direct Voronoi-cell calculation as the reference. The redshift axis decreases from left to right; only snapshots for which all three grid calculations and the direct Voronoi-cell result are available are shown.}
     \label{fig:aida-gridding-deviation-factor}
 \end{figure*}
 
-Figure~\ref{fig:aida-gridding-deviation-factor} shows that the qualitative ordering found for THESAN is also present in AIDA-TNG. The $256^3$ estimates remain below the direct Voronoi-cell result, while the $1024^3$ estimates generally lie above it. The $512^3$ grid gives the smallest integrated mismatch and is the closest of the three gridded estimates to the direct Voronoi-cell result across the available redshifts. The same ordering is observed for the different dark-matter models within a given box, indicating that the dominant effect is the density-field resolution rather than the particular dark-matter interaction model. The deviations are larger for the $75\,h^{-1}\,\mathrm{Mpc}$ box, whose lower particle sampling makes the grid-to-particle ratio less favorable. These results support the use of the intermediate gridding factor adopted for the AIDA-TNG dark-matter calculations.
+We can observe in Figure~\ref{fig:aida-gridding-deviation-factor} that the qualitative behavior observed for THESAN is also present in AIDA-TNG. The $512^3$ grid gives the smallest deviation, corresponding to a gridding factor of approximately $1/2$. This behavior also motivated us to choose this value as our preferred gridding factor for the rest of the work. We note that remarkably similar behavior is observed for the different dark-matter models within a given box size and particle-number parameters. Thus, we conclude that the dominant effect is the density-field resolution and that the systematics introduced by our particular calculation methods are sufficiently similar that the differences observed between the different dark-matter models cannot be attributed to the method itself.
+
+\subsection{Effect of the SubFindHSML in }
 
 \section{Impact of the Reduced Speed of Light on the THESAN Observables}
 \label{apx:reduced-speed-of-light}
-
-\subsection{Aim and scope}
 
 The main text uses the reduced speed of light adopted in the THESAN
 radiation-transport calculations when evaluating the photon-density
@@ -752,136 +770,48 @@ patterns shown above.
 \section{Parallelization and optimization: Working with large simulations}
 \label{apx:parallelization}
 
-The density-grid calculations are the most memory-intensive part of the
-clumping-factor pipeline.  A direct calculation requires the particle data,
-the density grid, and the intermediate arrays used by the smoothing and
-threshold operations to coexist in memory.  The implementation therefore
-uses a chunked execution path whenever the estimated full-load size exceeds
-the configured limit.  The chunked path preserves the scientific operation
-while changing how the input is scheduled and how temporary grids are
-combined.
+The density grids used in this work can become costly at high resolution
+because both the storage requirement and the numerical work grow rapidly with
+the number of cells.  We therefore use a chunked calculation in which the
+snapshot is processed in pieces rather than loaded in full.  Independent
+parts of the input can be evaluated simultaneously and their density grids
+are combined only after the individual calculations are complete.  This
+changes the organisation of the calculation, but not the mass assignment,
+smoothing prescription, IGM selection, or definition of the clumping factor.
 
-\subsection{Work decomposition and reduction}
-
-The HDF5 snapshot is read as a stream of bounded particle chunks.  A parent
-process first inspects the snapshot metadata and creates a deterministic work
-plan.  The default plan assigns complete snapshot files to workers using a
-greedy load-balancing rule.  When the file sizes are sufficiently imbalanced,
-the plan subdivides large files into particle ranges.  This avoids assuming
-that the number of files is an adequate proxy for the amount of work while
-still limiting the number of independent readers per file.
-
-Each process owns a private density-grid accumulator.  Workers read their
-assigned chunks, apply the same mass-assignment and smoothing operations as
-the serial path, and write their private grids to temporary NumPy files.
-The parent process reduces these files into the final grid and removes each
-temporary file after it has been incorporated.  Consequently, workers never
-write concurrently to a shared grid, and the reduction order does not change
-the physical input data or the definition of the clumping factor.  The same
-private-grid and reduction pattern is used by the SciPy and Pylians chunked
-grid builders.
-
-\subsection{Memory policy and diagnostics}
-
-Parallelism is constrained by the memory required for the private grids.  If
-$B_g$ is the size of one grid, $w$ is the effective worker count, and $b$ is
-the number of radius bins processed per stream pass, the implementation
-estimates the grid-related allocation as
-\begin{equation}
-    B_{\mathrm{grid}} \simeq B_g\left[1+w(b+2)\right].
-    \label{eq:parallel-grid-memory}
-\end{equation}
-The configured safety fraction reserves space for Python, HDF5, and other
-non-grid allocations.  When the estimate exceeds the memory limit, the
-policy reduces the worker count first and then the radius-bin batch size.  If
-even one worker with one radius-bin batch cannot fit, the calculation fails
-before starting the worker pool.  Result metadata records the requested and
-effective worker counts, partition mode, private-grid estimates, worker
-assignment, I/O, preprocessing, smoothing, and reduction times.
-
-\subsection{Existing validation evidence}
-
-The parallel path is validated at two levels.  First, the chunked-loading
-test suite contains 21 tests covering serial--parallel equality for the cube
-and Pylians paths, deterministic file and range partitioning, automatic
-range selection, memory-policy reductions, cache invalidation, temporary
-file cleanup, and worker-failure cleanup.  These tests pass without changing
-the numerical tolerances used by the production calculations.
-
-Second, the existing Thesan-2 worker overlays show that the clumping-factor
-curves and selected-cell counts remain coincident as the worker count changes.
-The overlays are reproduced from the existing analysis artifacts in
-Fig.~\ref{fig:parallel-worker-clumping} and Fig.~\ref{fig:parallel-worker-cells};
-they are numerical-parity diagnostics, not new simulations.
-
-\begin{figure}[t]
-    \centering
-    \includegraphics[width=\linewidth]{../results/analysis/operations/thesan/performance/combined/Thesan-2_dm_pylians_grid256_threads/analysis-94345f89284c/artifacts/Thesan-2_dm_pylians_grid256_threads.png}
-    \caption{Existing Thesan-2 dark-matter Pylians clumping-factor curves for
-    the available worker-count configurations at $256^3$.  The near-overlap
-    of the curves provides a production-scale numerical-parity check.}
-    \label{fig:parallel-worker-clumping}
-\end{figure}
-
-\begin{figure}[t]
-    \centering
-    \includegraphics[width=\linewidth]{../results/analysis/operations/thesan/performance/combined/Thesan-2_dm_pylians_grid256_cell_counts/analysis-95b33b59128a/artifacts/Thesan-2_dm_pylians_grid256_cell_counts.png}
-    \caption{Existing selected-cell-count diagnostic for the same worker
-    configurations.  The overlap confirms that parallel execution does not
-    change the IGM mask used by the clumping calculation.}
-    \label{fig:parallel-worker-cells}
-\end{figure}
-
-\subsection{Benchmark evidence and protocol}
-
-The repository contains 40 historical timing rows spanning Thesan-1 and
-Thesan-2, $128^3$ through $1024^3$ grids, and requested worker counts from
-one to sixteen.  These rows are retained as contextual evidence for grid
-scaling and memory growth.  They are not used as the primary speedup claim:
-the configurations contain a mixture of cache hits, lock waits, cache builds,
-and one-off runs, and the raw JSON paths referenced by the consolidated CSV
-are not all present after results consolidation.
-
-The report-side extraction script named
-reports/parallelization\_benchmark.py separates these historical
-rows from controlled measurements and produces the compact summary figure in
-Fig.~\ref{fig:parallel-benchmark}.  The controlled protocol requires only
-six new grid computations on the machine containing the Thesan-2 snapshot:
-snapshot 80, dark matter, Pylians, a $512^3$ grid, requested worker counts of
-one and sixteen, and three alternating repeats at each setting.  The chunk
-size, radius-bin batch size, partition mode, memory limit, software
-environment, and node are fixed.  The summary cache is disabled or isolated
-from previous runs.  Both requested and effective worker counts are recorded.
-
-The primary timing statistic is the ratio of the median total time for the
-serial runs to the median total time for the parallel runs.  The repeat range
-and the grid-build timing are reported alongside this ratio.  If the six JSON
-files are not available, the extraction script leaves the controlled panels
-explicitly marked as pending and reports only the historical context; no
-speedup is inferred from the contaminated historical timings.
+For a controlled test, we processed the dark-matter snapshot at $z=5.49$ of
+Thesan-2 on a $512^3$ grid three times with one worker and three times with
+16 workers.  All calculations used the same input, settings, and an inactive
+summary cache.  The median end-to-end time decreased from 13.90 to
+2.56 minutes, corresponding to a speedup of $5.44$ (Fig.~\ref{fig:parallel-timing}).
+The requested and effective worker counts were equal in every run.
 
 \begin{figure*}[t]
-    \centering
-    \includegraphics[width=0.96\textwidth]{figures/parallelization_benchmark.png}
-    \caption{Compact evidence summary for the parallel chunked-grid path.
-    The historical timing and memory panels are contextual.  The lower panels
-    are populated from the six cache-isolated benchmark JSON files when they
-    are available; otherwise they identify the missing controlled evidence
-    rather than reporting an unsupported speedup.}
-    \label{fig:parallel-benchmark}
+\centering
+\includegraphics[width=0.82\textwidth]{figures/parallelization_benchmark.png}
+\caption{Controlled wall-time measurement for the Thesan-2 dark-matter
+snapshot at $z=5.49$ on a $512^3$ grid.  Bar heights give the median of three
+cache-free repetitions and error bars show the full repeat range.}
+\label{fig:parallel-timing}
 \end{figure*}
 
-\subsection{Limitations and reproducibility}
+The serial and parallel calculations produced identical clumping-factor
+curves at the stored precision.  The selected-cell totals differed by fewer
+than eight cells out of $512^3$, which is negligible for the measurements in
+this work.  Parallel execution therefore acts only as a computational
+acceleration; it does not introduce a new physical or numerical definition of
+the measured quantity.
 
-The controlled timing is a representative measurement of the process-pool
-grid path, not a hardware-independent scaling law.  The effective worker
-count can be lower than requested when the snapshot contains too few balanced
-work units or when the memory policy applies a cap.  The appendix therefore
-reports both counts and separates numerical parity from wall-clock behavior.
-No new cosmological snapshots, particle fields, redshifts, or dark-matter
-models are required for this validation: the existing scientific results and
-worker overlays provide the broad numerical coverage, while the six
-cache-isolated computations provide the only new timing evidence.
+The practical limitation remains the memory required by the density grid.
+For a grid with $N$ cells along each dimension, this requirement scales as
+$N^3$.  The calculation consequently limits the number of simultaneous
+workers when necessary, so that a faster execution does not require an
+uncontrolled increase in memory use.  This makes it possible to evaluate the
+grids adopted in the main analysis while retaining the same convergence and
+smoothing choices discussed in Sec.~\ref{sec:density-grid-tests}.  The timing
+values above are specific to this calculation and computing environment, but
+demonstrate the practical gain available without changing the scientific
+results.
 
 
 
