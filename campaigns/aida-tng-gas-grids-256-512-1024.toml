@@ -1,0 +1,69 @@
+me = "aida-tng-gas-grids-256-512-1024"
+output_root = "results-aida-gas-grid-completion"
+
+[[simulations]]
+family = "aida-tng"
+name = "L35n1080_CDM"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L35n1080_CDM/output"
+
+[[simulations]]
+family = "aida-tng"
+name = "L35n1080_SIDM1"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L35n1080_SIDM1/output"
+
+[[simulations]]
+family = "aida-tng"
+name = "L35n1080_vSIDM"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L35n1080_vSIDM/output"
+
+[[simulations]]
+family = "aida-tng"
+name = "L35n1080_WDM3"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L35n1080_WDM3/output"
+
+[[simulations]]
+family = "aida-tng"
+name = "L75n910_CDM"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L75n910_CDM/output"
+
+[[simulations]]
+family = "aida-tng"
+name = "L75n910_SIDM1"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L75n910_SIDM1/output"
+
+[[simulations]]
+family = "aida-tng"
+name = "L75n910_vSIDM"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L75n910_vSIDM/output"
+
+[[simulations]]
+family = "aida-tng"
+name = "L75n910_WDM3"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L75n910_WDM3/output"
+
+[matrix]
+snapshots = "available"
+particle_types = ["gas"]
+methods = ["clumping.pylians"]
+grids = [256, 512, 1024]
+
+[method_options."clumping.pylians"]
+filter_type = "Top-Hat"
+radius_bins = 10
+threshold_min = -1.0
+threshold_max = 25.0
+threshold_count = 200
+memory_limit = "128gb"
+
+[execution]
+threads = 8
+load_mode = "chunked"
+chunk_size = 1000000
+mas = "CIC"
+radius_bin_batch_size = 1
+
+[resources]
+cpus = 8
+memory = "128gb"
+walltime = "24:00:00"
+queue = "mini"
