@@ -11,7 +11,7 @@ import numpy as np
 
 from clumping_factor.infrastructure.artifacts import write_explicit_analysis_sidecar
 
-from clumping_factor.visualization.styles import dark_matter_model, simulation_style
+from clumping_factor.visualization.styles import GRID_SIZE_COLORS, dark_matter_model, simulation_style
 
 
 @dataclass(frozen=True)
@@ -118,6 +118,7 @@ def plot_arepo_local_comparison(
     local_fold_factor: int | str = "all",
     average_bins: int | None = None,
     show_nyquist: bool = True,
+    style_by_grid_and_engine: bool = False,
 ) -> Path:
     """Compare AREPO spectrum block(s) with one or more local JSON results.
 
@@ -140,7 +141,10 @@ def plot_arepo_local_comparison(
         block = arepo_spectra[block_index]
         block_k, block_values = _positive_spectrum(block.k, getattr(block, field))
         arepo_curves.append((block_index, block_k * k_unit_factor, block_values))
-    reference_k, reference_values = arepo_curves[0][1:]
+    arepo_references = {
+        block_index: (block_k, block_values)
+        for block_index, block_k, block_values in arepo_curves
+    }
     local_paths = [local_path] if isinstance(local_path, (str, Path)) else list(local_path)
     if not local_paths:
         raise ValueError("At least one local JSON result is required.")
@@ -150,8 +154,10 @@ def plot_arepo_local_comparison(
     figure, (spectrum_axis, ratio_axis) = plt.subplots(
         2, 1, figsize=(10, 8), sharex=True, gridspec_kw={"height_ratios": [3, 1]}, constrained_layout=True
     )
-    arepo_colors = ["#1f77b4", "#2ca02c", "#8c564b"]
-    arepo_linestyles = ["-", "--", ":"]
+    fold_labels = {0: "fold 1", 1: "fold 2", 2: "fold 4"}
+    fold_colors = {1: "#1f77b4", 2: "#ff7f0e", 4: "#2ca02c"}
+    arepo_colors = [fold_colors[1], fold_colors[2], fold_colors[4]]
+    arepo_linestyles = ["-", "-", "-"]
     for curve_index, block_k, block_values in arepo_curves:
         block_k, block_values = _log_average(block_k, block_values, average_bins)
         spectrum_axis.plot(
@@ -160,7 +166,7 @@ def plot_arepo_local_comparison(
             color=arepo_colors[curve_index % len(arepo_colors)],
             linewidth=1.6,
             linestyle=arepo_linestyles[curve_index % len(arepo_linestyles)],
-            label=f"AREPO (block {curve_index})",
+            label=f"AREPO {fold_labels.get(curve_index, f'block {curve_index}')}",
         )
     local_colors = ["#d62728", "#9467bd", "#ff7f0e", "#17becf", "#8c564b", "#e377c2"]
     local_linestyles = ["--", ":", "-.", (0, (5, 1)), (0, (3, 1, 1, 1)), (0, (1, 1))]
@@ -172,6 +178,17 @@ def plot_arepo_local_comparison(
             blocks = _spectrum_blocks(local, field, selected_engine, local_fold_factor)
             for block in blocks:
                 local_k, local_values, actual_engine = block[:3]
+                fold_factor = block[3]
+                reference_block = {1: 0, 2: 1, 4: 2}.get(
+                    fold_factor, selected_arepo_blocks[0]
+                )
+                reference_k, reference_values = arepo_references.get(
+                    reference_block, arepo_curves[0][1:]
+                )
+                # Local and AREPO results are both stored in inverse kpc/h.
+                # Convert local wavenumbers alongside the AREPO reference so
+                # interpolation, plotted coordinates, and axis units agree.
+                local_k = np.asarray(local_k, dtype=float) * k_unit_factor
                 local_k, local_values = _log_average(local_k, local_values, average_bins)
                 common_k = np.geomspace(max(reference_k.min(), local_k.min()), min(reference_k.max(), local_k.max()), 500)
                 arepo_interp = np.exp(np.interp(np.log(common_k), np.log(reference_k), np.log(reference_values)))
@@ -180,22 +197,41 @@ def plot_arepo_local_comparison(
                 fold_label = f" fold {block[3]}" if block[3] is not None else ""
                 label_prefix = local_labels[path_index] if local_labels is not None else default_label
                 label = f"{label_prefix}{fold_label} ({actual_engine})" if local_engine == "both" else f"{label_prefix}{fold_label}"
-                color = local_colors[series_index % len(local_colors)]
-                linestyle = local_linestyles[series_index % len(local_linestyles)]
+                if style_by_grid_and_engine:
+                    grid = local.get("parameters", {}).get("grid_size")
+                    color = GRID_SIZE_COLORS.get(int(grid), local_colors[series_index % len(local_colors)]) if grid is not None else local_colors[series_index % len(local_colors)]
+                    linestyle = "-" if actual_engine == "numpy" else "--"
+                    label = f"{int(grid)}³ | {actual_engine}" if grid is not None else label
+                else:
+                    color = fold_colors.get(fold_factor, local_colors[series_index % len(local_colors)])
+                    linestyle = "--"
                 spectrum_axis.plot(local_k, local_values, color=color, linewidth=1.5, linestyle=linestyle, label=label)
-                ratio_axis.plot(common_k, local_interp / arepo_interp, color=color, linewidth=1.4, linestyle=linestyle, label=label)
+                visible = np.ones(common_k.shape, dtype=bool)
+                if k_min is not None:
+                    visible &= common_k >= k_min
+                if k_max is not None:
+                    visible &= common_k <= k_max
+                ratio_axis.plot(
+                    common_k[visible],
+                    (local_interp / arepo_interp)[visible],
+                    color=color,
+                    linewidth=1.4,
+                    linestyle=linestyle,
+                    label=label,
+                )
                 if show_nyquist and block[4] is not None:
                     spectrum_axis.axvline(block[4] * k_unit_factor, color=color, alpha=0.25, linewidth=0.8)
                 series_index += 1
     ratio_axis.axhline(1.0, color="0.35", linestyle="--", linewidth=1)
     spectrum_axis.set_ylabel(r"$\Delta^2(k)$" if field == "dimensionless_power" else r"$P(k)$")
-    ratio_axis.set_ylabel("Local / AREPO")
+    ratio_axis.set_ylabel("Pylians / AREPO")
     ratio_axis.set_xlabel(r"$k\ [h\,\mathrm{Mpc}^{-1}]$")
     spectrum_axis.set_title(title or "THESAN-1 dark-matter power spectrum: AREPO vs local")
     for axis in (spectrum_axis, ratio_axis):
         axis.set_xscale("log")
         axis.grid(True, which="both", alpha=0.25)
     spectrum_axis.set_yscale("log")
+    ratio_axis.set_yscale("log")
     if show_nyquist:
         for block_index, block in enumerate(arepo_spectra):
             if block.k.size:
@@ -281,6 +317,7 @@ def plot_power_spectrum_files(
     fold_factor: int | str | None = None,
     average_bins: int | None = None,
     show_nyquist: bool = True,
+    style_by_grid_and_engine: bool = False,
 ) -> Path:
     if field not in {"power", "dimensionless_power"}:
         raise ValueError("field must be 'power' or 'dimensionless_power'.")
@@ -290,10 +327,12 @@ def plot_power_spectrum_files(
     if relative_to_baseline is not None and engine == "both":
         raise ValueError("relative_to_baseline requires one selected engine, not 'both'.")
 
+    k_display_factor = 1000.0
     baseline = None
     if relative_to_baseline is not None:
         baseline_document = _load_result(relative_to_baseline)
-        baseline = _spectrum(baseline_document, field, None if engine == "primary" else engine)[:2]
+        baseline_k, baseline_values = _spectrum(baseline_document, field, None if engine == "primary" else engine)[:2]
+        baseline = (baseline_k * k_display_factor, baseline_values)
 
     figure, axis = plt.subplots(figsize=(10, 6), constrained_layout=True)
     linestyles = ["-", "--", ":", "-."]
@@ -313,20 +352,27 @@ def plot_power_spectrum_files(
         engines = ["numpy", "pylians"] if engine == "both" else [None if engine == "primary" else engine]
         for selected_engine in engines:
             for k, values, actual_engine, block_factor, nyquist in _spectrum_blocks(document, field, selected_engine, fold_factor):
+                k = np.asarray(k, dtype=float) * k_display_factor
                 k, values = _log_average(k, values, average_bins)
                 label = _label(document, actual_engine) + (f" | fold {block_factor}" if block_factor is not None else "")
                 style = simulation_style(document, series_index)
-                linestyle = (
-                    linestyles[series_index % len(linestyles)]
-                    if alternate_linestyles
-                    else style["linestyle"] if dark_matter_model(document) is not None else "-"
-                )
-                color = snapshot_colors.get(document.get("parameters", {}).get("snapshot"), style["color"]) if color_by_snapshot else style["color"]
+                grid = document.get("parameters", {}).get("grid_size")
+                if style_by_grid_and_engine:
+                    color = GRID_SIZE_COLORS.get(int(grid), style["color"]) if grid is not None else style["color"]
+                    linestyle = "-" if actual_engine == "numpy" else "--"
+                    label = f"{int(grid)}³ | {actual_engine}" if grid is not None else label
+                else:
+                    linestyle = (
+                        linestyles[series_index % len(linestyles)]
+                        if alternate_linestyles
+                        else style["linestyle"] if dark_matter_model(document) is not None else "-"
+                    )
+                    color = snapshot_colors.get(document.get("parameters", {}).get("snapshot"), style["color"]) if color_by_snapshot else style["color"]
                 series_index += 1
                 if baseline is None:
                     axis.plot(k, values, linewidth=1.5, linestyle=linestyle, color=color, label=label)
                     if show_nyquist and nyquist is not None:
-                        axis.axvline(nyquist, color=color, alpha=0.2, linewidth=0.8)
+                        axis.axvline(nyquist * k_display_factor, color=color, alpha=0.2, linewidth=0.8)
                     continue
                 baseline_k, baseline_values = baseline
                 common_k = np.linspace(max(k.min(), baseline_k.min()), min(k.max(), baseline_k.max()), 400)
@@ -450,6 +496,11 @@ def build_power_spectrum_plot_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fold-factor", default=None, help="Fold factor to plot, or 'all' for every explicit fold block.")
     parser.add_argument("--average-bins", type=int, help="Optional logarithmic-bin average count.")
     parser.add_argument("--no-nyquist", action="store_true")
+    parser.add_argument(
+        "--style-by-grid-and-engine",
+        action="store_true",
+        help="Use the THESAN grid-size colours and solid NumPy/dashed Pylians lines.",
+    )
     return parser
 
 
@@ -472,6 +523,7 @@ def power_spectrum_plot_main(argv: list[str] | None = None) -> None:
         fold_factor="all" if args.fold_factor == "all" else (int(args.fold_factor) if args.fold_factor is not None else None),
         average_bins=args.average_bins,
         show_nyquist=not args.no_nyquist,
+        style_by_grid_and_engine=args.style_by_grid_and_engine,
     )
     write_explicit_analysis_sidecar(
         output, domain="power-spectrum", family="explicit", analysis_kind="plot",
@@ -497,6 +549,11 @@ def build_power_spectrum_compare_parser() -> argparse.ArgumentParser:
     parser.add_argument("--k-max", type=float)
     parser.add_argument("--average-bins", type=int, help="Optional logarithmic-bin average count.")
     parser.add_argument("--no-nyquist", action="store_true")
+    parser.add_argument(
+        "--style-by-grid-and-engine",
+        action="store_true",
+        help="Use the THESAN grid-size colours and solid NumPy/dashed Pylians lines.",
+    )
     return parser
 
 
@@ -518,6 +575,7 @@ def power_spectrum_compare_main(argv: list[str] | None = None) -> None:
         k_max=args.k_max,
         average_bins=args.average_bins,
         show_nyquist=not args.no_nyquist,
+        style_by_grid_and_engine=args.style_by_grid_and_engine,
     )
     write_explicit_analysis_sidecar(
         output, domain="power-spectrum", family="explicit", analysis_kind="compare",

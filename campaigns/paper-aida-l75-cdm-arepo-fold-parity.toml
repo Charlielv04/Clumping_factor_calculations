@@ -1,0 +1,37 @@
+name = "paper-aida-l75-cdm-arepo-fold-parity"
+output_root = "results"
+
+# Matches the AIDA-TNG / IllustrisTNG AREPO self-folding sequence for the
+# L75n910 CDM z=0 reference spectrum.  The three AREPO blocks are the normal,
+# 16-folded, and 256-folded measurements—not folds 1, 2, and 4.
+[simulation]
+family = "aida-tng"
+name = "L75n910_CDM"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L75n910_CDM/output"
+
+[matrix]
+snapshots = [99]
+particle_types = ["dm"]
+methods = ["power-spectrum.combined"]
+grids = [1024]
+
+[method_options."power-spectrum.combined"]
+fold_factors = [1, 16, 256]
+bin_count = 80
+binning = "log"
+smoothing = "none"
+# Retain the CIC deconvolution used for the existing AREPO comparison figures.
+# The combined method also writes the raw NumPy spectrum for a backend check.
+pylians_mas = "CIC"
+
+[execution]
+threads = 8
+load_mode = "chunked"
+chunk_size = 1000000
+mas = "CIC"
+
+[resources]
+cpus = 8
+memory = "128gb"
+walltime = "24:00:00"
+queue = "mini"

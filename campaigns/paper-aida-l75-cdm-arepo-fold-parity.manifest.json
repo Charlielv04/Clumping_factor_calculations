@@ -1,0 +1,61 @@
+{
+  "campaign": "paper-aida-l75-cdm-arepo-fold-parity",
+  "source": "campaigns\\paper-aida-l75-cdm-arepo-fold-parity.toml",
+  "tasks": [
+    {
+      "command": [
+        "clumping",
+        "power",
+        "compute",
+        "--base-path",
+        "/lustre/work/egaraldi/AIDA-TNG/L75n910_CDM/output",
+        "--simulation-name",
+        "L75n910_CDM",
+        "--snapshot",
+        "99",
+        "--particle-type",
+        "dm",
+        "--spectrum-engine",
+        "both",
+        "--grid-size",
+        "1024",
+        "--bin-count",
+        "80",
+        "--binning",
+        "log",
+        "--fold-factors",
+        "1",
+        "16",
+        "256",
+        "--pylians-mas",
+        "CIC",
+        "--smoothing",
+        "none",
+        "--threads",
+        "8",
+        "--load-mode",
+        "chunked",
+        "--chunk-size",
+        "1000000",
+        "--mas",
+        "CIC",
+        "--output",
+        "results\\aida-tng\\L75n910_CDM\\power-spectrum\\power-spectrum.combined\\dm\\snapshot099\\science-fd954b8fe299\\execution-9acc339e07bc_run001.json"
+      ],
+      "environment": {},
+      "grid_size": 1024,
+      "id": "aida-tng-L75n910_CDM-s099-dm-power-spectrum.combined-g1024",
+      "method_id": "power-spectrum.combined",
+      "output": "results\\aida-tng\\L75n910_CDM\\power-spectrum\\power-spectrum.combined\\dm\\snapshot099\\science-fd954b8fe299\\execution-9acc339e07bc_run001.json",
+      "particle_type": "dm",
+      "resources": {
+        "cpus": 8,
+        "memory": "128gb",
+        "queue": "mini",
+        "walltime": "24:00:00"
+      },
+      "simulation": "L75n910_CDM",
+      "snapshot": 99
+    }
+  ]
+}

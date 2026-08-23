@@ -11,6 +11,15 @@ AIDA_DM_STYLES: dict[str, dict[str, str]] = {
     "WDM3": {"color": "#d62728", "linestyle": "-."},
 }
 
+# Match the grid-size colours used by the THESAN resolution diagnostics.
+GRID_SIZE_COLORS: dict[int, str] = {
+    64: "#9467bd",
+    128: "#d62728",
+    256: "#1f77b4",
+    512: "#ff7f0e",
+    1024: "#2ca02c",
+}
+
 
 def dark_matter_model(document: dict[str, Any]) -> str | None:
     simulation = document.get("simulation", {}).get("name")
