@@ -171,23 +171,24 @@ Cosmic reionization is the epoch during which the IGM was ionized and heated by 
 
 Recombinations are two-body interactions: an electron and an ionized hydrogen atom must encounter one another before a recombination can occur. The recombination rate per unit volume is therefore
 
-$$
+\begin{equation}
 \dot n_{\rm rec}=n_e n_{\mathrm{H\,II}}\alpha_{\mathrm{H\,II}},
-$$
+\end{equation}
 
 where $n_e$ and $n_{\mathrm{H\,II}}$ are the number densities of free electrons and ionized hydrogen, respectively, and $\alpha_{\mathrm{H\,II}}$ is the recombination coefficient. In a fully ionized gas of fixed composition, both number densities are proportional to the gas density. The recombination rate then scales approximately as $\rho^2$. This is why density inhomogeneities enhance the total recombination rate: at fixed mean density, overdense regions contribute disproportionately more recombinations than underdense regions. This dependence is the physical motivation for introducing a clumping factor in reionization calculations \cite{feng2019reionization,davies2024clumping}.
 
 A simple density-based definition is
 
-$$
+\begin{equation}
 C \equiv \frac{\langle \rho^2 \rangle}{\langle \rho \rangle^2},
-$$
+\end{equation}
 
 where the averages must be taken over a precisely specified gas phase and spatial region. For reionization, a more directly relevant definition weights the electron and ionized-hydrogen densities and the recombination coefficient,
 
-$$
+\begin{equation}
 C_{\rm rec} \equiv \frac{\left\langle n_e n_{\mathrm{H\,II}} \alpha_{\mathrm{H\,II}} \right\rangle}{\langle n_e\rangle \langle n_{\mathrm{H\,II}}\rangle \langle\alpha_{\mathrm{H\,II}}\rangle}.
-$$
+\label{eq:recombination-clumping-factor}
+\end{equation}
 
 The density-based and recombination-weighted definitions are related but depend on the selected gas phase, volume, ionization state, and temperature treatment \cite{davies2024clumping,rahmati2013selfshielding}.
 
@@ -219,9 +220,9 @@ The reference cosmology is the $\Lambda$CDM model with cold, collisionless dark 
 
 CDM therefore provides the baseline against which the other models are compared. For this purpose, it is useful to consider the ratio
 
-$$
+\begin{equation}
 R_P(k) \equiv \frac{P_{\rm model}(k)}{P_{\rm CDM}(k)}.
-$$
+\end{equation}
 
 In this work, $R_P(k)$ can refer either to the ratio of linear power spectra or to power spectra measured from the simulations. In the latter case, it includes the effects of nonlinear evolution and, when present, baryonic physics.
 
@@ -244,9 +245,9 @@ SIDM therefore differs conceptually from WDM and FDM. WDM and FDM primarily modi
 
 In velocity-dependent SIDM (vSIDM), the scattering strength varies with the relative velocity of the dark-matter particles,
 
-$$
+\begin{equation}
 \frac{\sigma}{m_\chi}=\frac{\sigma(v)}{m_\chi}.
-$$
+\end{equation}
 
 This dependence allows interactions to be stronger in low-velocity dwarf-galaxy environments and weaker in groups and clusters. It can therefore provide appreciable changes to small halos while reducing the impact on systems with larger characteristic velocities. The resulting model can preserve the large-scale success of CDM while producing scale-dependent changes in halo structure and nonlinear density statistics \cite{tulin2018sidm}.
 
@@ -281,9 +282,9 @@ The clumping factor is introduced to describe the enhancement of recombinations 
 
 In order to define which regions enter our calculation we define a mask over our grids, this procedure applies the same for both the uneven Voronoi cells or our standarized mass deposited grid. To define this mask, we use the overdensity,
 
-$$
+\begin{equation}
 \delta \equiv \frac{\rho - \bar\rho}{\bar\rho},
-$$
+\end{equation}
 
 where $\bar\rho$ is the cosmic mean density. In practice, we define the IGM by establishing a mask that eliminates the gas that is part of collapsed, galaxy-associated, or otherwise very dense structures by requiring $\delta<\delta_{\rm max}$. During reionization, in order to compare with certain existing estimators, it is also useful to remove cells that are not sufficiently ionized by requiring $x_{\mathrm{H\,II}}>x_{\mathrm{H\,II,min}}$, where $x_{\mathrm{H\,II}}$ is the ionized-hydrogen fraction. The exact thresholds are analysis choices and will be varied in the methodology below; their purpose is to make explicit which phase of the gas enters the average \cite{rahmati2013selfshielding,davies2024clumping}.
 
@@ -291,9 +292,13 @@ where $\bar\rho$ is the cosmic mean density. In practice, we define the IGM by e
 \subsection{Power spectrum calculation}
 
 The power spectrum is obtained from the Fourier transform of the overdensity field. In particular, for a periodic simulation box of volume $V$, we will have for each fourier mode \cite{jing2005correcting}
-$$P(\mathbf{k}) = \frac{V}{N^6}|\delta_{\mathbf{k}}|^2$$
+\begin{equation}
+P(\mathbf{k}) = \frac{V}{N^6}|\delta_{\mathbf{k}}|^2
+\end{equation}
 where $N^3$ corresponds to the number of grid cells. Then, one will group the resulting modes in spherical shells in wavenumber space. After that, we are particularly interested in the dimensionless form of the power spectrum,
-$$\Delta^2(k) = \frac{k^3 P(k)}{2\pi^2}.$$
+\begin{equation}
+\Delta^2(k) = \frac{k^3 P(k)}{2\pi^2}.
+\end{equation}
 
 For this calculation one has to apply a sequence of choices that impact the subsequent results. 
 
@@ -332,12 +337,12 @@ Then, we traverse each line of sight until the cumulative optical depth reaches 
 The hydrogen photoionization rate, $\Gamma_{\mathrm{HI}}$, measures the rate at which a neutral hydrogen atom is ionized by the surrounding radiation field. In our case, we calculate it using the Voronoi gas cells from the simulation. To focus on the ionized IGM, we restrict the volume average to cells such that $x_{\mathrm{HI}}<0.5$, that is the fraction of neutral hydrogen is less than half.
 
 In general, the photoionization rate is obtained by integrating the product of the photon number density and the hydrogen photoionization cross section over the photon frequency space, 
-$$
+\begin{equation}
 \Gamma_{\mathrm{HI}}
 =
 c\int_{\nu_0}^{\infty}
 n_\gamma(\nu)\sigma_{\mathrm{HI}}(\nu)\,d\nu,
-$$
+\end{equation}
 with $\nu_0$ being the hydrogen-ionization threshold frequency, $n_\gamma(\nu)$ the photon number density per unit frequency, and $\sigma_{\mathrm{HI}}(\nu)$ the frequency-dependent photoionization cross section \cite{verner1996atomic}.
 
 However, the publicly available THESAN snapshots provide the radiation field in three discrete photon groups \cite{garaldi2022thesan}. We therefore, approximate the integral as a sum over these groups. Thus, the frequency integral becomes,
@@ -351,14 +356,14 @@ where $n_{\gamma,b}$ is the photon number density in group $b$ and $\left\langle
 
 For this work, we use the precalculated values,
 
-$$
+\begin{equation}
 \left\langle c\sigma_{\mathrm{HI}}\right\rangle_b =
 \left(
 9.913\times10^{-8},\,
 2.095\times10^{-8},\,
 3.269\times10^{-9}
 \right)\,\mathrm{cm^3/s}.
-$$
+\end{equation}
 
 The photoionization rate is first computed separately for each cell. Then, in order to recover a simulation wide value, we volume-average over all the cells satisfying the ionization criterion.
 
@@ -381,7 +386,9 @@ Thus, we note that when $g/N \approx 1$ the gridded calculation slightly overest
 Moreover, in the Thesan-mini calculations one can observe that using a grid size too fine with respect to the number of particles introduces some instabilities that the smoothing and cloud in cell assignment aren't able to eliminate. 
 
 This comparison is extremely informative, however, it only explores the data as a singular redshift. Therefore, we would like to see if similar behaviors hold for different redshifts. In order to carry out this comparison, let us define a gridding-deviation measure as follows:
-$$\Delta_{grid} = \int_0^{25} \frac{C_{Voronoi} - C_{grid}}{C_{Voronoi}} d\delta,$$
+\begin{equation}
+\Delta_{grid} = \int_0^{25} \frac{C_{Voronoi} - C_{grid}}{C_{Voronoi}}\,\mathrm{d}\delta,
+\end{equation}
 where $C_{Voronoi}$ corresponds to the clumping factor calculated using the native cells, and $C_{grid}$ to the calculation at a given grid size. Thus, we can see this comparison in Figure \ref{fig:gridding_deviation_factor_Thesan-2} that earlier in the simulation a gridding factor close to unity almost exactly matches the native calculation, this corresponds to a lower clumping factor overall and thus the Voronoi cell sizes being more uniform throughout the simulation space. However, as the simulation progresses and the halos collapse the finer grid size starts to overestimate the clumping factor where as smaller grids get closer to it. 
 
 \begin{figure}
@@ -471,10 +478,12 @@ In this section we will use as a reference the clumping factor as calculated usi
 \end{figure}
 
 For this application we will be interested in the recombination clumping factor coeffcient, which we recall was given by,
-$$ C_{rec} \equiv \frac{\left\langle n_e n_{\mathrm{H\,II}} \alpha_{\mathrm{H\,II}} \right\rangle}
+\begin{equation}
+C_{rec} \equiv \frac{\left\langle n_e n_{\mathrm{H\,II}} \alpha_{\mathrm{H\,II}} \right\rangle}
 {\left\langle n_e \right\rangle
  \left\langle n_{\mathrm{H\,II}} \right\rangle
- \left\langle \alpha_{\mathrm{H\,II}} \right\rangle}.$$ 
+ \left\langle \alpha_{\mathrm{H\,II}} \right\rangle}.
+\end{equation}
 
 This introduces small changes in the calculation, however, for each Voronoi cell in the simulation we have access to the proportion of neutral hydrogen and the electron abudance, thus, these changes only introduce some extra factors into the averages but don't fundamentally change the calculation procedure. Moreover, in all the calculations that follow, we have taken the fiducial recombination coefficient equal to the Case B recombination rate for 10,000K gas. This assumption is matched on the relevant paper. 
 
@@ -493,26 +502,26 @@ We also note that there is an almost perfect proportionality relationship betwee
 \subsection{Approximate estimator 1: ionization equilibrium}
 
 The first approximate estimator presented by Davies et al. assumes ionization equilibrium \cite{davies2024clumping}. This corresponds to the assumption
-$$
+\begin{equation}
 \left\langle n_{\mathrm{H\,I}}\Gamma_{\mathrm{H\,I}}\right\rangle
 =
 \left\langle n_e n_{\mathrm{H\,II}}\alpha_{\mathrm{H\,II}}\right\rangle,
-$$
+\end{equation}
 which, using the definition of the recombination clumping factor, becomes
-$$
+\begin{equation}
 \left\langle n_{\mathrm{H\,I}}\Gamma_{\mathrm{H\,I}}\right\rangle
 = C\chi_e\left(1-x_{\mathrm{H\,I}}\right)^2
 n_{\mathrm{H}}^2\alpha_{\mathrm{H\,II}}.
-$$
+\end{equation}
 
 We are interested in testing this assumption in the context of our simulations. Ionization equilibrium is expected to hold only in fully ionized gas. Because the THESAN snapshots studied here are recorded near the end of reionization, they can still contain neutral islands. We therefore introduce an additional ionization cutoff in our definition of the IGM, preventing these neutral regions from affecting the calculation.
 
 The results are shown in Figure~\ref{fig:ionization-equilibrium}. With a sufficiently strict ionization cutoff, the equilibrium relation is satisfied for each of the three overdensity cutoffs considered. While this is not an estimator proposed by Davies et al., it will be useful for us to consider the clumping-factor estimator obtained by simply assuming ionization equilibrium. We will therefore also compare
-$$
+\begin{equation}
 C = \frac{\left\langle n_{\mathrm{H\,I}}\Gamma_{\mathrm{H\,I}}\right\rangle}
 {\chi_e\left(1-x_{\mathrm{H\,I}}\right)^2
 n_{\mathrm{H}}^2\alpha_{\mathrm{H\,II}}}.
-$$
+\end{equation}
 
 \begin{figure}
     \centering
@@ -522,10 +531,10 @@ $$
 \end{figure}
 
 For the first estimator proposed by Davies et al., they additionally approximate the mean free path as \cite{davies2024clumping}
-$$
+\begin{equation}
 \lambda_{\mathrm{mfp}}=
 \left(n_{\mathrm{H\,I}}\sigma_{\mathrm{H\,I}}\right)^{-1},
-$$
+\end{equation}
 where $n_{\mathrm{H\,I}}$ is the neutral-hydrogen number density and $\sigma_{\mathrm{H\,I}}$ is the photoionization cross section of neutral hydrogen. We also test this approximation as a function of the overdensity and ionization cutoffs introduced above. Figure~\ref{fig:meanfreepath-sigma} shows that it introduces a bias in the region of parameter space where ionization equilibrium is most closely satisfied. We therefore conclude that these two assumptions cannot be satisfied simultaneously for any of the threshold choices used to define the IGM in the THESAN simulations.
 \begin{figure}[t]
     \centering
@@ -537,12 +546,12 @@ where $n_{\mathrm{H\,I}}$ is the neutral-hydrogen number density and $\sigma_{\m
 
 Combining these two assumptions gives the first approximate estimator,
 
-$$
+\begin{equation}
 C = \frac{\Gamma_{\mathrm{H\,I}}}
 {\lambda_{\mathrm{mfp}}\sigma_{\mathrm{H\,I}}\chi_e
 \left(1-x_{\mathrm{H\,I}}\right)^2 n_{\mathrm{H}}^2
 \alpha_{\mathrm{H\,II}}}.
-$$
+\end{equation}
 
 We later compare this estimator with our standard direct implementation. However, the tests of its underlying assumptions already show that there is no IGM definition, within the thresholds examined here, for which both relations can be reconciled.
 
@@ -551,15 +560,15 @@ We later compare this estimator with our standard direct implementation. However
 \subsection{Approximate estimator 2: photon-density closure}
 \label{sec:photon-density-estimator}
 Davies et al. introduce a second estimator based on the definition of an effective photon interaction rate \cite{davies2024clumping},
-$$
+\begin{equation}
 \Gamma_{\gamma}=\frac{c}{\lambda_{\mathrm{mfp}}},
-$$
+\end{equation}
 Then, ionization equilibrium gives that the photoionization rate per unit volume should balance the recombination rate,
-$$
+\begin{equation}
 \frac{n_{\gamma}c}{\lambda_{\mathrm{mfp}}}
 =
 \left\langle n_e n_{\mathrm{H\,II}}\alpha_{\mathrm{H\,II}}\right\rangle.
-$$
+\end{equation}
 
 \begin{figure}[H]
     \centering
@@ -567,21 +576,10 @@ $$
     \caption{Ratio between the photoionization rate and the standard
     recombination rate as a function of the ionization cutoff. The
     horizontal line marks agreement between the rates.}
-    \label{fig:photon-density}
+\label{fig:photon-density}
 \end{figure}
 
-The THESAN simulations use a reduced speed of light. We therefore use the corresponding reduced value of $c$ in this relation. Even after this correction, the relation is not satisfied for any of the combinations of overdensity and ionization masks examined here. The resulting discrepancy is shown in Figure~\ref{fig:photon-density}.
-
-The resulting estimator is
-$$
-C = \frac{n_{\gamma}c}
-{\lambda_{\mathrm{mfp}}\chi_e\left(1-x_{\mathrm{H\,I}}\right)^2
-n_{\mathrm{H}}^2\alpha_{\mathrm{H\,II}}}.
-$$
-
-The effects that the reduced speed of light can have on these relations were studied during the preparation of this work; the current results are presented in Appendix~\ref{apx:reduced-speed-of-light}. However, simulations of the required size are computationally expensive, and further study is needed to establish the general impact of this approximation.
-
-\begin{figure*}[]
+\begin{figure*}[t]
     \centering
     \includegraphics[width=0.96\textwidth]{figures/thesan1_thesan2_clumping_methods_reduced_c_vs_ionization_cut.png}
     \caption{Comparison of the direct and approximate clumping-factor
@@ -594,6 +592,17 @@ The effects that the reduced speed of light can have on these relations were stu
     \label{fig:clumpingfactors}
 \end{figure*}
 
+The THESAN simulations use a reduced speed of light. We therefore use the corresponding reduced value of $c$ in this relation. Even after this correction, the relation is not satisfied for any of the combinations of overdensity and ionization masks examined here. The resulting discrepancy is shown in Figure~\ref{fig:photon-density}.
+
+The resulting estimator is
+\begin{equation}
+C = \frac{n_{\gamma}c}
+{\lambda_{\mathrm{mfp}}\chi_e\left(1-x_{\mathrm{H\,I}}\right)^2
+n_{\mathrm{H}}^2\alpha_{\mathrm{H\,II}}}.
+\end{equation}
+
+The effects that the reduced speed of light can have on these relations were studied during the preparation of this work; the current results are presented in Appendix~\ref{apx:reduced-speed-of-light}. However, simulations of the required size are computationally expensive, and further study is needed to establish the general impact of this approximation.
+
 \subsection{Comparison of clumping-factor estimators}
 
 After testing the assumptions entering the approximate estimators individually, we now compare their resulting clumping factors with the direct calculations for the THESAN simulations. Figure~\ref{fig:clumpingfactors} shows this comparison for several choices of the overdensity and ionization thresholds used to define the IGM.
@@ -601,10 +610,10 @@ After testing the assumptions entering the approximate estimators individually, 
 The direct calculation provides the reference result. Depending on the overdensity threshold, it gives a clumping factor between approximately 2 and 4. If we retain only the ionization-equilibrium assumption, the resulting estimator is in close agreement with the reference value for $10^{-3}\lesssim x_{\mathrm{H\,II,min}}\lesssim10^{-2}$. This is again consistent with the presence of neutral islands in the simulated IGM. It would be useful to repeat this comparison using a THESAN-like simulation at a later stage, once the IGM is fully ionized.
 
 Including the additional approximation
-$$
+\begin{equation}
 \lambda_{\mathrm{mfp}}=
 \left(n_{\mathrm{H\,I}}\sigma_{\mathrm{H\,I}}\right)^{-1}
-$$
+\end{equation}
 increases the discrepancy. This is consistent with the earlier finding that the two assumptions entering the first estimator cannot be satisfied simultaneously. The dependence of the two assumptions on the ionization threshold appears to cancel over most of the explored range, producing an almost constant estimator except at very high ionization cutoffs. The resulting clumping factors lie between approximately 4 and 6.
 
 The second estimator gives the largest values. Even after accounting for the reduced speed of light, which enters through the photon-interaction-rate assumption, it exceeds the direct estimate by up to a factor of approximately 5. Its clumping factors are between approximately 8 and 12.
@@ -619,7 +628,29 @@ We first present the power-spectrum measurements for these models and characteri
 
 \subsection{Power spectrum}
 
-The AIDA-TNG project describes the simulation suite, its alternative-dark-matter prescriptions, and the associated power-spectrum measurements \cite{despali2025aidatng}.
+One of the most studied observables for the different dark-matter models is the power spectrum. It is particularly useful because it provides a clear reference for how the different models behave across scales.
+
+In Figure~\ref{fig:aida-z0-dm-power-spectrum-absolute}, we observe that the absolute dark-matter power spectrum measured for all the models is very similar. We are therefore more interested in studying the ratio of the power spectrum of each model with respect to the $\Lambda$CDM reference. This comparison is shown in Figure~\ref{fig:aida-z0-dm-power-spectrum-ratio}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\linewidth]{../results/analysis/power-spectrum/aida-tng/absolute-power-spectrum/snapshot099/full-physics-dm/analysis-4a357b1b50b9/artifacts/aida_tng_z0_dm_power_spectrum_absolute.png}
+    \caption{Absolute dimensionless dark-matter power spectrum at snapshot 099 ($z=0$), calculated on the standardized $512^3$ grid with the Pylians backend. Colours identify the dark-matter model; dashed lines show L35n1080 and solid lines L75n910.}
+    \label{fig:aida-z0-dm-power-spectrum-absolute}
+\end{figure}
+
+We observe that self-interacting dark matter provides a subtle enhancement of the power spectrum, followed by a more pronounced suppression before starting to return to $\Lambda$CDM in the high-$k$ regime.
+
+The case for velocity-dependent self-interacting dark matter seems more nuanced overall, staying relatively close to $\Lambda$CDM but with very subtle deviations that depend on the box size.
+
+Lastly, for warm dark matter we observe a small initial suppression at about $10^1$ before returning to normal levels and then a more pronounced suppression later on, right at the limit of our validity region.
+
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=\textwidth]{../results/analysis/power-spectrum/aida-tng/figure17-analogue/snapshot099/full-physics-dm-model-over-cdm/analysis-95f635f8bab5/artifacts/figure17_middle_panel_dm_fp.png}
+    \caption{Ratio of the dimensionless dark-matter power spectrum of each alternative model to its $\Lambda$CDM counterpart at snapshot 099 ($z=0$), calculated on the standardized $512^3$ grid with the Pylians backend. Panels show SIDM1, vSIDM, and WDM3; colours distinguish the simulation box and line styles distinguish folding factors 1, 2, and 4.}
+    \label{fig:aida-z0-dm-power-spectrum-ratio}
+\end{figure*}
 
 \subsection{Clumping factor}
 
@@ -669,9 +700,9 @@ where the normalization by $25$ corresponds to the full overdensity window. This
     \label{fig:aida-dm-clumping-evolution-relative}
 \end{figure}
 
-\subsubsection{Gas clumping}
+However, since the clumping factor is defined in the context of reionization, most of the currently observationally attainable estimators focus on the recombination clumping factor defined in the scientific background, Eq.~\eqref{eq:recombination-clumping-factor}. We saw in Section~\ref{sec:appl1} that the recombination clumping factor almost perfectly matched the standard density definition applied to the gas. Therefore, in the rest of this section we compare the different dark-matter models using the direct gas calculation.
 
-For comparison, the corresponding gas measurements are calculated directly from the native Voronoi cells. The snapshot-099 results are shown in Figures~\ref{fig:aida-z0-gas-clumping-absolute} and~\ref{fig:aida-z0-gas-clumping-relative}, while Figures~\ref{fig:aida-gas-clumping-evolution-absolute} and~\ref{fig:aida-gas-clumping-evolution-relative} show their redshift evolution.
+In Figure~\ref{fig:aida-z0-gas-clumping-absolute} we can observe that the absolute clumping factor looks very similar for all the different dark-matter models. The best comparison is found in Figure~\ref{fig:aida-z0-gas-clumping-relative}, where we can see the relative difference. In this figure we find something really interesting: while warm dark matter produces a suppression of the dark-matter clumping factor for both simulation sizes, it only produces a suppression in the gas clumping factor for the larger simulation, while providing a slight enhancement for the smaller counterpart.
 
 \begin{figure}[H]
     \centering
@@ -700,6 +731,30 @@ For comparison, the corresponding gas measurements are calculated directly from 
     \caption{Redshift evolution of the normalized, overdensity-integrated CDM-relative gas-clumping difference, $\overline{\Delta}_C=\frac{1}{25}\int_0^{25}(C_{\rm CDM}-C_{\rm model})/C_{\rm CDM}\,\mathrm{d}\delta$. Dashed lines show L35n1080 and solid lines L75n910.}
     \label{fig:aida-gas-clumping-evolution-relative}
 \end{figure}
+
+Moreover, when analysing the evolution of this relationship between the models as a function of redshift in Figures~\ref{fig:aida-gas-clumping-evolution-absolute} and~\ref{fig:aida-gas-clumping-evolution-relative}, we observe that the enhancement only starts to be produced at very low redshift. While the associated self-interacting dark matter produces a suppression effect at around the same redshift, we see the switch for warm dark matter.
+
+\subsection{Interpretation and limitations}
+
+Our power-spectrum results are consistent with the findings reported for the AIDA-TNG simulations \cite{despali2025aidatng}. In particular, the alternative dark-matter models remain close to the $\Lambda$CDM reference over much of the accessible range, with their departures becoming more apparent at smaller scales.
+
+The clumping-factor results are also interesting, since they show that the response of the density-squared statistic can differ between dark matter and gas and can depend on simulation box size. However, the deviations found here are too small to be useful for constraining the parameter space of the dark-matter models. At present, there is also no reliable observational measurement of the clumping factor with systematic uncertainties small enough to distinguish effects of this magnitude. We would therefore not be able to differentiate between the models through this observable alone.
+
+Further study is needed to understand why the models behave differently throughout redshift and why the trends in dark matter and gas do not always coincide. These differences emerge from inherently complex nonlinear systems, in which structure formation, baryonic physics, and the dark-matter model can interact across a range of scales.
+
+\section{Conclusion}
+
+The main objective of this work was to study whether the clumping factor can provide us with a useful observable to differentiate different dark-matter models. In order to do this, we first explored the numerical and physical choices required to calculate the clumping factor and the matter power spectrum from cosmological simulations. We then tested observationally motivated clumping-factor estimators using the THESAN simulations and applied the obtained methodology to the AIDA-TNG suite, comparing CDM, WDM3, SIDM1, and vSIDM.
+
+We have seen that the clumping-factor calculation is sensitive to the way in which we construct the density field, including the grid size, the mass-assignment scheme, the smoothing prescription, and the definition of the IGM. The native Voronoi-cell gas calculation provides us with an important reference for making these choices. For the gridded calculations used in this work, cloud-in-cell mass assignment with Pylians smoothing and a gridding factor near $g/N\simeq0.5$ gives a good compromise between agreement with the direct calculation and computational cost. However, the results still have a strong dependence on the overdensity cutoff and, where relevant, on the ionization threshold used to define the gas phase.
+
+For the power spectrum, the validation tests show that the NumPy and Pylians implementations give very similar results in their reliable ranges. We also observe that the folded Pylians spectra agree with the corresponding AREPO measurements in the regions in which they overlap. This gives us confidence in the power-spectrum pipeline used for the comparison between models. Nevertheless, at high wavenumbers the effects of the grid size, the cloud-in-cell correction, aliasing, and folding become increasingly important, so we have to treat these scales with caution.
+
+In the THESAN simulations, we compared the direct calculation with the approximate estimators proposed by Davies et al. \cite{davies2024clumping}. We observe that the direct recombination clumping factor is very close to the standard density-based calculation for the definitions studied here. Ionization equilibrium can be approximately recovered when we impose a sufficiently strict ionization cutoff; however, the additional mean-free-path approximation cannot be satisfied at the same time for the same IGM selections. Thus, the first approximate estimator gives values of approximately $4$--$6$, whereas the direct calculation gives values of approximately $2$--$4$, and the photon-density estimator can exceed the direct result by up to a factor of five. This shows that the assumptions entering observational estimators have to be tested carefully in the particular simulated gas phase to which they are applied.
+
+For the AIDA-TNG simulations, the power-spectrum measurements follow the same qualitative trends reported for the suite \cite{despali2025aidatng}: the alternative dark-matter models remain close to $\Lambda$CDM over most of the accessible range, with the differences becoming more visible at smaller scales. We also observe that the clumping factor responds to the model choice. For the dark-matter calculation, WDM produces a suppression that reaches about $5\%$ for L35n1080 and about $1.5\%$ for L75n910, whereas the self-interacting models show enhancements below one percent. The gas calculation also shows that the sign and magnitude of the WDM effect can depend on the simulation box, and that the redshift evolution of the dark-matter and gas signals does not necessarily coincide.
+
+The main conclusion we obtain is that, while the clumping factor does contain model-dependent information, the deviations found in this work are too small to be useful for constraining the parameter spaces of the dark-matter models with the current methods. Moreover, there is not currently a reliable observational measurement of the clumping factor with systematic uncertainties small enough to distinguish effects of this magnitude. Thus, the clumping factor by itself would not allow us to differentiate the models studied here. Further work is needed using larger and more controlled simulation samples, tests in fully ionized reionization-era volumes, and continued study of the reduced-speed-of-light effects, particularly because of the inherent complexity of the nonlinear relationships between dark matter, gas, and baryonic physics throughout redshift.
 
 \section{Disclosure of the use of artificial intelligence}
 
