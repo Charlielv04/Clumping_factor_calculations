@@ -188,35 +188,41 @@ def _write_figure(controlled: list[dict[str, Any]], output: Path) -> None:
     if plt is None:
         raise RuntimeError("matplotlib is required to write the controlled timing figure")
     output.parent.mkdir(parents=True, exist_ok=True)
-    values: dict[int, list[float]] = defaultdict(list)
+    values_by_grid: dict[int, dict[int, list[float]]] = defaultdict(lambda: defaultdict(list))
     for row in controlled:
+        grid = int(_as_float(row, "grid"))
         workers = int(_as_float(row, "workers"))
         seconds = _as_float(row, "total_seconds")
         if math.isfinite(seconds) and seconds > 0:
-            values[workers].append(seconds / 60)
-    if 1 not in values or len(values) < 2:
-        raise RuntimeError("Controlled results require a one-worker baseline and a parallel measurement")
+            values_by_grid[grid][workers].append(seconds / 60)
+    grids = sorted(values_by_grid)
+    if not grids or any(1 not in values_by_grid[grid] or len(values_by_grid[grid]) < 2 for grid in grids):
+        raise RuntimeError("Each grid requires a one-worker baseline and a parallel measurement")
 
-    workers = sorted(values)
-    medians = [sorted(values[worker])[len(values[worker]) // 2] for worker in workers]
-    lower = [median - min(values[worker]) for worker, median in zip(workers, medians)]
-    upper = [max(values[worker]) - median for worker, median in zip(workers, medians)]
-    speedup = medians[workers.index(1)] / medians[-1]
-
-    figure, axis = plt.subplots(figsize=(6.4, 3.25), constrained_layout=True)
-    axis.plot(workers, medians, marker="o", markersize=6, lw=2, color="#4C72B0", zorder=3)
-    axis.errorbar(workers, medians, yerr=[lower, upper], fmt="none", color="black", capsize=4, lw=1.2, zorder=4)
-    axis.text(0.62, 0.79, f"{speedup:.2f}$\\times$ speedup", transform=axis.transAxes, ha="center", va="center", fontsize=11)
-    axis.set(
-        title=r"Controlled Thesan-2 scaling ($512^3$ dark-matter grid)",
-        xlabel="Effective workers",
-        ylabel="End-to-end wall time [min]",
-        ylim=(0, max(medians) * 1.14),
-    )
-    axis.set_xscale("log", base=2)
-    axis.set_xlim(0.8, 18)
-    axis.set_xticks(workers, [str(worker) for worker in workers])
-    axis.grid(axis="y", alpha=0.25, zorder=0)
+    figure, axes = plt.subplots(1, len(grids), figsize=(9.6, 3.25), constrained_layout=True, sharex=False)
+    if len(grids) == 1:
+        axes = [axes]
+    for axis, grid in zip(axes, grids):
+        values = values_by_grid[grid]
+        workers = sorted(values)
+        medians = [sorted(values[worker])[len(values[worker]) // 2] for worker in workers]
+        lower = [median - min(values[worker]) for worker, median in zip(workers, medians)]
+        upper = [max(values[worker]) - median for worker, median in zip(workers, medians)]
+        speedup = medians[workers.index(1)] / medians[-1]
+        axis.plot(workers, medians, marker="o", markersize=5.5, lw=1.8, color="#4C72B0", zorder=3)
+        axis.errorbar(workers, medians, yerr=[lower, upper], fmt="none", color="black", capsize=3, lw=1.0, zorder=4)
+        axis.text(0.56, 0.84, f"{speedup:.2f}$\\times$", transform=axis.transAxes, ha="center", va="center", fontsize=10)
+        axis.set(
+            title=fr"${grid}^3$ grid",
+            xlabel="Effective workers",
+            ylim=(0, max(medians) * 1.16),
+        )
+        axis.set_xscale("log", base=2)
+        axis.set_xlim(0.8, max(workers) * 1.13)
+        axis.set_xticks(workers, [str(worker) for worker in workers])
+        axis.grid(axis="y", alpha=0.25, zorder=0)
+    axes[0].set_ylabel("End-to-end wall time [min]")
+    figure.suptitle("Controlled Thesan-2 strong scaling", fontsize=14)
     figure.savefig(output, dpi=220)
     plt.close(figure)
 
@@ -231,8 +237,8 @@ def main() -> None:
     parser.add_argument(
         "--expected-controlled",
         type=int,
-        default=6,
-        help="Expected controlled-result count when --require-controlled is used (use 18 after the intermediate sweep).",
+        default=48,
+        help="Expected controlled-result count when --require-controlled is used.",
     )
     args = parser.parse_args()
 

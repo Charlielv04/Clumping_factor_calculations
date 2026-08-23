@@ -256,7 +256,7 @@ def integrated_relative_difference(
     model_thresholds: np.ndarray,
     model_values: np.ndarray,
 ) -> float:
-    """Integrate the CDM-relative clumping difference over 0 <= Delta <= 25."""
+    """Average the CDM-relative clumping difference over 0 <= delta <= 25."""
     common_thresholds = np.unique(
         np.concatenate(
             (
@@ -270,7 +270,7 @@ def integrated_relative_difference(
     cdm = np.interp(common_thresholds, cdm_thresholds, cdm_values)
     model = np.interp(common_thresholds, model_thresholds, model_values)
     trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
-    return float(trapezoid((cdm - model) / cdm, common_thresholds))
+    return float(trapezoid((cdm - model) / cdm, common_thresholds) / MAX_OVERDENSITY)
 
 
 def collect_evolution_relative_integrals(particle_type: str) -> dict[str, dict[str, tuple[np.ndarray, np.ndarray]]]:
@@ -331,7 +331,7 @@ def make_evolution_relative_figure(
     axis.set_xlim(5.2, -0.1)
     axis.set_xticks([5, 3, 2, 1, 0])
     axis.set_xlabel("Redshift")
-    axis.set_ylabel(r"Integrated difference $\Delta_C$")
+    axis.set_ylabel(r"Mean integrated difference $\overline{\Delta}_C$")
     style_axis(axis)
     evolution_legend(axis, include_cdm=False)
     save_figure(figure, f"aida_tng_{particle_type}_clumping_evolution_relative_to_cdm.png")
