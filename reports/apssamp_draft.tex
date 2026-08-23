@@ -134,6 +134,32 @@ Je soussign\'e(e) Carlos Lopez Villanueva certifie sur l'honneur :
 \noindent Date : \rule{2.3cm}{0.4pt}\hfill Signature : \rule{2.3cm}{0.4pt}
 
 \clearpage
+\thispagestyle{plain}
+\begin{center}
+    {\Large\bfseries Abstract\par}
+\end{center}
+
+\vspace{1.2cm}
+
+\begin{center}
+\begin{minipage}{0.82\textwidth}
+\noindent
+Different dark-matter models can produce similar predictions on large scales while giving different amounts and distributions of small-scale structure. In this work, we study whether the clumping factor, a density-squared observable motivated by the recombination rate during reionization, can provide useful information to differentiate such models. We first validate the numerical choices required to calculate the clumping factor and the matter power spectrum from cosmological simulations, using direct Voronoi-cell gas calculations as a reference for the gridded density fields. We then use the THESAN radiation-hydrodynamical simulations to test approximate clumping-factor estimators based on the photoionization rate and mean free path, finding that the assumptions entering these estimators cannot be simultaneously satisfied for the IGM definitions studied here and can introduce substantial biases with respect to the direct calculation. Finally, we compare CDM, WDM3, SIDM1, and vSIDM in the AIDA-TNG simulations. The power-spectrum results reproduce the expected qualitative behaviour of the alternative dark-matter models, while the clumping factor shows percent-level, model-dependent differences whose sign and magnitude can depend on the simulation box, the matter component, and redshift. We conclude that the clumping factor contains complementary information about nonlinear structure formation, but that the signal found here is too small, relative to the current numerical and observational systematic uncertainties, to constrain the parameter spaces of the dark-matter models on its own.
+
+\vspace{0.8cm}
+
+\begin{center}
+    {\large\bfseries R\'esum\'e\par}
+\end{center}
+
+\vspace{0.3cm}
+
+\noindent
+Diff\'erents mod\`eles de mati\`ere noire peuvent produire des pr\'edictions similaires aux grandes \`echelles tout en donnant des quantit\'es et des distributions diff\'erentes de structures aux petites \`echelles. Dans ce travail, nous \`etudions si le facteur de regroupement, un observable d\'ependant du carr\'e de la densit\'e et motiv\'e par le taux de recombinaison pendant la r\'eionisation, peut fournir des informations utiles pour diff\'erencier ces mod\`eles. Nous validons d'abord les choix num\'eriques n\'ecessaires au calcul du facteur de regroupement et du spectre de puissance de la mati\`ere \`a partir de simulations cosmologiques, en utilisant les calculs directs sur les cellules de Voronoi du gaz comme r\'ef\'erence pour les champs de densit\'e sur grille. Nous utilisons ensuite les simulations hydrodynamiques avec transfert radiatif THESAN pour tester des estimateurs approch\'es du facteur de regroupement fond\'es sur le taux de photoionisation et le libre parcours moyen. Nous constatons que les hypoth\`eses entrant dans ces estimateurs ne peuvent pas \^etre satisfaites simultan\'ement pour les d\'efinitions de l'IGM \`etudi\'ees et qu'elles peuvent introduire des biais importants par rapport au calcul direct. Enfin, nous comparons CDM, WDM3, SIDM1 et vSIDM dans les simulations AIDA-TNG. Les r\'esultats du spectre de puissance reproduisent le comportement qualitatif attendu pour les mod\`eles alternatifs de mati\`ere noire, tandis que le facteur de regroupement pr\'esente des diff\'erences d\'ependantes du mod\`ele, de l'ordre du pourcent, dont le signe et l'amplitude peuvent d\'ependre de la taille de la bo\^ite de simulation, de la composante de mati\`ere et du redshift. Nous concluons que le facteur de regroupement contient des informations compl\'ementaires sur la formation non lin\'eaire des structures, mais que le signal trouv\'e ici est trop faible, par rapport aux incertitudes syst\'ematiques num\'eriques et observationnelles actuelles, pour contraindre \`a lui seul l'espace des param\`etres des mod\`eles de mati\`ere noire.
+\end{minipage}
+\end{center}
+
+\clearpage
 \twocolumngrid
 \pagestyle{plain}
 
@@ -488,7 +514,7 @@ C_{rec} \equiv \frac{\left\langle n_e n_{\mathrm{H\,II}} \alpha_{\mathrm{H\,II}}
 This introduces small changes in the calculation, however, for each Voronoi cell in the simulation we have access to the proportion of neutral hydrogen and the electron abudance, thus, these changes only introduce some extra factors into the averages but don't fundamentally change the calculation procedure. Moreover, in all the calculations that follow, we have taken the fiducial recombination coefficient equal to the Case B recombination rate for 10,000K gas. This assumption is matched on the relevant paper. 
 
 
-One observes that in Figure.~\ref{fig:clumping-factor-definitions} the changes in the definition only slightly change the obtained results. The difference between the three defintions tested is below $0.36\%$ for THESAN-1 and $1.16\%$ for THESAN-2\footnote{we only have considering the values for $\delta_{\max} \geq 0$ to avoid the artifacts found at $\delta_{\max} \approx -1$.}.
+One observes that in Figure.~\ref{fig:clumping-factor-definitions} the changes in the definition only slightly change the obtained results. The difference between the three defintions tested is below $0.36\%$ for THESAN-1 and $1.16\%$ for THESAN-2\footnote{we only have considered the values for $\delta_{\max} \geq 0$ to avoid the artifacts found at $\delta_{\max} \approx -1$.}.
 
 We also note that there is an almost perfect proportionality relationship between $\langle n_{HII} \rangle$ and $\langle n_e \rangle$, with $\chi_e \approx 1.08$, as shown in Figure~\ref{fig:electron-ratio}. This matches the value presented by Davies et al. to account for the enhancement in the number of free electrons due to ionized helium \cite{davies2024clumping}.
 
@@ -653,6 +679,7 @@ Lastly, for warm dark matter we observe a small initial suppression at about $10
 \end{figure*}
 
 \subsection{Clumping factor}
+\label{sec:aida-clumping-factor}
 
 Let us start by analysing the results we obtain for the clumping factor of the dark-matter run at a $512^3$ grid and with Pylians spherical smoothing. We can observe in Figure~\ref{fig:aida-z0-dm-clumping-absolute} that the clumping factor for both simulation sizes has a very similar tendency. We note that for L75n910 the difference between the different dark-matter models seems more subtle, whereas for the smaller simulation box, L35n1080, we observe that warm dark matter produces a visible reduction in the clumping factor throughout the overdensity-threshold window analysed.
 
@@ -771,6 +798,21 @@ In accordance with standard scientific practice, these tools did not independent
 
 
 
+\begingroup
+\global\def\Eprint#1#2{#2}
+\renewcommand{\bibfont}{\normalsize}
+\renewcommand{\emph}[1]{#1}
+\bibliography{apssamp}
+\endgroup
+
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/aida_tng_grid_deviation_vs_redshift_no_formula.png}
+    \caption{Normalized gridding-deviation factor, Eq.~\eqref{eq:aida-gridding-deviation}, for the gas fields of the AIDA-TNG simulations. Each panel corresponds to one dark-matter model and simulation box. The curves show estimates from standardized mass-deposited grids with cloud-in-cell mass assignment and spherical Pylians smoothing at $256^3$, $512^3$, and $1024^3$ grid cells, using the direct Voronoi-cell calculation as the reference. The redshift axis decreases from left to right; only snapshots for which all three grid calculations and the direct Voronoi-cell result are available are shown.}
+    \label{fig:aida-gridding-deviation-factor}
+\end{figure*}
+
+\newpage
 \appendix
 \section{Gridding impact in the AIDA-TNG simulations}
 
@@ -789,187 +831,123 @@ We first repeat the grid-size comparison using the gas fields of the AIDA-TNG si
 \end{equation}
 where $C_{Voronoi}$ is the clumping factor calculated directly from the native Voronoi cells and $C_{grid}$ is the estimate obtained from the standardized mass-deposited grid. We recall that positive values indicate that the gridded calculation underestimates the direct calculation, whereas negative values indicate that it overestimates it.
 
-\begin{figure*}[t]
-    \centering
-    \includegraphics[width=\textwidth]{figures/aida_tng_grid_deviation_vs_redshift_no_formula.png}
-    \caption{Normalized gridding-deviation factor, Eq.~\eqref{eq:aida-gridding-deviation}, for the gas fields of the AIDA-TNG simulations. Each panel corresponds to one dark-matter model and simulation box. The curves show estimates from standardized mass-deposited grids with cloud-in-cell mass assignment and spherical Pylians smoothing at $256^3$, $512^3$, and $1024^3$ grid cells, using the direct Voronoi-cell calculation as the reference. The redshift axis decreases from left to right; only snapshots for which all three grid calculations and the direct Voronoi-cell result are available are shown.}
-    \label{fig:aida-gridding-deviation-factor}
-\end{figure*}
-
 We can observe in Figure~\ref{fig:aida-gridding-deviation-factor} that the qualitative behavior observed for THESAN is also present in AIDA-TNG. The $512^3$ grid gives the smallest deviation, corresponding to a gridding factor of approximately $1/2$. This behavior also motivated us to choose this value as our preferred gridding factor for the rest of the work. We note that remarkably similar behavior is observed for the different dark-matter models within a given box size and particle-number parameters. Thus, we conclude that the dominant effect is the density-field resolution and that the systematics introduced by our particular calculation methods are sufficiently similar that the differences observed between the different dark-matter models cannot be attributed to the method itself.
 
-\subsection{Effect of the SubFindHSML in }
+\subsection{Effect of the SubfindHsml smoothing length}
+\label{apx:subfind-hsml}
+
+In the dark-matter clumping-factor calculations presented in Section~\ref{sec:aida-clumping-factor}, the particle smoothing length is established as the average interparticle distance of the entire simulation. However, the AIDA-TNG snapshots also contain the adaptive smoothing-length estimate recorded by the simulation, $\mathrm{PartType1/SubfindHsml}$. In this appendix section, we test how much the dark-matter clumping factor changes when this quantity is used as the smoothing length instead. All other choices are kept fixed: the cloud-in-cell mass-assignment scheme, the spherical Pylians smoothing, the overdensity window, and the $256^3$ or $512^3$ grids.
+
+Let us start by comparing how this change in the density-field construction affects our clumping-factor results. We define the following relative difference for this particular change,
+\begin{equation}
+    \Delta_{\rm HSML}(\delta,z) =
+    \frac{C_{\rm DM}^{\rm SubfindHsml}(\delta,z)-C_{\rm DM}^{\rm base}(\delta,z)}
+    {C_{\rm DM}^{\rm base}(\delta,z)},
+    \label{eq:subfind-hsml-relative-clumping}
+\end{equation}
+where $C_{\rm DM}^{\rm base}$ is the corresponding calculation using the baseline particle-smoothing prescription. The results are shown for both grid resolutions because the $512^3$ calculation is the resolution adopted for the main dark-matter clumping-factor comparison.
+
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/aida_tng_subfind_hsml_dm_clumping_relative_z0.png}
+    \caption{Relative change in the dark-matter clumping factor produced by using the adaptive SubfindHsml smoothing length at snapshot 099 ($z=0$). The two panels show the $256^3$ and $512^3$ grids. The quantity plotted is Eq.~\eqref{eq:subfind-hsml-relative-clumping}; colours identify the dark-matter models, dashed lines show L35n1080, and solid lines show L75n910. The SIDM1 curve is shown for the simulation size for which the SubfindHsml output is available.}
+    \label{fig:aida-subfind-hsml-dm-clumping-z0}
+\end{figure*}
+
+In Figure~\ref{fig:aida-subfind-hsml-dm-clumping-z0}, we can observe the differences between the two smoothing prescriptions. For the $256^3$ grid, we observe a minimal change that is only slightly relevant in the very low-overdensity-threshold region. However, for the $512^3$ grid, we observe a more pronounced effect, particularly for the larger simulation box.
+
+This matches what we would expect from the gridding factors used in the main analysis. For the $256^3$ grid, our gridding factor is approximately $1/4$, meaning that a particle would need to have a volume $64$ times larger than the average particle volume before its smoothing length is affected by the grid. For the $512^3$ grid, the corresponding factor is approximately $1/2$, so the particle only needs to have a volume $8$ times larger than average for the smoothing to be affected. If we were to perform the same test at $1024^3$, we would therefore expect the effect to be even more pronounced. The change is small compared with the several-percent WDM suppression discussed in Section~\ref{sec:aida-clumping-factor} over the main overdensity range, but it can become comparable to the model differences at the lowest thresholds.
+
+To compare the redshift dependence with the integrated model differences shown in Eq.~\eqref{eq:aida-integrated-clumping-difference}, we also calculate
+\begin{equation}
+    \overline{\Delta}_{\rm HSML}(z) =
+    \frac{1}{25}\int_{0}^{25}\Delta_{\rm HSML}(\delta,z)\,\mathrm{d}\delta.
+    \label{eq:subfind-hsml-integrated-clumping}
+\end{equation}
+
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/aida_tng_subfind_hsml_dm_clumping_integrated_evolution.png}
+    \caption{Normalized overdensity-integrated change in the dark-matter clumping factor caused by the SubfindHsml smoothing length, Eq.~\eqref{eq:subfind-hsml-integrated-clumping}. The two panels show the $256^3$ and $512^3$ calculations. Colours identify the dark-matter models; dashed lines correspond to L35n1080 and solid lines to L75n910.}
+    \label{fig:aida-subfind-hsml-dm-clumping-evolution}
+\end{figure*}
+
+In Figure~\ref{fig:aida-subfind-hsml-dm-clumping-evolution}, we observe that the effect is larger for the $512^3$ grid, particularly for the larger simulation box, where it approaches a $5\%$ integrated difference at the lowest redshifts. The relationship between the different dark-matter models is not exactly constant, and it is therefore interesting to recompare the differences between $\Lambda$CDM and the different dark-matter models for this new calculation. We show this comparison in Figure~\ref{fig:aida-subfind-hsml-model-comparison}: the left panel shows the proportional difference as a function of overdensity, while the right panel shows the normalized overdensity-integrated difference as a function of redshift. Positive values indicate a suppression relative to the $\Lambda$CDM calculation.
+
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/aida_tng_subfind_hsml_dm_clumping_model_comparison.png}
+    \caption{Comparison between the dark-matter clumping factors obtained with the adaptive SubfindHsml smoothing length and the $\Lambda$CDM reference, using the $512^3$ grid. The left panel shows $(C_{\Lambda\mathrm{CDM}}-C_{\rm model})/C_{\Lambda\mathrm{CDM}}$ at snapshot 099 ($z=0$) as a function of overdensity. The right panel shows the corresponding normalized overdensity-integrated difference as a function of redshift. Colours identify the dark-matter models, dashed lines show L35n1080, and solid lines show L75n910. Positive values indicate a suppression relative to $\Lambda$CDM.}
+    \label{fig:aida-subfind-hsml-model-comparison}
+\end{figure*}
+
+In Figure~\ref{fig:aida-subfind-hsml-model-comparison}, we can see that the overall differences observed in Section~\ref{sec:aida-clumping-factor} are maintained: warm dark matter suppresses the clumping factor, while the self-interacting models generally produce an enhancement. However, at low overdensity thresholds, the larger simulation box shows a stronger enhancement for the self-interacting models, whereas the smaller counterpart shows a suppression relative to the corresponding baseline calculation using the fixed smoothing length.
+
+On the right-hand side of Figure~\ref{fig:aida-subfind-hsml-model-comparison}, we can see how the integrated difference changes as a function of redshift. The warm-dark-matter result somewhat mirrors the behavior of the baseline calculation, but the self-interacting dark-matter models show a markedly different evolution from the near redshift independence observed earlier.
 
 \section{Impact of the Reduced Speed of Light on the THESAN Observables}
 \label{apx:reduced-speed-of-light}
 
-The THESAN simulations use a reduced-speed-of-light approximation,
-$\tilde{c}=0.2c$. The physical speed of light would require much smaller
-radiation-transport time steps; THESAN therefore adopts this approximation to
-make the simulations computationally feasible, after demonstrating convergence
-of the neutral-fraction evolution at this value \cite{garaldi2022thesan}.
-However, the reduced speed of light also appears explicitly in the
-photon-density estimator evaluated in Section~\ref{sec:photon-density-estimator}.
-To test whether using $\tilde{c}$ in this expression is sufficient, we ran new
-simulations using both the reduced and standard speeds of light.
+The THESAN simulations adopt a reduced-speed-of-light approximation,
+$\tilde{c}=0.2c$.  Reducing the propagation speed relaxes the radiation
+transport time-step constraint, making the calculation computationally
+tractable; the value used by THESAN was selected after tests of the
+neutral-fraction evolution \cite{garaldi2022thesan}.  The speed of light also
+enters explicitly in the photon-density estimator of
+Section~\ref{sec:photon-density-estimator}.  We therefore compare otherwise
+equivalent small-volume simulations evolved with the reduced and physical
+speeds of light.
 
-Because these simulations require long runtimes, we can present only the
-smaller of the two configurations originally planned. In the main text, the
-reduced-speed version of this simulation is referred to as THESAN-mini. The
-data analysed here are from two simulations with a box length of
-$4\,\mathrm{Mpc}$ and $128^3$ particles. We also compare them with the full
-THESAN simulations to better understand their differences.
+The reduced-speed calculation is denoted THESAN-mini in the main text.  Both
+simulations considered here use a $4\,\mathrm{Mpc}$ box and $128^3$ particles.
+The comparison uses snapshot 014 ($z=4.507$), for which both runs contain the
+ionization-cut sequence used in Section~\ref{sec:appl1}.  We retain the same
+three IGM definitions, $\Delta<10$, $\Delta<15$, and $\Delta<20$, and use the
+direct recombination clumping factor $C_{\rm rec}$ defined in
+Eq.~\eqref{eq:recombination-clumping-factor}.
 
-We focus on the direct recombination clumping factor, the ionization-equilibrium
-estimator, the photon-density estimator, and the mean-free-path closure. These
-comparisons are primarily diagnostic and are intended to clarify how the
-reduced-speed-of-light approximation affects the quantities relevant to this
-work. Further analysis is needed and is planned for future work.
+\subsection{Standard- and reduced-speed THESAN-mini simulations}
 
-\subsection{Simulation suite and comparison metadata}
-
-Table~\ref{tab:reduced-speed-metadata} summarizes the outputs used in the
-figures. The full THESAN runs are included as reference calculations for the
-context of the main analysis. The paired in-house runs are the closest
-standard-speed/reduced-speed comparison currently available.
-
-\begin{table*}[t]
-    \centering
-    \caption{Simulation and analysis metadata for the reduced-speed-of-light
-    comparison. The redshifts and snapshot identifiers are those recorded in
-    the current structured equation-test results. The ``raw'' mask means that
-    the figures use an overdensity threshold without an additional ionized
-    fraction cut.}
-    \label{tab:reduced-speed-metadata}
-    \resizebox{\textwidth}{!}{\normalsize%
-    \begin{tabular}{llllll}
-        \hline
-        Run & Snapshot & Redshift & Light-speed prescription & Particle setup & Figure selection \\
-        \hline
-        THESAN-1 & 080 & 5.512 & THESAN reduced-speed prescription & full THESAN & raw $\Delta$ masks \\
-        THESAN-2 & 080 & 5.491 & THESAN reduced-speed prescription & full THESAN & raw $\Delta$ masks \\
-        mini SL & 015 & 4.000 & standard $c$ & $4\,\mathrm{Mpc}$, $128^3$ & raw $\Delta$ masks \\
-        mini RSL & 015 & 4.000 & reduced $\tilde{c}$ & $4\,\mathrm{Mpc}$, $128^3$ & raw $\Delta$ masks \\
-        \hline
-    \end{tabular}}
-\end{table*}
-
-The current mini-SL result does not contain the same ionized-fraction sweep
-as the mini-RSL result. For this reason, Figures~\ref{fig:sl-rsl-absolute}
-and~\ref{fig:sl-rsl-ratio} use only the common raw overdensity masks. This
-keeps the plotted selections explicit and avoids mixing an ionization-cut
-measurement with a raw overdensity measurement. The provenance metadata for
-the mini-SL result should also be checked before the numerical comparison is
-treated as final, since its recorded base path currently references the
-$4\times128^3$ reduced-speed output directory.
-
-\subsection{Definitions and comparison protocol}
-
-The direct reference quantity is the recombination-weighted clumping factor
-$C_{\rm rec}$ defined in the main text. We also show the ionization-equilibrium
-quantity $C_7$ and the photon-density quantity $C_{13,\tilde c}$ as they are
-recorded by the current analysis pipeline. The mean-free-path quantity,
-
-\begin{equation}
-    R_{\rm mfp} =
-    \frac{\langle n_{\rm HI}\rangle_{\lambda}}
-    {\langle n_{\rm HI}\rangle_V},
-\end{equation}
-
-is a closure ratio rather than an independent clumping-factor definition.
-Equality of the two mean neutral-hydrogen estimates corresponds to
-$R_{\rm mfp}=1$.
-
-The comparison uses the nearest available raw overdensity rows to
-$\Delta_{\rm max}=10$, $15$, and $20$. For the paired in-house comparison,
-we show both the absolute values and the ratio of the reduced-speed result
-to the standard-speed result,
-
-\begin{equation}
-    R_{\rm RSL/SL}(X) = \frac{X_{\rm mini\,RSL}}
-    {X_{\rm mini\,SL}}.
-\end{equation}
-
-The ratio is a diagnostic of the current paired outputs. It is not interpreted
-as a causal measurement of the speed-of-light effect without additional
-matched simulations.
-
-\subsection{In-house standard-speed and reduced-speed comparison}
-
-Figure~\ref{fig:sl-rsl-absolute} shows the four quantities for the two
-in-house runs. The direct recombination result and the radiation-dependent
-estimators are shown together so that changes in the underlying clumping
-quantity can be distinguished from changes in the closure relations.
+Figure~\ref{fig:thesan-mini-speed-of-light-clumping} compares $C_{\rm rec}$
+over the full range of ionization cuts.  The two calculations are nearly
+indistinguishable for all three overdensity thresholds.  The largest relative
+difference between their clumping factors is $0.18\%$, occurring for
+$\Delta<10$; the corresponding maximum differences for $\Delta<15$ and
+$\Delta<20$ are $0.04\%$ and $0.15\%$, respectively.
 
 \begin{figure*}[t]
     \centering
-    \includegraphics[width=0.96\textwidth]{figures/thesan_speed_of_light_inhouse_absolute.png}
-    \caption{Absolute comparison of the in-house standard-speed (mini SL) and
-    reduced-speed (mini RSL) outputs. Each panel uses the common raw
-    overdensity masks at the available snapshot. The photon-density and
-    mean-free-path panels use logarithmic vertical axes.}
-    \label{fig:sl-rsl-absolute}
+    \includegraphics[width=\textwidth]{figures/thesan_mini_standard_reduced_clumping_vs_ionization_cut.png}
+    \caption{Direct recombination clumping factor $C_{\rm rec}$ as a function
+    of the ionization cutoff in the matched $4\,\mathrm{Mpc}$,
+    $128^3$ standard-speed and reduced-speed simulations at $z=4.507$.  The
+    panels use the same overdensity selections as Section~\ref{sec:appl1}.
+    The curves overlap to within $0.18\%$ over the displayed range.}
+    \label{fig:thesan-mini-speed-of-light-clumping}
 \end{figure*}
 
-Figure~\ref{fig:sl-rsl-ratio} presents the same comparison as the ratio of the
-reduced-speed result to the standard-speed result. The horizontal line marks
-equality. These ratios show where the paired outputs differ, but they do not
-separate the speed-of-light prescription from any remaining differences in
-the simulation metadata or radiation history.
+The approximate estimators do not show the same agreement.  Their values are
+also nearly independent of the ionization cutoff, but remain separated by
+approximately constant normalizations between the two simulations.  For the
+ionization-equilibrium estimator, the reduced-speed values are larger by a
+factor of $5.6$--$6.0$; for the photon-density estimator, evaluated using the
+transport speed of each simulation, the corresponding factor is $1.50$.
 
-\begin{figure*}[t]
-    \centering
-    \includegraphics[width=0.96\textwidth]{figures/thesan_speed_of_light_inhouse_ratio.png}
-    \caption{Ratio of the mini-RSL to mini-SL results for the same four
-    observables. The dashed line marks equality. This figure is a diagnostic
-    comparison of the available paired outputs and is not a standalone causal
-    attribution to the speed of light.}
-    \label{fig:sl-rsl-ratio}
-\end{figure*}
+\subsection{Comparison with the full THESAN simulations}
 
-\subsection{Context from the full THESAN runs}
+For reference, the direct clumping factors in the full THESAN calculations
+at their available snapshots are $(2.36,\,2.59,\,2.80)$ for THESAN-1 and
+$(2.24,\,2.45,\,2.63)$ for THESAN-2 at $\Delta<10$, $\Delta<15$, and
+$\Delta<20$, respectively.  The matched mini simulations give
+$(2.55,\,2.93,\,3.24)$ for the same selections.  These values are of the same
+order, although the full and mini simulations sample different volumes,
+resolutions, source histories, and redshifts.  Their comparison consequently
+provides context for the mini results rather than a controlled measurement of
+the speed-of-light dependence in the full THESAN volume.
 
-Figure~\ref{fig:full-thesan-speed-comparison} places the in-house outputs
-alongside THESAN-1 and THESAN-2 at the same nominal overdensity thresholds.
-The comparison is intended to show the range of values represented by the
-available calculations and to connect the pilot runs with the full THESAN
-results used in Section~\ref{sec:appl1}. It should not be read as a matched
-full-volume speed-of-light experiment: the full and in-house calculations
-are at different redshifts and do not provide identical volume, resolution,
-initial-condition, or source-history controls.
-
-\begin{figure*}[t]
-    \centering
-    \includegraphics[width=0.98\textwidth]{figures/thesan_speed_of_light_full_comparison.png}
-    \caption{Contextual comparison of the full THESAN and in-house outputs at
-    common raw overdensity masks. The three panels show $\Delta<10$,
-    $\Delta<15$, and $\Delta<20$. The direct recombination quantity, the
-    ionization-equilibrium quantity, the reduced-speed photon-density
-    quantity, and the mean-free-path closure are shown on a logarithmic scale.
-    The full THESAN and in-house runs are not a fully matched volume,
-    resolution, and evolutionary-state suite.}
-    \label{fig:full-thesan-speed-comparison}
-\end{figure*}
-
-\subsection{Interpretation limits and planned larger simulations}
-
-The figures above document the current pilot comparison but do not establish
-a universal speed-of-light correction, volume-converged behavior, or the
-behavior of the estimators at other redshifts and source histories. In
-particular, the comparison does not demonstrate that every difference
-between the full THESAN and in-house results is caused by the radiation
-propagation speed. The existing conclusions in Section~\ref{sec:appl1}
-about the separate estimator assumptions therefore remain the scope of the
-present analysis.
-
-A further comparison is planned using simulations with double the size of
-the present in-house setup, together with an extended version of the
-comparison shown here. These calculations are intended to test whether the
-behavior seen in the pilot runs persists when the sampled volume and
-available structure are increased. They could not be completed within the
-time available for this report and are not included in the present results.
-No conclusion is drawn here about how the larger simulations will modify the
-patterns shown above.
+A second pair of simulations with twice the present box size is being run to
+extend this comparison and assess the dependence on the sampled volume.  The
+results were not available in time for inclusion in this report.
 
 \section{Parallelization and optimization: Working with large simulations}
 \label{apx:parallelization}
@@ -995,8 +973,7 @@ The resulting scaling is shown in Fig.~\ref{fig:parallel-timing}.  The
 median speedup from one worker to the largest worker count is $9.97$ for the
 $256^3$ grid and $5.44$ for the $512^3$ grid.  The $1024^3$ grid improves by
 a factor of $1.60$ at four workers, with no further median improvement at
-eight workers.  This saturation is retained in the figure rather than being
-interpreted as ideal scaling.
+eight workers. These decreasing returns with the increase on grid size are due to the fact that the reconciliation of all of the different populated grids ends up dominating. However, one must note that this relationship is probably dependent on the gridding factor rather than on the gridding alone. 
 
 \begin{figure*}[t]
 \centering
@@ -1026,15 +1003,6 @@ smoothing choices discussed in Sec.~\ref{sec:density-grid-tests}.  The timing
 values above are specific to this calculation and computing environment, but
 demonstrate the practical gain available without changing the scientific
 results.
-
-\clearpage
-\begingroup
-\global\def\Eprint#1#2{#2}
-\renewcommand{\bibfont}{\normalsize}
-\renewcommand{\emph}[1]{#1}
-\bibliography{apssamp}
-\endgroup
-
 
 \end{document}
 %
