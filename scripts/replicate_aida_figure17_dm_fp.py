@@ -50,7 +50,7 @@ def make_plot(snapshot: int = 99, grid: int = 512, engine: str = "pylians", bins
         "average_bins": bins,
         "particle_type": "dm",
         "comparison": "P_model/P_CDM",
-        "fold_factors": [1, 2, 4],
+        "fold_factors": [1, 16, 256],
         "figure_reference": "AIDA-TNG Figure 17 middle panel",
     }
     directory, output = analysis_artifact_path(
@@ -70,7 +70,7 @@ def make_plot(snapshot: int = 99, grid: int = 512, engine: str = "pylians", bins
         for box in BOXES:
             if box not in local or model not in local[box]:
                 continue
-            for fold in (1, 2, 4):
+            for fold in (1, 16, 256):
                 ref_k, ref_values, _ = _local_curve(local[box]["CDM"], grid, fold, engine, bins)
                 cur_k, cur_values, _ = _local_curve(local[box][model], grid, fold, engine, bins)
                 common, ratio = relative_curve(cur_k, cur_values, ref_k, ref_values)
@@ -93,7 +93,7 @@ def make_plot(snapshot: int = 99, grid: int = 512, engine: str = "pylians", bins
     legend_handles = [
         Line2D([0], [0], color=BOX_COLORS[box], linestyle=FOLD_LINESTYLES[fold], linewidth=1.5, label=f"{box} fold {fold}")
         for box in BOXES
-        for fold in (1, 2, 4)
+        for fold in (1, 16, 256)
     ]
     axes[0].legend(handles=legend_handles, fontsize=8, ncol=2)
     figure.suptitle(f"AIDA-TNG Figure 17 middle-panel analogue: FP dark matter / CDM, snapshot {snapshot:03d}")

@@ -17,7 +17,7 @@ ROOT = Path("results").resolve()
 MODELS = ("CDM", "SIDM1", "vSIDM", "WDM3")
 MODEL_COLORS = {"CDM": "#111111", "SIDM1": "#7b1fa2", "vSIDM": "#1e3aef", "WDM3": "#e53935"}
 GRID_COLORS = {256: "#1b9e77", 512: "#d95f02", 1024: "#7570b3"}
-FOLD_LINESTYLES = {1: "-", 2: "--", 4: ":"}
+FOLD_LINESTYLES = {1: "-", 16: "--", 256: ":"}
 
 
 def logarithmic_average(k: np.ndarray, values: np.ndarray, bins: int) -> tuple[np.ndarray, np.ndarray]:
@@ -50,7 +50,7 @@ def local_path(simulation: str, snapshot: int, grid: int) -> Path:
         if (
             document.get("statistic") == "density_power_spectrum"
             and int(parameters.get("grid_size", -1)) == grid
-            and {"1", "2", "4"}.issubset(folded)
+            and {"1", "16", "256"}.issubset(folded)
         ):
             candidates.append(path)
     if not candidates:
@@ -88,7 +88,7 @@ def make_plot(box: str, snapshot: int, *, engine: str, bins: int) -> tuple[Path,
     inputs = list(arepo.values()) + [path for grids in local.values() for path in grids.values()]
     options = {
         "box": box, "snapshot": snapshot, "models": list(MODELS), "grids": [256, 512, 1024],
-        "fold_factors": [1, 2, 4], "engine": engine, "average_bins": bins,
+        "fold_factors": [1, 16, 256], "engine": engine, "average_bins": bins,
         "arepo_blocks": "normal/folded/double-folded", "field": "dimensionless_power",
     }
     directory, spectrum_output = analysis_artifact_path(
@@ -101,16 +101,16 @@ def make_plot(box: str, snapshot: int, *, engine: str, bins: int) -> tuple[Path,
     figure, axes = plt.subplots(2, 2, figsize=(14, 10), constrained_layout=True)
     ratio_figure, ratio_axes = plt.subplots(2, 2, figsize=(14, 8), constrained_layout=True)
     for axis, ratio_axis, model in zip(axes.flat, ratio_axes.flat, MODELS):
-        for block_index, fold in enumerate((1, 2, 4)):
+        for block_index, fold in enumerate((1, 16, 256)):
             k, values = _arepo_curve(arepo[model], block_index, bins)
             axis.plot(k, values, color="0.25", linestyle=FOLD_LINESTYLES[fold], linewidth=1.5, alpha=0.8, label=f"AREPO fold {fold}" if model == "CDM" else None)
         for grid in (256, 512, 1024):
-            for fold in (1, 2, 4):
+            for fold in (1, 16, 256):
                 k, values, nyquist = _local_curve(local[model][grid], grid, fold, engine, bins)
                 label = f"local {grid}³ fold {fold}" if model == "CDM" else None
                 axis.plot(k, values, color=GRID_COLORS[grid], linestyle=FOLD_LINESTYLES[fold], linewidth=1.25, alpha=0.85, label=label)
                 axis.axvline(nyquist, color=GRID_COLORS[grid], alpha=0.12, linewidth=0.7)
-                arepo_k, arepo_values = _arepo_curve(arepo[model], {1: 0, 2: 1, 4: 2}[fold], bins)
+                arepo_k, arepo_values = _arepo_curve(arepo[model], {1: 0, 16: 1, 256: 2}[fold], bins)
                 lo, hi = max(k.min(), arepo_k.min()), min(k.max(), arepo_k.max())
                 if hi > lo:
                     common = np.geomspace(lo, hi, 300)

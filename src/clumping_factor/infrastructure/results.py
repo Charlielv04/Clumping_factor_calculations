@@ -39,6 +39,7 @@ SCHEDULER_EXECUTION_KEYS = {
     "source_campaign",
     "task_id",
     "walltime",
+    "run_label",
 }
 
 ALGORITHMIC_EXECUTION_KEYS = {

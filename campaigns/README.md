@@ -42,7 +42,7 @@ clumping campaign submit campaigns/aida-tng-power-spectrum-folded.toml --execute
 ```
 
 It runs the combined NumPy/Pylians estimator for DM on 256³, 512³, and 1024³
-meshes with fold factors 1, 2, and 4. The first command is the reviewable
+meshes with fold factors 1, 16, and 256. The first command is the reviewable
 dry-run; use `--manifest` to choose its JSON manifest path.
 
 Generated workers explicitly activate the `clumping-factor` conda environment,

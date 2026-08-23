@@ -61,7 +61,7 @@ class CampaignTask:
             "snapshot": self.snapshot,
             "particle_type": self.particle_type,
             "grid_size": self.grid_size,
-            "output": self.output,
+            "output": Path(self.output).as_posix() if self.output else None,
             "command": list(self.command),
             "environment": dict(self.environment),
             "resources": self.resources.to_dict(),
@@ -75,7 +75,7 @@ class CampaignManifest:
     tasks: tuple[CampaignTask, ...]
 
     def to_dict(self) -> dict[str, object]:
-        return {"campaign": self.name, "source": self.source, "tasks": [task.to_dict() for task in self.tasks]}
+        return {"campaign": self.name, "source": Path(self.source).as_posix(), "tasks": [task.to_dict() for task in self.tasks]}
 
 
 def load_campaign(path: str | Path) -> dict[str, Any]:
@@ -262,14 +262,21 @@ def _task_command(
         "chunk_size": "--chunk-size",
         "mas": "--mas",
         "radius_bin_batch_size": "--radius-bin-batch-size",
+        "summary_cache": "--summary-cache",
+        "summary_cache_dir": "--summary-cache-dir",
+        "work_partition": "--work-partition",
+        "max_file_readers": "--max-file-readers",
+        "memory_limit": "--memory-limit",
+        "memory_safety_fraction": "--memory-safety-fraction",
+        "run_label": "--run-label",
     }
     for key, option in option_names.items():
         if key in execution:
             command += [option, str(execution[key])]
     if spec.command_kind == "forest-snapshot":
-        command += ["--output-dir", str(output.parent)]
+        command += ["--output-dir", output.parent.as_posix()]
     else:
-        command += ["--output", str(output)]
+        command += ["--output", output.as_posix()]
     return tuple(command)
 
 
@@ -298,6 +305,51 @@ def _task_component(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "-", value).strip("-")
 
 
+def _benchmark_variants(document: dict[str, Any], execution: dict[str, Any]) -> list[tuple[int, int, str]]:
+    """Return ``(run_number, threads, run_label)`` for an optional benchmark axis."""
+
+    benchmark = document.get("benchmark")
+    if benchmark is None:
+        return [(1, int(execution.get("threads", 1)), "")]
+    if not isinstance(benchmark, dict):
+        raise ValueError("benchmark must be a table")
+    worker_counts = benchmark.get("worker_counts")
+    if not isinstance(worker_counts, list) or not worker_counts:
+        raise ValueError("benchmark.worker_counts must be a non-empty array")
+    workers = [int(value) for value in worker_counts]
+    if any(value < 1 for value in workers):
+        raise ValueError("benchmark.worker_counts must contain positive integers")
+    repeats = int(benchmark.get("repeats", 1))
+    if repeats < 1:
+        raise ValueError("benchmark.repeats must be at least one")
+    order_value = benchmark.get("order")
+    if order_value is None:
+        order = workers * repeats
+    else:
+        if not isinstance(order_value, list):
+            raise ValueError("benchmark.order must be an array when provided")
+        order = [int(value) for value in order_value]
+    expected = len(workers) * repeats
+    if len(order) != expected:
+        raise ValueError("benchmark.order must contain worker_counts multiplied by repeats entries")
+    expected_counts = {worker: repeats for worker in workers}
+    observed_counts = {worker: order.count(worker) for worker in set(order)}
+    if observed_counts != expected_counts:
+        raise ValueError("benchmark.order must repeat every worker count exactly benchmark.repeats times")
+    labels = benchmark.get("run_labels")
+    if labels is not None:
+        if not isinstance(labels, list) or len(labels) != expected:
+            raise ValueError("benchmark.run_labels must have one entry per benchmark run")
+        run_labels = [str(value) for value in labels]
+    else:
+        seen: dict[int, int] = {}
+        run_labels = []
+        for worker in order:
+            seen[worker] = seen.get(worker, 0) + 1
+            run_labels.append(f"w{worker}-r{seen[worker]}")
+    return [(index, worker, run_labels[index - 1]) for index, worker in enumerate(order, start=1)]
+
+
 def _plan_matrix(source: Path, document: dict[str, Any]) -> CampaignManifest:
     matrix = document.get("matrix")
     if not isinstance(matrix, dict):
@@ -314,13 +366,16 @@ def _plan_matrix(source: Path, document: dict[str, Any]) -> CampaignManifest:
     if not isinstance(execution, dict):
         raise ValueError("execution must be a table")
     resources = _resources(document)
-    output_root = Path(str(document.get("output_root", "results")))
-    threads = int(execution.get("threads", 1))
-    if threads < 1 or threads > resources.cpus:
-        raise ValueError("execution.threads must be between 1 and resources.cpus")
+    benchmark = document.get("benchmark")
+    if benchmark is not None and not isinstance(benchmark, dict):
+        raise ValueError("benchmark must be a table")
+    output_root = Path(str((benchmark or {}).get("output_root", document.get("output_root", "results"))))
+    variants = _benchmark_variants(document, execution)
+    if any(threads < 1 or threads > resources.cpus for _, threads, _ in variants):
+        raise ValueError("worker counts must be between 1 and resources.cpus")
 
     tasks: list[CampaignTask] = []
-    seen: set[tuple[str, str, str, str, int, str, int | None]] = set()
+    seen: set[tuple[str, str, str, str, int, str, int | None, int, int]] = set()
     for simulation in simulations:
         # A simulation may override the campaign-wide snapshot selector.  This
         # is useful for targeted retries while preserving the existing global
@@ -343,53 +398,66 @@ def _plan_matrix(source: Path, document: dict[str, Any]) -> CampaignManifest:
             load_mode = str(execution.get("load_mode", "auto"))
             if load_mode in {"full", "chunked"} and load_mode not in spec.execution_modes:
                 raise ValueError(f"Method {spec.identifier} does not support execution.load_mode={load_mode}")
-            if threads > 1 and "threaded" not in spec.execution_modes:
+            if any(threads > 1 for _, threads, _ in variants) and "threaded" not in spec.execution_modes:
                 raise ValueError(f"Method {spec.identifier} does not support threaded execution")
             needs_grid = any(item in {"grid-size", "optional-grid"} for item in spec.grid_requirements)
             grid = requested_grid if needs_grid else None
             if needs_grid and grid is None:
                 raise ValueError(f"Method {spec.identifier} requires matrix.grids")
-            key = (family, name, base_path, spec.identifier, snapshot, particle, grid)
-            if key in seen:
-                continue
-            seen.add(key)
             options = _method_options(document, spec)
             method_spec = spec.to_dict()
             method_spec["configuration"] = {**options, "grid_size": grid}
             selection_spec = {"particle_type": particle}
-            execution_spec = {
-                **execution,
-                "cpus": resources.cpus,
-                "queue": resources.queue,
-                "walltime": resources.walltime,
-                "campaign": str(document.get("name") or source.stem),
-            }
-            output = canonical_result_path(
-                output_root,
-                family=family,
-                simulation_name=name,
-                particle_type=particle,
-                snapshot=snapshot,
-                method_spec=method_spec,
-                selection_spec=selection_spec,
-                execution_spec=execution_spec,
-            )
-            task_id = "-".join(filter(None, (_task_component(family), _task_component(name), f"s{snapshot:03d}", _task_component(particle), _task_component(spec.identifier), f"g{grid}" if grid else "nogrid")))
-            command = _task_command(
-                spec,
-                base_path=base_path,
-                simulation=name,
-                snapshot=snapshot,
-                particle=particle,
-                grid=grid,
-                execution=execution,
-                method_options=options,
-                output=output,
-            )
-            tasks.append(CampaignTask(task_id, command, method_id=spec.identifier, simulation=name,
-                                      snapshot=snapshot, particle_type=particle, grid_size=grid,
-                                      output=str(output), resources=resources))
-    return CampaignManifest(str(document.get("name") or source.stem), str(source), tuple(sorted(tasks, key=lambda task: task.task_id)))
+            for run_number, requested_threads, run_label in variants:
+                key = (family, name, base_path, spec.identifier, snapshot, particle, grid, requested_threads, run_number)
+                if key in seen:
+                    continue
+                seen.add(key)
+                variant_execution = {**execution}
+                if benchmark:
+                    variant_execution["threads"] = requested_threads
+                if benchmark and run_label:
+                    variant_execution["run_label"] = run_label
+                execution_spec = {
+                    **variant_execution,
+                    "cpus": resources.cpus,
+                    "queue": resources.queue,
+                    "walltime": resources.walltime,
+                    "campaign": str(document.get("name") or source.stem),
+                }
+                output = canonical_result_path(
+                    output_root,
+                    family=family,
+                    simulation_name=name,
+                    particle_type=particle,
+                    snapshot=snapshot,
+                    method_spec=method_spec,
+                    selection_spec=selection_spec,
+                    execution_spec=execution_spec,
+                    run=run_number,
+                )
+                task_parts = (
+                    _task_component(family), _task_component(name), f"s{snapshot:03d}",
+                    _task_component(particle), _task_component(spec.identifier), f"g{grid}" if grid else "nogrid",
+                )
+                if benchmark:
+                    task_parts += (f"r{run_number:02d}", f"w{requested_threads}")
+                task_id = "-".join(filter(None, task_parts))
+                command = _task_command(
+                    spec,
+                    base_path=base_path,
+                    simulation=name,
+                    snapshot=snapshot,
+                    particle=particle,
+                    grid=grid,
+                    execution=variant_execution,
+                    method_options=options,
+                    output=output,
+                )
+                tasks.append(CampaignTask(task_id, command, method_id=spec.identifier, simulation=name,
+                                          snapshot=snapshot, particle_type=particle, grid_size=grid,
+                                          output=output.as_posix(), resources=resources))
+    return CampaignManifest(str(document.get("name") or source.stem), source.as_posix(), tuple(sorted(tasks, key=lambda task: task.task_id)))
 
 
 def plan_campaign(path: str | Path) -> CampaignManifest:

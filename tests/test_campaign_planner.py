@@ -60,6 +60,47 @@ def test_campaign_manifest_is_deterministic(tmp_path: Path):
     assert json.loads(first.read_text(encoding="utf-8")) == json.loads(second.read_text(encoding="utf-8"))
 
 
+def test_benchmark_campaign_expands_alternating_worker_repeats(tmp_path: Path):
+    campaign = tmp_path / "benchmark.toml"
+    campaign.write_text(
+        '''name = "benchmark"
+output_root = "results"
+[simulation]
+family = "thesan"
+name = "Thesan-2"
+base_path = "/data/thesan"
+[matrix]
+snapshots = [80]
+particle_types = ["dm"]
+methods = ["clumping.pylians"]
+grids = [512]
+[method_options."clumping.pylians"]
+filter_type = "Top-Hat"
+[execution]
+load_mode = "chunked"
+summary_cache = "off"
+[benchmark]
+worker_counts = [1, 16]
+repeats = 3
+order = [1, 16, 1, 16, 1, 16]
+output_root = "reports/benchmark"
+[resources]
+cpus = 16
+memory = "128gb"
+walltime = "24:00:00"
+queue = "mini"
+''',
+        encoding="utf-8",
+    )
+    manifest = plan_campaign(campaign)
+
+    assert len(manifest.tasks) == 6
+    assert [task.command[task.command.index("--threads") + 1] for task in manifest.tasks] == ["1", "16", "1", "16", "1", "16"]
+    assert [task.output.rsplit("_run", 1)[1] for task in manifest.tasks] == ["001.json", "002.json", "003.json", "004.json", "005.json", "006.json"]
+    assert all("--summary-cache" in task.command and "off" in task.command for task in manifest.tasks)
+    assert all(task.resources.cpus == 16 for task in manifest.tasks)
+
+
 def test_campaign_validates_registry_and_particle_compatibility(tmp_path: Path):
     unknown = tmp_path / "unknown.toml"
     _write_matrix(unknown, methods='["invented"]')

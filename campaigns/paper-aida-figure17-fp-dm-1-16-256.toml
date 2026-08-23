@@ -1,9 +1,10 @@
-name = "aida-tng-power-spectrum-folded"
+name = "paper-aida-figure17-fp-dm-1-16-256"
 output_root = "results"
 
-# Each simulation contributes every snapdir_###/snap_###.hdf5 snapshot found
-# below its base_path. Override the base paths or use a static snapshot list
-# when submitting from a different filesystem layout.
+# Focused replacement for the existing Figure 17 middle-panel analogue.
+# These are the full-physics AIDA runs, using the dark-matter component.
+# The 1/16/256 folds match the AREPO convention used in the consistency test.
+
 [[simulations]]
 family = "aida-tng"
 name = "L35n1080_CDM"
@@ -45,15 +46,17 @@ name = "L75n910_WDM3"
 base_path = "/lustre/work/egaraldi/AIDA-TNG/L75n910_WDM3/output"
 
 [matrix]
-snapshots = "available"
+snapshots = [99]
 particle_types = ["dm"]
 methods = ["power-spectrum.combined"]
-grids = [256, 512, 1024]
+grids = [512]
 
 [method_options."power-spectrum.combined"]
 fold_factors = [1, 16, 256]
 bin_count = 80
 binning = "log"
+smoothing = "none"
+pylians_mas = "CIC"
 
 [execution]
 threads = 8

@@ -50,8 +50,8 @@ The power-spectrum command can measure the same periodic particle distribution
 at several effective box sizes.  A fold factor `f` maps each particle once with
 `x_folded = x mod (L/f)` in all three coordinates, then deposits the remapped
 particles on the selected mesh.  It does not duplicate particles.  Factor `1`
-is the normal full-box spectrum, `2` is the folded spectrum in a box of size
-`L/2`, and `4` is the double-folded spectrum in a box of size `L/4`.
+is the normal full-box spectrum, `16` is the folded spectrum in a box of size
+`L/16`, and `256` is the further-folded spectrum in a box of size `L/256`.
 
 The effective box changes the Fourier fundamental and nominal Nyquist limit:
 `k_fundamental = 2π/(L/f)` and `k_Nyquist = πN/(L/f)`.  The reported values
@@ -64,15 +64,15 @@ For example:
 
 ```bash
 clumping power compute --base-path /data/L75n910 --snapshot 99 --particle-type dm \
-  --grid-size 512 --spectrum-engine both --fold-factors 1 2 4 \
+  --grid-size 512 --spectrum-engine both --fold-factors 1 16 256 \
   --output results/L75n910_snapshot099_folded.json
 clumping power compare --arepo results/aida-tng/L75n910_CDM/power-spectrum/power-spectrum.arepo-comparison/dm/snapshot099/arepo/powerspec_099.txt \
   --local results/L75n910_snapshot099_folded.json --local-fold-factor all \
   --arepo-block all --average-bins 35 --output reports/L75n910_snapshot099_folded.png
 ```
 
-Folding extends the nominal mesh limit by approximately factors of two and
-four, but it also increases sensitivity to mass-assignment aliasing and shot
+Folding extends the nominal mesh limit by approximately factors of sixteen and
+256, but it also increases sensitivity to mass-assignment aliasing and shot
 noise.  Treat the high-k tail cautiously, use logarithmic-bin averaging when
 plotting, and compare blocks primarily in their overlapping k-ranges.  A
 disagreement that begins near a Nyquist marker is generally numerical rather
@@ -163,7 +163,7 @@ For snapshot-aware folded power-spectrum submission, use
 `campaigns/aida-tng-power-spectrum-folded.toml`. Its `snapshots = "available"`
 matrix value discovers snapshots independently below each simulation
 `base_path`; its Cartesian product covers DM, combined NumPy/Pylians spectra,
-fold factors `1 2 4`, and meshes `256`, `512`, and `1024`:
+fold factors `1 16 256`, and meshes `256`, `512`, and `1024`:
 
 ```bash
 clumping campaign plan campaigns/aida-tng-power-spectrum-folded.toml \

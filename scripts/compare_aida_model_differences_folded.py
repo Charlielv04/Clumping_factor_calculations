@@ -57,7 +57,7 @@ def make_plot(box: str, snapshot: int, *, engine: str, bins: int, y_min: float, 
         "snapshot": snapshot,
         "models": list(MODELS),
         "grids": [256, 512, 1024],
-        "fold_factors": [1, 2, 4],
+        "fold_factors": [1, 16, 256],
         "engine": engine,
         "average_bins": bins,
         "field": "dimensionless_power",
@@ -79,7 +79,7 @@ def make_plot(box: str, snapshot: int, *, engine: str, bins: int, y_min: float, 
     output.parent.mkdir(parents=True, exist_ok=True)
     figure, axes = plt.subplots(1, 3, figsize=(17, 5.5), sharey=True, constrained_layout=True)
     for axis, model in zip(axes, models):
-        for block_index, fold in enumerate((1, 2, 4)):
+        for block_index, fold in enumerate((1, 16, 256)):
             reference_k, reference_values = _arepo_curve(arepo["CDM"], block_index, bins)
             current_k, current_values = _arepo_curve(arepo[model], block_index, bins)
             common, relative = _relative_curve(current_k, current_values, reference_k, reference_values)
@@ -93,7 +93,7 @@ def make_plot(box: str, snapshot: int, *, engine: str, bins: int, y_min: float, 
                 label=f"AREPO fold {fold}",
             )
         for grid in (256, 512, 1024):
-            for fold in (1, 2, 4):
+            for fold in (1, 16, 256):
                 reference_k, reference_values, reference_nyquist = _local_curve(local["CDM"][grid], grid, fold, engine, bins)
                 current_k, current_values, current_nyquist = _local_curve(local[model][grid], grid, fold, engine, bins)
                 common, relative = _relative_curve(current_k, current_values, reference_k, reference_values)

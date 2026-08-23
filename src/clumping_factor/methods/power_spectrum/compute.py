@@ -59,7 +59,7 @@ def build_power_spectrum_parser() -> argparse.ArgumentParser:
     parser.add_argument("--k-max", type=float)
     parser.add_argument(
         "--fold-factors", type=int, nargs="+", default=[1], metavar="F",
-        help="Spatial folds to compute independently (for example: --fold-factors 1 2 4).",
+        help="Spatial folds to compute independently (for example: --fold-factors 1 16 256).",
     )
     parser.add_argument("--threads", type=int, default=1)
     parser.add_argument("--output")

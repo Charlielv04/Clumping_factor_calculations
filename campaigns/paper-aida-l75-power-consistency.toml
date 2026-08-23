@@ -15,7 +15,7 @@ methods = ["power-spectrum.combined", "power-spectrum.pylians"]
 grids = [256, 512, 1024]
 
 [method_options."power-spectrum.combined"]
-fold_factors = [1, 2, 4]
+fold_factors = [1, 16, 256]
 bin_count = 80
 binning = "log"
 smoothing = "none"
@@ -25,7 +25,7 @@ smoothing = "none"
 pylians_mas = "None"
 
 [method_options."power-spectrum.pylians"]
-fold_factors = [1, 2, 4]
+fold_factors = [1, 16, 256]
 bin_count = 80
 binning = "log"
 smoothing = "none"
