@@ -1,0 +1,36 @@
+name = "paper-aida-l75-cdm-arepo-fold-parity-all-snapshots"
+output_root = "results"
+
+# Direct comparison with the three AREPO self-folded spectra for L75n910 CDM.
+# The AREPO blocks correspond to fold factors 1, 16, and 256.
+[simulation]
+family = "aida-tng"
+name = "L75n910_CDM"
+base_path = "/lustre/work/egaraldi/AIDA-TNG/L75n910_CDM/output"
+
+[matrix]
+# These are the snapshots for which the repository contains AREPO comparison
+# files: snapshot017, 025, 033, 050, 067, 084, and 099.
+snapshots = [17, 25, 33, 50, 67, 84, 99]
+particle_types = ["dm"]
+methods = ["power-spectrum.combined"]
+grids = [1024]
+
+[method_options."power-spectrum.combined"]
+fold_factors = [1, 16, 256]
+bin_count = 80
+binning = "log"
+smoothing = "none"
+pylians_mas = "CIC"
+
+[execution]
+threads = 8
+load_mode = "chunked"
+chunk_size = 1000000
+mas = "CIC"
+
+[resources]
+cpus = 8
+memory = "128gb"
+walltime = "24:00:00"
+queue = "mini"

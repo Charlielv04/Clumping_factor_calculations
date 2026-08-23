@@ -150,11 +150,24 @@ def plot_arepo_local_comparison(
         raise ValueError("At least one local JSON result is required.")
     if local_labels is not None and len(local_labels) != len(local_paths):
         raise ValueError("local_labels must have one entry per local result.")
+    local_documents = [_load_result(path) for path in local_paths]
+    available_folds = {
+        int(fold)
+        for document in local_documents
+        for fold in document.get("folded_spectra", {})
+    }
+    if {1, 16, 256}.issubset(available_folds):
+        fold_sequence = (1, 16, 256)
+    elif {1, 2, 4}.issubset(available_folds):
+        fold_sequence = (1, 2, 4)
+    else:
+        fold_sequence = tuple(sorted(available_folds))
+    fold_to_arepo_block = {fold: index for index, fold in enumerate(fold_sequence)}
+    fold_labels = {index: f"fold {fold}" for index, fold in enumerate(fold_sequence)}
 
     figure, (spectrum_axis, ratio_axis) = plt.subplots(
         2, 1, figsize=(10, 8), sharex=True, gridspec_kw={"height_ratios": [3, 1]}, constrained_layout=True
     )
-    fold_labels = {0: "fold 1", 1: "fold 2", 2: "fold 4"}
     fold_colors = {1: "#1f77b4", 2: "#ff7f0e", 4: "#2ca02c"}
     arepo_colors = [fold_colors[1], fold_colors[2], fold_colors[4]]
     arepo_linestyles = ["-", "-", "-"]
@@ -171,17 +184,14 @@ def plot_arepo_local_comparison(
     local_colors = ["#d62728", "#9467bd", "#ff7f0e", "#17becf", "#8c564b", "#e377c2"]
     local_linestyles = ["--", ":", "-.", (0, (5, 1)), (0, (3, 1, 1, 1)), (0, (1, 1))]
     series_index = 0
-    for path_index, path in enumerate(local_paths):
-        local = _load_result(path)
+    for path_index, (path, local) in enumerate(zip(local_paths, local_documents)):
         engines = ["numpy", "pylians"] if local_engine == "both" else [None if local_engine == "primary" else local_engine]
         for selected_engine in engines:
             blocks = _spectrum_blocks(local, field, selected_engine, local_fold_factor)
             for block in blocks:
                 local_k, local_values, actual_engine = block[:3]
                 fold_factor = block[3]
-                reference_block = {1: 0, 2: 1, 4: 2}.get(
-                    fold_factor, selected_arepo_blocks[0]
-                )
+                reference_block = fold_to_arepo_block.get(fold_factor, selected_arepo_blocks[0])
                 reference_k, reference_values = arepo_references.get(
                     reference_block, arepo_curves[0][1:]
                 )
@@ -203,7 +213,7 @@ def plot_arepo_local_comparison(
                     linestyle = "-" if actual_engine == "numpy" else "--"
                     label = f"{int(grid)}³ | {actual_engine}" if grid is not None else label
                 else:
-                    color = fold_colors.get(fold_factor, local_colors[series_index % len(local_colors)])
+                    color = arepo_colors[reference_block % len(arepo_colors)]
                     linestyle = "--"
                 spectrum_axis.plot(local_k, local_values, color=color, linewidth=1.5, linestyle=linestyle, label=label)
                 visible = np.ones(common_k.shape, dtype=bool)
