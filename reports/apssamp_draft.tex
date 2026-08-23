@@ -305,6 +305,13 @@ To extend the range of wave numbers that can be measured, we also implemented sp
 
 Folding changes both the fundamental mode and the nominal Nyquist scale by a factor of $f$. It also changes the volume normalization of the measured power spectrum. We therefore rescale the folded power amplitude by $f^3$ before comparing it with the unfolded spectrum or with AREPO. The applied factors are $1$ for $f=1$, $16^3=4096$ for $f=16$, and $256^3=16{,}777{,}216$ for $f=256$. This correction changes the normalization, not the underlying density field, and the folding procedure is validated only over the ranges where adjacent folds overlap and remain numerically reliable.
 
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=1\textwidth]{figures/thesan_grid_native_mini.png}
+    \caption{Clumping factor computation at different grid sizes as a function of overdensity compared to the Voronoi-cell direct computation. Left: Thesan-1 simulation; Center: Thesan-2 simulation; Right: Thesan-mini\footnote{Thesan-mini corresponds to a $128^3$ particles 4 Mpc simulation with the same conditions and software as the Thesan simulations that was run for this project. \label{fn:Thesan-mini}}  }
+    \label{fig:grid-size_comparison_thesan}
+\end{figure*}
+
 \subsection{Auxiliary quantities for other calculations}
 In addition to the density field and the clumping factor, some of the estimators considered later require two further properties of the IGM: the mean free path of ionizing photons and the hydrogen photoionization rate. These quentities can be calculated directly from the THESAN outputs.
 
@@ -354,12 +361,6 @@ $$
 $$
 
 The photoionization rate is first computed separately for each cell. Then, in order to recover a simulation wide value, we volume-average over all the cells satisfying the ionization criterion.
-\begin{figure*}[H]
-    \centering
-    \includegraphics[width=1\textwidth]{figures/thesan_grid_native_mini.png}
-    \caption{Clumping factor computation at different grid sizes as a function of overdensity compared to the Voronoi-cell direct computation. Left: Thesan-1 simulation; Center: Thesan-2 simulation; Right: Thesan-mini\footnote{Thesan-mini corresponds to a $128^3$ particles 4 Mpc simulation with the same conditions and software as the Thesan simulations that was run for this project. \label{fn:Thesan-mini}}  }
-    \label{fig:grid-size_comparison_thesan}
-\end{figure*}
 
 \section{Numerical validation and adopted analysis choices}
 
@@ -450,16 +451,9 @@ While the clumping factor has a simple formal definition, obtaining a direct obs
 
 \subsection{Reference clumping factor}
 
-In this section we will use as a reference the clumping factor as calculated using the native Voronoi-cells from the simulation. However, for this application we will be interested in the recombination clumping factor coeffcient, which we recall was given by,
-$$ C_{rec} \equiv \frac{\left\langle n_e n_{\mathrm{H\,II}} \alpha_{\mathrm{H\,II}} \right\rangle}
-{\left\langle n_e \right\rangle
- \left\langle n_{\mathrm{H\,II}} \right\rangle
- \left\langle \alpha_{\mathrm{H\,II}} \right\rangle}.$$ 
+In this section we will use as a reference the clumping factor as calculated using the native Voronoi-cells from the simulation. Figure~\ref{fig:clumping-factor-definitions} compares the direct clumping-factor definitions used for this reference calculation.
 
-This introduces small changes in the calculation, however, for each Voronoi cell in the simulation we have access to the proportion of neutral hydrogen and the electron abudance, thus, these changes only introduce some extra factors into the averages but don't fundamentally change the calculation procedure. Moreover, in all the calculations that follow, we have taken the fiducial recombination coefficient equal to the Case B recombination rate for 10,000K gas. This assumption is matched on the relevant paper. 
-
-
-\begin{figure}[ht]
+\begin{figure}[H]
     \centering
 
     \begin{subfigure}{0.48\textwidth}
@@ -475,7 +469,15 @@ This introduces small changes in the calculation, however, for each Voronoi cell
     \caption{Comparison of clumping-factor definitions at snapshot 80. The upper and lower panels show THESAN-1 and THESAN-2, respectively. The curves are plotted as a function of the overdensity cutoff defining the IGM mask.}
     \label{fig:clumping-factor-definitions}
 \end{figure}
- 
+
+For this application we will be interested in the recombination clumping factor coeffcient, which we recall was given by,
+$$ C_{rec} \equiv \frac{\left\langle n_e n_{\mathrm{H\,II}} \alpha_{\mathrm{H\,II}} \right\rangle}
+{\left\langle n_e \right\rangle
+ \left\langle n_{\mathrm{H\,II}} \right\rangle
+ \left\langle \alpha_{\mathrm{H\,II}} \right\rangle}.$$ 
+
+This introduces small changes in the calculation, however, for each Voronoi cell in the simulation we have access to the proportion of neutral hydrogen and the electron abudance, thus, these changes only introduce some extra factors into the averages but don't fundamentally change the calculation procedure. Moreover, in all the calculations that follow, we have taken the fiducial recombination coefficient equal to the Case B recombination rate for 10,000K gas. This assumption is matched on the relevant paper. 
+
 
 One observes that in Figure.~\ref{fig:clumping-factor-definitions} the changes in the definition only slightly change the obtained results. The difference between the three defintions tested is below $0.36\%$ for THESAN-1 and $1.16\%$ for THESAN-2\footnote{we only have considering the values for $\delta_{\max} \geq 0$ to avoid the artifacts found at $\delta_{\max} \approx -1$.}.
 
