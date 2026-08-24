@@ -847,12 +847,12 @@ Let us start by comparing how this change in the density-field construction affe
 \end{equation}
 where $C_{\rm DM}^{\rm base}$ is the corresponding calculation using the baseline particle-smoothing prescription. The results are shown for both grid resolutions because the $512^3$ calculation is the resolution adopted for the main dark-matter clumping-factor comparison.
 
-\begin{figure*}[t]
+\begin{figure}[H]
     \centering
-    \includegraphics[width=\textwidth]{figures/aida_tng_subfind_hsml_dm_clumping_relative_z0.png}
+    \includegraphics[width=\linewidth]{figures/aida_tng_subfind_hsml_dm_clumping_relative_z0.png}
     \caption{Relative change in the dark-matter clumping factor produced by using the adaptive SubfindHsml smoothing length at snapshot 099 ($z=0$). The two panels show the $256^3$ and $512^3$ grids. The quantity plotted is Eq.~\eqref{eq:subfind-hsml-relative-clumping}; colours identify the dark-matter models, dashed lines show L35n1080, and solid lines show L75n910. The SIDM1 curve is shown for the simulation size for which the SubfindHsml output is available.}
     \label{fig:aida-subfind-hsml-dm-clumping-z0}
-\end{figure*}
+\end{figure}
 
 In Figure~\ref{fig:aida-subfind-hsml-dm-clumping-z0}, we can observe the differences between the two smoothing prescriptions. For the $256^3$ grid, we observe a minimal change that is only slightly relevant in the very low-overdensity-threshold region. However, for the $512^3$ grid, we observe a more pronounced effect, particularly for the larger simulation box.
 
@@ -865,21 +865,21 @@ To compare the redshift dependence with the integrated model differences shown i
     \label{eq:subfind-hsml-integrated-clumping}
 \end{equation}
 
-\begin{figure*}[t]
+\begin{figure}[H]
     \centering
-    \includegraphics[width=\textwidth]{figures/aida_tng_subfind_hsml_dm_clumping_integrated_evolution.png}
+    \includegraphics[width=\linewidth]{figures/aida_tng_subfind_hsml_dm_clumping_integrated_evolution.png}
     \caption{Normalized overdensity-integrated change in the dark-matter clumping factor caused by the SubfindHsml smoothing length, Eq.~\eqref{eq:subfind-hsml-integrated-clumping}. The two panels show the $256^3$ and $512^3$ calculations. Colours identify the dark-matter models; dashed lines correspond to L35n1080 and solid lines to L75n910.}
     \label{fig:aida-subfind-hsml-dm-clumping-evolution}
-\end{figure*}
+\end{figure}
 
 In Figure~\ref{fig:aida-subfind-hsml-dm-clumping-evolution}, we observe that the effect is larger for the $512^3$ grid, particularly for the larger simulation box, where it approaches a $5\%$ integrated difference at the lowest redshifts. The relationship between the different dark-matter models is not exactly constant, and it is therefore interesting to recompare the differences between $\Lambda$CDM and the different dark-matter models for this new calculation. We show this comparison in Figure~\ref{fig:aida-subfind-hsml-model-comparison}: the left panel shows the proportional difference as a function of overdensity, while the right panel shows the normalized overdensity-integrated difference as a function of redshift. Positive values indicate a suppression relative to the $\Lambda$CDM calculation.
 
-\begin{figure*}[t]
+\begin{figure}[H]
     \centering
-    \includegraphics[width=\textwidth]{figures/aida_tng_subfind_hsml_dm_clumping_model_comparison.png}
+    \includegraphics[width=\linewidth]{figures/aida_tng_subfind_hsml_dm_clumping_model_comparison.png}
     \caption{Comparison between the dark-matter clumping factors obtained with the adaptive SubfindHsml smoothing length and the $\Lambda$CDM reference, using the $512^3$ grid. The left panel shows $(C_{\Lambda\mathrm{CDM}}-C_{\rm model})/C_{\Lambda\mathrm{CDM}}$ at snapshot 099 ($z=0$) as a function of overdensity. The right panel shows the corresponding normalized overdensity-integrated difference as a function of redshift. Colours identify the dark-matter models, dashed lines show L35n1080, and solid lines show L75n910. Positive values indicate a suppression relative to $\Lambda$CDM.}
     \label{fig:aida-subfind-hsml-model-comparison}
-\end{figure*}
+\end{figure}
 
 In Figure~\ref{fig:aida-subfind-hsml-model-comparison}, we can see that the overall differences observed in Section~\ref{sec:aida-clumping-factor} are maintained: warm dark matter suppresses the clumping factor, while the self-interacting models generally produce an enhancement. However, at low overdensity thresholds, the larger simulation box shows a stronger enhancement for the self-interacting models, whereas the smaller counterpart shows a suppression relative to the corresponding baseline calculation using the fixed smoothing length.
 
@@ -888,66 +888,75 @@ On the right-hand side of Figure~\ref{fig:aida-subfind-hsml-model-comparison}, w
 \section{Impact of the Reduced Speed of Light on the THESAN Observables}
 \label{apx:reduced-speed-of-light}
 
-The THESAN simulations adopt a reduced-speed-of-light approximation,
-$\tilde{c}=0.2c$.  Reducing the propagation speed relaxes the radiation
-transport time-step constraint, making the calculation computationally
-tractable; the value used by THESAN was selected after tests of the
-neutral-fraction evolution \cite{garaldi2022thesan}.  The speed of light also
-enters explicitly in the photon-density estimator of
-Section~\ref{sec:photon-density-estimator}.  We therefore compare otherwise
-equivalent small-volume simulations evolved with the reduced and physical
-speeds of light.
+The THESAN simulations use a reduced-speed-of-light approximation,
+$\tilde{c}=0.2c$.  In fully coupled radiation-hydrodynamic simulations, the
+small time steps imposed by the high signal speed of light are a major
+computational cost.  The reduced-speed-of-light approximation relaxes this
+constraint, provided that the ionization fronts remain slower than the reduced
+light speed \cite{garaldi2022thesan}.  Garaldi et al. show that the evolution
+of the neutral fraction is converged for $\tilde{c}=0.2c$ in their test
+simulations \cite{garaldi2022thesan}.  However, this speed of light also
+appears in the photon-density estimator evaluated in
+Section~\ref{sec:photon-density-estimator}.  To determine whether using the
+reduced value in this expression is sufficient, we ran new simulations with
+both the reduced and physical speeds of light.
 
-The reduced-speed calculation is denoted THESAN-mini in the main text.  Both
-simulations considered here use a $4\,\mathrm{Mpc}$ box and $128^3$ particles.
-The comparison uses snapshot 014 ($z=4.507$), for which both runs contain the
-ionization-cut sequence used in Section~\ref{sec:appl1}.  We retain the same
-three IGM definitions, $\Delta<10$, $\Delta<15$, and $\Delta<20$, and use the
-direct recombination clumping factor $C_{\rm rec}$ defined in
-Eq.~\eqref{eq:recombination-clumping-factor}.
+Because of the time required for these calculations, we are able to present
+only the smaller of the two simulations originally planned.  In the main body
+of the text, the reduced-speed version of this simulation is referred to as
+THESAN-mini.  The data analysed in this section come from two simulations with
+a box length of $4\,\mathrm{Mpc}$ and $128^3$ particles.  We will also compare
+these results with the full THESAN simulations to better understand their
+differences.
 
-\subsection{Standard- and reduced-speed THESAN-mini simulations}
+When carrying out this study, we find that the direct recombination clumping
+factor is effectively identical in the two simulations.  Over the overdensity
+range shown in Figure~\ref{fig:thesan-mini-speed-of-light-clumping}, the
+largest relative difference is $0.31\%$.
 
-Figure~\ref{fig:thesan-mini-speed-of-light-clumping} compares $C_{\rm rec}$
-over the full range of ionization cuts.  The two calculations are nearly
-indistinguishable for all three overdensity thresholds.  The largest relative
-difference between their clumping factors is $0.18\%$, occurring for
-$\Delta<10$; the corresponding maximum differences for $\Delta<15$ and
-$\Delta<20$ are $0.04\%$ and $0.15\%$, respectively.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{figures/thesan_mini_standard_reduced_clumping_vs_overdensity.png}
+    \caption{Direct recombination clumping factor $C_{\rm rec}$ as a function
+    of the overdensity cutoff defining the IGM mask in the matched
+    $4\,\mathrm{Mpc}$, $128^3$ standard-speed and reduced-speed THESAN-mini
+    simulations at $z=4.507$.}
+    \label{fig:thesan-mini-speed-of-light-clumping}
+\end{figure}
 
 \begin{figure*}[t]
     \centering
-    \includegraphics[width=\textwidth]{figures/thesan_mini_standard_reduced_clumping_vs_ionization_cut.png}
-    \caption{Direct recombination clumping factor $C_{\rm rec}$ as a function
-    of the ionization cutoff in the matched $4\,\mathrm{Mpc}$,
-    $128^3$ standard-speed and reduced-speed simulations at $z=4.507$.  The
-    panels use the same overdensity selections as Section~\ref{sec:appl1}.
-    The curves overlap to within $0.18\%$ over the displayed range.}
-    \label{fig:thesan-mini-speed-of-light-clumping}
+    \includegraphics[width=0.96\textwidth]{../results/analysis/clumping/thesan/ionization/combined/sl_rsl_clumping_methods_reduced_c_vs_ionization_cut/analysis-e0ebb168171a/artifacts/sl_rsl_clumping_methods_reduced_c_vs_ionization_cut.png}
+    \caption{Comparison of the clumping-factor estimates used in
+    Section~\ref{sec:appl1} for the matched standard-speed (SL) and
+    reduced-speed (RSL) THESAN-mini simulations.  The panels show the three
+    overdensity cuts used in Application~I; dotted and solid curves denote
+    the standard-speed and reduced-speed simulations, respectively.  The
+    photon-density estimate uses the transport speed of the corresponding
+    simulation.}
+    \label{fig:thesan-mini-speed-of-light-diagnostics}
 \end{figure*}
 
-The approximate estimators do not show the same agreement.  Their values are
-also nearly independent of the ionization cutoff, but remain separated by
-approximately constant normalizations between the two simulations.  For the
-ionization-equilibrium estimator, the reduced-speed values are larger by a
-factor of $5.6$--$6.0$; for the photon-density estimator, evaluated using the
-transport speed of each simulation, the corresponding factor is $1.50$.
+The mean free path and photoionization rate used in the diagnostics are shown
+in Figure~\ref{fig:thesan-mini-speed-of-light-ionizing-inputs}.  These are
+specified for each snapshot and are therefore independent of the density and
+ionization cuts used above.
 
-\subsection{Comparison with the full THESAN simulations}
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=0.92\textwidth]{figures/thesan_mini_standard_reduced_ionizing_inputs_vs_redshift.png}
+    \caption{Mean free path $\lambda_{\rm mfp}$ and hydrogen photoionization
+    rate $\Gamma_{\rm HI}$ used in the standard-speed and reduced-speed
+    THESAN-mini diagnostics.  The values are shown as a function of snapshot
+    redshift; both quantities are independent of the IGM-mask cuts.}
+    \label{fig:thesan-mini-speed-of-light-ionizing-inputs}
+\end{figure*}
+\clearpage
 
-For reference, the direct clumping factors in the full THESAN calculations
-at their available snapshots are $(2.36,\,2.59,\,2.80)$ for THESAN-1 and
-$(2.24,\,2.45,\,2.63)$ for THESAN-2 at $\Delta<10$, $\Delta<15$, and
-$\Delta<20$, respectively.  The matched mini simulations give
-$(2.55,\,2.93,\,3.24)$ for the same selections.  These values are of the same
-order, although the full and mini simulations sample different volumes,
-resolutions, source histories, and redshifts.  Their comparison consequently
-provides context for the mini results rather than a controlled measurement of
-the speed-of-light dependence in the full THESAN volume.
-
-A second pair of simulations with twice the present box size is being run to
-extend this comparison and assess the dependence on the sampled volume.  The
-results were not available in time for inclusion in this report.
+The purpose of these comparisons is primarily diagnostic and to shed light on
+the effects of the reduced-speed-of-light approximation on the quantities
+relevant to this work.  The interpretation of these data is complex, and
+further study is required.
 
 \section{Parallelization and optimization: Working with large simulations}
 \label{apx:parallelization}
